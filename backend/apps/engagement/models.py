@@ -51,6 +51,7 @@ class Certificate(models.Model):
     )
     course = models.ForeignKey("courses.Course", on_delete=models.CASCADE, related_name="certificates")
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.ISSUED)
+    completed_at = models.DateTimeField()
     issued_at = models.DateTimeField(auto_now_add=True)
     revoked_at = models.DateTimeField(null=True, blank=True)
     revocation_reason = models.CharField(max_length=500, blank=True)

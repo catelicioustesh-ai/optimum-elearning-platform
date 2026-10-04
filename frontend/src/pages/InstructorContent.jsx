@@ -38,7 +38,7 @@ export default function InstructorContent() {
   const [attachments, setAttachments] = useState([])
   const [pdfTitle, setPdfTitle] = useState('')
   const [pdfFile, setPdfFile] = useState(null)
-  const [activityDraft, setActivityDraft] = useState({ activity_type: 'assignment', title: '', instructions: '', max_score: 100, max_attempts: 1, pass_percentage: 50, is_required: true, deadline: '', starter_code: '', test_cases: '[]' })
+  const [activityDraft, setActivityDraft] = useState({ activity_type: 'assignment', title: '', instructions: '', max_score: 100, max_attempts: 1, pass_percentage: 50, is_required: true, deadline: '', language: 'javascript', starter_code: '', test_cases: '[]' })
   const [quizDraft, setQuizDraft] = useState({ title: '', instructions: '', time_limit_minutes: 30, pass_mark_percentage: 70, max_attempts: 1, is_required: true })
   const [quizQuestions, setQuizQuestions] = useState([{ text: '', marks: 1, choice_a: '', choice_b: '', correct_choice_index: 0 }])
 
@@ -419,13 +419,15 @@ export default function InstructorContent() {
   async function handleCreateActivity(e) {
     e.preventDefault()
     if (!lessonId || !activityDraft.title.trim()) return
-    let testCases
-    try {
-      testCases = JSON.parse(activityDraft.test_cases || '[]')
-      if (!Array.isArray(testCases)) throw new Error('Test cases must be a JSON array.')
-    } catch {
-      setError('Test cases must be valid JSON in an array.')
-      return
+    let testCases = null
+    if (activityDraft.language !== 'html') {
+      try {
+        testCases = JSON.parse(activityDraft.test_cases || '[]')
+        if (!Array.isArray(testCases)) throw new Error('Test cases must be a JSON array.')
+      } catch {
+        setError('Test cases must be valid JSON in an array.')
+        return
+      }
     }
     setBusy(true)
     try {
@@ -939,8 +941,19 @@ export default function InstructorContent() {
                 </div>
                 <textarea rows={3} value={activityDraft.instructions} onChange={(event) => setActivityDraft({ ...activityDraft, instructions: event.target.value })} placeholder="Student instructions" className="w-full rounded border border-line bg-paper px-2 py-2 text-sm text-ink" />
                 {(activityDraft.activity_type === 'lab' || activityDraft.activity_type === 'exercise') && <>
+                  <label className="grid max-w-xs gap-1 text-xs font-medium text-text-muted">Code language
+                    <select value={activityDraft.language} onChange={(event) => setActivityDraft({ ...activityDraft, language: event.target.value })} className="rounded border border-line bg-paper px-2 py-2 text-sm text-ink">
+                      <option value="javascript">JavaScript</option>
+                      <option value="python">Python</option>
+                      <option value="html">HTML</option>
+                    </select>
+                  </label>
                   <textarea rows={3} value={activityDraft.starter_code} onChange={(event) => setActivityDraft({ ...activityDraft, starter_code: event.target.value })} placeholder="Starter code (optional)" className="w-full rounded border border-line bg-paper px-2 py-2 font-mono text-sm text-ink" />
-                  <textarea rows={3} value={activityDraft.test_cases} onChange={(event) => setActivityDraft({ ...activityDraft, test_cases: event.target.value })} aria-label="Test cases JSON" placeholder={'Test cases JSON, e.g. [{"input":"1","expected_output":"1","public":true}]'} className="w-full rounded border border-line bg-paper px-2 py-2 font-mono text-xs text-ink" />
+                  {activityDraft.language === 'html' ? (
+                    <p className="text-xs text-text-muted">HTML activities use a restricted browser preview and do not support runner test cases.</p>
+                  ) : (
+                    <textarea rows={3} value={activityDraft.test_cases} onChange={(event) => setActivityDraft({ ...activityDraft, test_cases: event.target.value })} aria-label="Test cases JSON" placeholder={'Test cases JSON, e.g. [{"input":"1","expected_output":"1","public":true}]'} className="w-full rounded border border-line bg-paper px-2 py-2 font-mono text-xs text-ink" />
+                  )}
                 </>}
                 <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={activityDraft.is_required} onChange={(event) => setActivityDraft({ ...activityDraft, is_required: event.target.checked })} /> Required for module completion</label>
                 <button type="submit" disabled={busy || !activityDraft.title.trim()} className="inline-flex items-center gap-2 rounded-md bg-blue-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"><Plus size={15} /> Add activity</button>

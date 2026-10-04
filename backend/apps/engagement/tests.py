@@ -1,4 +1,5 @@
 from django.test import TestCase
+from django.utils import timezone
 
 from apps.accounts.testing import World, client_for
 from apps.engagement.models import (
@@ -29,6 +30,8 @@ class EngagementEventTests(TestCase):
         self.assertEqual(StudentAchievement.objects.filter(student=w.student_1).count(), 1)
         certificate = Certificate.objects.get(student=w.student_1, course=w.course_a)
         self.assertEqual(certificate.status, Certificate.Status.ISSUED)
+        self.assertIsNotNone(certificate.completed_at)
+        self.assertLessEqual(certificate.completed_at, certificate.issued_at)
         self.assertEqual(
             Notification.objects.filter(recipient=w.student_1, kind="achievement_earned").count(),
             1,
@@ -49,6 +52,7 @@ class EngagementApiTests(TestCase):
         self.student = client_for(self.world.student_1)
         self.other_student = client_for(self.world.student_2)
         self.instructor = client_for(self.world.instructor_a)
+        self.anonymous = client_for()
 
     def test_student_engagement_includes_awarded_and_unearned_achievements(self):
         mark_activity_complete(self.world.student_1, self.world.exercise, score=90)
@@ -91,6 +95,9 @@ class EngagementApiTests(TestCase):
 
         self.assertEqual(downloaded.status_code, 200)
         self.assertEqual(downloaded["Content-Type"], "application/pdf")
+        self.assertEqual(downloaded["Cache-Control"], "private, no-store")
+        self.assertTrue(downloaded.content.startswith(b"%PDF-"))
+        self.assertGreater(len(downloaded.content), 10_000)
         self.assertEqual(
             self.student.post(
                 f"/api/engagement/certificates/{certificate.certificate_number}/revoke/",
@@ -99,6 +106,49 @@ class EngagementApiTests(TestCase):
             ).status_code,
             403,
         )
+
+    def test_certificate_qr_destination_verifies_publicly_without_exposing_user_ids(self):
+        mark_activity_complete(self.world.student_1, self.world.exercise, score=90)
+        mark_activity_complete(self.world.student_1, self.world.locked_activity, score=90)
+        certificate = Certificate.objects.get(student=self.world.student_1, course=self.world.course_a)
+
+        response = self.anonymous.get(
+            f"/api/engagement/certificates/{certificate.certificate_number}/verify/"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Cache-Control"], "no-store")
+        self.assertTrue(response.data["verified"])
+        self.assertEqual(response.data["student_name"], self.world.student_1.get_full_name() or self.world.student_1.username)
+        self.assertEqual(response.data["course_title"], self.world.course_a.title)
+        self.assertEqual(response.data["certificate_number"], str(certificate.certificate_number))
+        self.assertEqual(
+            response.data["completed_on"],
+            timezone.localtime(certificate.completed_at).date().isoformat(),
+        )
+        self.assertNotIn("student_id", response.data)
+        self.assertNotIn("revocation_reason", response.data)
+
+    def test_public_certificate_verification_marks_revoked_certificates_invalid(self):
+        mark_activity_complete(self.world.student_1, self.world.exercise, score=90)
+        mark_activity_complete(self.world.student_1, self.world.locked_activity, score=90)
+        certificate = Certificate.objects.get(student=self.world.student_1, course=self.world.course_a)
+        revoke_certificate(certificate, "Completion was awarded in error.", self.world.instructor_a)
+
+        response = self.anonymous.get(
+            f"/api/engagement/certificates/{certificate.certificate_number}/verify/"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["verified"])
+        self.assertEqual(response.data["status"], Certificate.Status.REVOKED)
+
+    def test_public_certificate_verification_returns_not_found_for_unknown_id(self):
+        response = self.anonymous.get(
+            "/api/engagement/certificates/00000000-0000-0000-0000-000000000000/verify/"
+        )
+
+        self.assertEqual(response.status_code, 404)
 
     def test_instructor_can_revoke_and_student_sees_revocation(self):
         mark_activity_complete(self.world.student_1, self.world.exercise, score=90)

@@ -1,11 +1,18 @@
 import { api } from '../lib/api.js'
 
 export async function fetchStudentDashboardData() {
-  const [dashboard, student, engagement] = await Promise.all([
+  const [dashboard, student, engagementResult] = await Promise.all([
     api.get('/dashboard/student/'),
     api.me(),
-    api.get('/engagement/me/').catch(() => null),
+    api.get('/engagement/me/')
+      .then((data) => ({ data }))
+      .catch((error) => ({ error })),
   ])
 
-  return { ...dashboard, student, engagement }
+  return {
+    ...dashboard,
+    student,
+    engagement: engagementResult.data || null,
+    engagementError: engagementResult.error?.message || '',
+  }
 }

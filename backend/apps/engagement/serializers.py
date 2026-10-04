@@ -24,7 +24,7 @@ class CertificateSerializer(serializers.ModelSerializer):
         model = Certificate
         fields = (
             "certificate_number", "course_id", "course_title", "student_id", "student_name",
-            "status", "issued_at", "revoked_at", "revocation_reason", "revoked_by_name",
+            "status", "completed_at", "issued_at", "revoked_at", "revocation_reason", "revoked_by_name",
         )
 
     def get_student_name(self, obj):

@@ -23,6 +23,33 @@ Microsoft SQL Server is the only supported database for development and producti
 
 For trusted certificates, use `TrustServerCertificate=no`. Keep certificate validation enabled in production.
 
+## Code runner for a native Windows backend
+
+The code editor sends Python/JavaScript to the isolated runner; it never executes student code in Django.
+The reference runner requires a Linux container and must not be started directly on Windows. Install and
+start Docker Desktop with its Linux/WSL2 engine enabled, then:
+
+1. Generate a private token in PowerShell:
+
+   ```powershell
+   $token = & .\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_hex(32))"
+   ```
+
+2. Add `SANDBOX_TOKEN=<generated token>` to `backend/.env` and save the file. Do not commit or share it.
+3. From the repository root, start the local-only runner:
+
+   ```powershell
+   docker compose --env-file backend/.env -f docker-compose.runner.yml up --build -d
+   ```
+
+4. Restart Django so it loads the same token. The runner health check should pass, and Django uses
+   `http://localhost:9000` by default.
+
+This development-only Compose file publishes the runner on `127.0.0.1:9000` so native Django can reach it.
+Student programs still run in a read-only, non-root Linux container on an internal network without outbound
+network access. Production should use the private runner network in `docker-compose.yml`; do not publish
+the sandbox port there.
+
 ## Docker
 
 Set `MSSQL_DB_HOST` in `backend/.env.docker`. `host.docker.internal` reaches SQL Server on the Docker host; remote SQL Server instances should use their private hostname. SQL Server remains outside the Compose stack and its TCP port is not published by this project.

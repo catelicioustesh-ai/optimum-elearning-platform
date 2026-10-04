@@ -1,15 +1,16 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link, useParams } from 'react-router-dom'
 import {
-  LayoutDashboard, BookOpen, GraduationCap, FileText, Play, Send,
-  CircleCheckBig, Upload, ChevronLeft, ChevronRight,
+  LayoutDashboard, BookOpen, GraduationCap, FileText, Upload, ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import LessonVideo from '../components/LessonVideo.jsx'
 import { ACCEPT, MAX_UPLOAD_MB, checkUpload } from '../lib/uploadRules.js'
 import DashboardLayout from '../components/DashboardLayout.jsx'
 import { api } from '../lib/api.js'
 import { useAuth } from '../context/useAuth.js'
+
+const CodeActivityEditor = lazy(() => import('../components/CodeActivityEditor.jsx'))
 
 const navItems = [
   { to: '/dashboard/student', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -216,8 +217,12 @@ function ActivityCard({ activity, onSubmitted }) {
       {activity.instructions && <p className="mt-2 text-sm text-text-muted">{activity.instructions}</p>}
 
       <div className="mt-4">
-        {activity.activity_type === 'exercise' && <ExerciseRunner activity={activity} onSubmitted={onSubmitted} />}
-        {(activity.activity_type === 'lab' || activity.activity_type === 'assignment') && (
+        {(activity.activity_type === 'lab' || activity.activity_type === 'exercise') && (
+          <Suspense fallback={<div className="rounded-lg border border-line bg-panel p-4 text-sm text-text-muted">Loading code editor…</div>}>
+            <CodeActivityEditor key={activity.id} activity={activity} onSubmitted={onSubmitted} />
+          </Suspense>
+        )}
+        {activity.activity_type === 'assignment' && (
           <SubmissionForm activity={activity} onSubmitted={onSubmitted} />
         )}
         {activity.activity_type === 'quiz' && activity.quiz_id && (
@@ -229,137 +234,6 @@ function ActivityCard({ activity, onSubmitted }) {
           </Link>
         )}
       </div>
-    </div>
-  )
-}
-
-function ExerciseRunner({ activity, onSubmitted }) {
-  const [language, setLanguage] = useState('javascript')
-  const [code, setCode] = useState(activity.starter_code || '')
-  const [output, setOutput] = useState(null)
-  const [testResults, setTestResults] = useState(null)
-  const [status, setStatus] = useState('')
-  const [isError, setIsError] = useState(false)
-  const [busy, setBusy] = useState(false)
-
-  async function handleRun() {
-    setBusy(true)
-    setOutput(null)
-    setStatus('')
-    setIsError(false)
-    try {
-      const result = await api.post('/execute/run/', { language, code })
-      setOutput(result)
-    } catch (err) {
-      setOutput({ error: err.message })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function handleRunTests() {
-    setBusy(true)
-    setTestResults(null)
-    setStatus('')
-    try {
-      const result = await api.post('/execute/test/', { language, code, activity_id: activity.id })
-      setTestResults(result)
-    } catch (err) {
-      setTestResults({ error: err.message })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function handleSubmit() {
-    setBusy(true)
-    setStatus('')
-    try {
-      await api.post('/submissions/', { activity: activity.id, content: code })
-      setIsError(false)
-      setStatus('Submitted! Your instructor will grade it.')
-      onSubmitted?.()
-    } catch (err) {
-      setIsError(true)
-      setStatus(err.status === 429 ? 'You are submitting too quickly. Please wait a moment.' : err.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <select
-          value={language}
-          onChange={(e) => setLanguage(e.target.value)}
-          className="rounded-md border border-line bg-paper px-2 py-1.5 text-xs text-ink"
-        >
-          <option value="javascript">JavaScript</option>
-          <option value="python">Python</option>
-        </select>
-      </div>
-
-      <textarea
-        value={code}
-        onChange={(e) => setCode(e.target.value)}
-        rows={10}
-        spellCheck={false}
-        className="w-full rounded-md border border-line bg-ink px-3 py-2.5 font-mono text-sm text-white placeholder:text-white/40"
-        placeholder="Write your code here…"
-      />
-
-      <div className="flex flex-wrap gap-2">
-        <button onClick={handleRun} disabled={busy} className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-sm text-ink hover:border-text-dim disabled:opacity-60">
-          <Play size={14} /> Run
-        </button>
-        <button onClick={handleRunTests} disabled={busy} className="flex items-center gap-1.5 rounded-md border border-line px-3 py-1.5 text-sm text-ink hover:border-text-dim disabled:opacity-60">
-          <CircleCheckBig size={14} /> Run tests
-        </button>
-        <button onClick={handleSubmit} disabled={busy} className="flex items-center gap-1.5 rounded-md bg-coral px-3 py-1.5 text-sm font-medium text-white hover:bg-coral-dim disabled:opacity-60">
-          <Send size={14} /> Submit
-        </button>
-      </div>
-
-      {output && (
-        <div className="rounded-md bg-panel p-3 font-mono text-xs text-ink">
-          {output.error ? (
-            <span className="text-red-600">{output.error}</span>
-          ) : (
-            <>
-              {output.timed_out && <p className="mb-1 font-semibold text-red-600">Stopped: your code ran too long (time limit).</p>}
-              {output.stdout && <pre className="whitespace-pre-wrap">{output.stdout}</pre>}
-              {output.stderr && <pre className="whitespace-pre-wrap text-red-600">{output.stderr}</pre>}
-              {!output.stdout && !output.stderr && !output.timed_out && <span className="text-text-muted">(no output)</span>}
-            </>
-          )}
-        </div>
-      )}
-
-      {testResults && (
-        <div className="rounded-md bg-panel p-3 text-sm">
-          {testResults.error ? (
-            <span className="text-red-600">{testResults.error}</span>
-          ) : (
-            <div role="status">
-              <p className="font-semibold text-ink">{testResults.passed} of {testResults.total} tests passed</p>
-              <ul className="mt-2 space-y-1.5">
-                {testResults.results.map((r) => (
-                  <li key={r.index} className={r.passed ? 'text-emerald-700' : 'text-red-600'}>
-                    Test {r.index}: {r.passed ? 'passed' : r.timed_out ? 'timed out' : 'failed'}
-                    {r.expected_output !== undefined && !r.passed && (
-                      <span className="block font-mono text-xs text-text-muted">expected “{r.expected_output}” · got “{r.actual_output}”</span>
-                    )}
-                    {r.error && <span className="block whitespace-pre-wrap font-mono text-xs">{r.error}</span>}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-
-      {status && <p role={isError ? 'alert' : 'status'} className={`text-sm ${isError ? 'text-red-600' : 'text-emerald-700'}`}>{status}</p>}
     </div>
   )
 }

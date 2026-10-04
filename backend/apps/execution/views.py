@@ -34,6 +34,7 @@ from apps.accounts.access import STUDENT, require_student_access, require_teache
 logger = logging.getLogger(__name__)
 
 ALLOWED_LANGUAGES = {"python", "javascript"}
+ALLOWED_ACTIVITY_LANGUAGES = ALLOWED_LANGUAGES | {"html"}
 MAX_CODE_LENGTH = 20_000
 MAX_STDIN_LENGTH = 10_000
 MAX_TEST_CASES = 25
@@ -47,10 +48,10 @@ class CodeRunThrottle(UserRateThrottle):
     scope = "code_run"
 
 
-def _clean_request(request, require_code=True):
+def _clean_request(request, allowed_languages=ALLOWED_LANGUAGES):
     code, language = request.data.get("code"), request.data.get("language")
-    if not isinstance(language, str) or language not in ALLOWED_LANGUAGES:
-        raise ValidationError({"language": f"Choose one of: {', '.join(sorted(ALLOWED_LANGUAGES))}."})
+    if not isinstance(language, str) or language not in allowed_languages:
+        raise ValidationError({"language": f"Choose one of: {', '.join(sorted(allowed_languages))}."})
     if not isinstance(code, str) or not code.strip():
         raise ValidationError({"code": "Code is required."})
     if len(code) > MAX_CODE_LENGTH:
@@ -60,6 +61,10 @@ def _clean_request(request, require_code=True):
 
 def _call_runner(payload, read_timeout):
     """POST to the runner. Returns parsed JSON or raises a generic 503-style error."""
+    if not settings.SANDBOX_TOKEN:
+        logger.error("Code runner is unavailable: SANDBOX_TOKEN is not configured.")
+        return None
+
     try:
         resp = requests.post(
             f"{settings.SANDBOX_URL}/run",
@@ -82,7 +87,10 @@ def _trim(text):
 
 
 def _unavailable():
-    return Response({"error": "The code runner is temporarily unavailable. Please try again shortly."}, status=503)
+    return Response({
+        "code": "CODE_RUNNER_UNAVAILABLE",
+        "error": "Code execution is unavailable. Verify the isolated code runner is running and configured, then try again.",
+    }, status=503)
 
 
 class RunCodeView(APIView):
@@ -128,7 +136,7 @@ class RunTestsView(APIView):
     def post(self, request):
         from apps.courses.models import Activity, ActivityType
 
-        language, code = _clean_request(request)
+        language, code = _clean_request(request, ALLOWED_ACTIVITY_LANGUAGES)
         try:
             activity = Activity.objects.select_related("lesson__module__course").get(pk=request.data.get("activity_id"))
         except (Activity.DoesNotExist, ValueError, TypeError):
@@ -147,6 +155,10 @@ class RunTestsView(APIView):
 
         if activity.activity_type not in (ActivityType.EXERCISE, ActivityType.LAB):
             raise ValidationError("This activity has no automated tests.")
+        if language != activity.language:
+            raise ValidationError({"language": f"This activity uses {activity.language}."})
+        if activity.language == "html":
+            raise ValidationError("HTML activities use the in-page preview and do not support automated runner tests.")
         cases = activity.test_cases if isinstance(activity.test_cases, list) else []
         if not cases:
             raise ValidationError("This activity has no test cases yet.")

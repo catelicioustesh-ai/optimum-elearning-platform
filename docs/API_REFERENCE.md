@@ -228,14 +228,18 @@ respect the same course/module permissions.
 [{
   "id": 20, "lesson": 12, "activity_type": "exercise", "title": "Sum two numbers",
   "instructions": "...", "max_score": 100, "max_attempts": 1, "deadline": null,
-  "is_required": true, "starter_code": "function sum(a, b) {}", "test_cases": [{"input": "2 3", "expected_output": "5", "public": true}]
+  "is_required": true, "language": "javascript", "starter_code": "function sum(a, b) {}", "test_cases": [{"input": "2 3", "expected_output": "5", "public": true}]
 }]
 ```
 `activity_type` is one of: `exercise`, `lab`, `quiz`, `assignment`.
-Activities support score, pass threshold, attempt count, required-for-module
-completion, instructions, and optional deadline fields. Assignment/lab work is
-submitted at `/api/submissions/` and graded through
-`PATCH /api/submissions/{id}/grade/`.
+Code activities (`exercise` and `lab`) use the persisted `language` setting:
+`javascript`, `python`, or `html`; run-tests requests must match it.
+JavaScript/Python activities use the Monaco editor and isolated code runner.
+HTML activities use Monaco with a restricted in-page preview and do not support
+automated runner tests. Activities also support score,
+pass threshold, attempt count, required-for-module completion, instructions,
+and optional deadline fields. Submitted code and assignment work use
+`/api/submissions/` and are graded through `PATCH /api/submissions/{id}/grade/`.
 
 ### `POST /api/activities/` 🔒 — Instructor/Admin
 
@@ -314,8 +318,9 @@ Lists certificate and revocation history for an authorized course. Admins may om
 { "course_id": 1, "student_id": 4 }
 ```
 The learner must be enrolled and every module must be complete. Course completion
-also issues a certificate automatically. Reissuing after revocation creates a new
-certificate number and retains the revoked record.
+also issues a certificate automatically. The completion timestamp is saved with
+the certificate so its printed date remains stable if course content later changes.
+Reissuing after revocation creates a new certificate number and retains the revoked record.
 
 ### `GET /api/engagement/certificates/{certificate_number}/` 🔒
 Returns certificate status and audit fields to its student, the course instructor,
@@ -323,7 +328,16 @@ or an admin.
 
 ### `GET /api/engagement/certificates/{certificate_number}/download/` 🔒
 Downloads a generated PDF. Only issued certificates can be downloaded; revoked
-certificates remain viewable in the audit history.
+certificates remain viewable in the audit history. The PDF is landscape A4 with
+Optimum LMS branding, the learner/course completion date, instructor signature,
+and a QR code that links to public certificate verification.
+
+### `GET /api/engagement/certificates/{certificate_number}/verify/`
+Public, read-only verification endpoint used by the certificate QR code. Returns
+the certificate ID, learner name, course title, completion date, issue time, and
+whether the certificate is currently valid. It does not expose account IDs or
+revocation notes. The frontend displays the verification result at
+`/verify/{certificate_number}`.
 
 ### `POST /api/engagement/certificates/{certificate_number}/revoke/` 🔒 — Owning Instructor/Admin
 ```json

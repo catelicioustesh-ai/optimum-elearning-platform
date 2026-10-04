@@ -1,5 +1,5 @@
-import { createElement, useState } from 'react'
-import { Award, CircleCheck, CircleDot, LockKeyhole, TriangleAlert } from 'lucide-react'
+import { createElement, useEffect, useRef, useState } from 'react'
+import { Award, ChevronLeft, ChevronRight, CircleCheck, CircleDot, LockKeyhole, TriangleAlert } from 'lucide-react'
 import ContentIcon from './ContentIcon.jsx'
 
 const statusMeta = {
@@ -11,19 +11,118 @@ const statusMeta = {
   mastered: { label: 'Mastered', className: 'learning-path-node-mastered', icon: Award },
 }
 
+function scrollStepToCenter(container, step, behavior) {
+  const containerBounds = container.getBoundingClientRect()
+  const stepBounds = step.getBoundingClientRect()
+  const targetLeft = container.scrollLeft
+    + stepBounds.left
+    - containerBounds.left
+    - (container.clientWidth - stepBounds.width) / 2
+
+  container.scrollTo({
+    left: Math.max(0, Math.min(container.scrollWidth - container.clientWidth, targetLeft)),
+    behavior,
+  })
+}
+
 export default function LearningPath({ modules = [], onSelectModule }) {
   const [selected, setSelected] = useState(null)
+  const [scrollState, setScrollState] = useState({ canScrollBack: false, canScrollForward: true })
+  const scrollRef = useRef(null)
+  const currentStepRef = useRef(null)
   const completed = modules.filter((module) => module.status === 'done' || module.status === 'mastered').length
   const completedPercent = modules.length ? Math.round((completed / modules.length) * 100) : 0
+  const currentModule = modules.find((module) => module.status === 'current' || module.status === 'active')
+  const currentModuleKey = currentModule && String(currentModule.module_id || currentModule.id || `${currentModule.order}-${currentModule.title}`)
+
+  useEffect(() => {
+    const container = scrollRef.current
+    if (!container) return undefined
+
+    const updateScrollState = () => {
+      const maxScrollLeft = container.scrollWidth - container.clientWidth
+      setScrollState({
+        canScrollBack: container.scrollLeft > 2,
+        canScrollForward: maxScrollLeft - container.scrollLeft > 2,
+      })
+    }
+    const frame = requestAnimationFrame(updateScrollState)
+    const observer = new ResizeObserver(updateScrollState)
+    observer.observe(container)
+    if (container.firstElementChild) observer.observe(container.firstElementChild)
+    container.addEventListener('scroll', updateScrollState, { passive: true })
+    container.addEventListener('scrollend', updateScrollState)
+    return () => {
+      cancelAnimationFrame(frame)
+      observer.disconnect()
+      container.removeEventListener('scroll', updateScrollState)
+      container.removeEventListener('scrollend', updateScrollState)
+    }
+  }, [modules.length])
+
+  useEffect(() => {
+    const step = currentStepRef.current
+    const container = scrollRef.current
+    if (!step || !container) return
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    scrollStepToCenter(container, step, reduceMotion ? 'instant' : 'smooth')
+  }, [currentModuleKey])
+
+  function scrollModules(direction) {
+    const container = scrollRef.current
+    if (!container) return
+    const steps = Array.from(container.querySelectorAll('.learning-path-step'))
+    if (!steps.length) return
+
+    const containerBounds = container.getBoundingClientRect()
+    const center = containerBounds.left + container.clientWidth / 2
+    const centers = steps.map((step) => {
+      const bounds = step.getBoundingClientRect()
+      return bounds.left + bounds.width / 2
+    })
+    const currentIndex = centers.reduce((closestIndex, stepCenter, index) => (
+      Math.abs(stepCenter - center) < Math.abs(centers[closestIndex] - center) ? index : closestIndex
+    ), 0)
+    const targetIndex = Math.max(0, Math.min(steps.length - 1, currentIndex + direction))
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    scrollStepToCenter(container, steps[targetIndex], reduceMotion ? 'instant' : 'smooth')
+  }
 
   return (
     <div>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-slate-400">Scroll sideways or use the arrows to view every module.</p>
+        <div className="flex gap-1">
+          <button
+            type="button"
+            onClick={() => scrollModules(-1)}
+            disabled={!scrollState.canScrollBack}
+            aria-label="Scroll to previous modules"
+            className="grid h-9 w-9 place-items-center rounded-lg border border-slate-600 text-slate-200 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40 lms-focus-ring"
+          >
+            <ChevronLeft size={18} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={() => scrollModules(1)}
+            disabled={!scrollState.canScrollForward}
+            aria-label="Scroll to more modules"
+            className="grid h-9 w-9 place-items-center rounded-lg border border-slate-600 text-slate-200 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40 lms-focus-ring"
+          >
+            <ChevronRight size={18} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
       <div
+        ref={scrollRef}
         className="learning-path-scroll overflow-x-auto overscroll-x-contain pb-3 lms-focus-ring"
         tabIndex={0}
-        aria-label="Learning path modules. Scroll horizontally to view all modules."
+        role="region"
+        aria-label="Course learning path"
+        aria-describedby="learning-path-scroll-help"
       >
-        <ol className="flex w-max min-w-full list-none p-0 pt-2">
+        <span id="learning-path-scroll-help" className="sr-only">Scroll horizontally or use the previous and next module buttons.</span>
+        <ol className="flex w-max min-w-full list-none snap-x snap-mandatory p-0 pt-2">
           {modules.map((module, index) => {
             const status = statusMeta[module.status] ? module.status : 'locked'
             const meta = statusMeta[status]
@@ -34,7 +133,12 @@ export default function LearningPath({ modules = [], onSelectModule }) {
             const progressToHere = modules.slice(0, index + 1).every((item) => item.status === 'done' || item.status === 'mastered')
 
             return (
-              <li key={moduleKey} className={`learning-path-step learning-path-step-${status} relative w-36 shrink-0 px-2 sm:w-40`} style={{ '--path-delay': `${Math.min(index * 65, 780)}ms` }}>
+              <li
+                key={moduleKey}
+                ref={String(moduleKey) === currentModuleKey ? currentStepRef : null}
+                className={`learning-path-step learning-path-step-${status} relative w-[min(11rem,78vw)] shrink-0 snap-center px-2 sm:w-40`}
+                style={{ '--path-delay': `${Math.min(index * 65, 780)}ms` }}
+              >
                 {index < modules.length - 1 && (
                   <span
                     className={`learning-path-connector ${progressToHere ? 'learning-path-connector-done' : ''}`}

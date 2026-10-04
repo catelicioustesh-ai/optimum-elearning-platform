@@ -8,6 +8,7 @@ import Login from './pages/Login.jsx'
 import Register from './pages/Register.jsx'
 import EmailVerification from './pages/EmailVerification.jsx'
 import PasswordReset from './pages/PasswordReset.jsx'
+import CertificateVerification from './pages/CertificateVerification.jsx'
 import StudentDashboard from './pages/StudentDashboard.jsx'
 import CourseCatalog from './pages/CourseCatalog.jsx'
 import CourseView from './pages/CourseView.jsx'
@@ -19,6 +20,7 @@ import InstructorContent from './pages/InstructorContent.jsx'
 import InstructorSubmissions from './pages/InstructorSubmissions.jsx'
 import InstructorStudents from './pages/InstructorStudents.jsx'
 import AdminDashboard from './pages/AdminDashboard.jsx'
+import AppErrorBoundary from './components/AppErrorBoundary.jsx'
 
 function NotFound() {
   return (
@@ -37,14 +39,16 @@ function App() {
     <HelmetProvider>
       <AuthProvider>
         <ToastProvider>
-          <BrowserRouter>
-            <Routes>
+          <AppErrorBoundary>
+            <BrowserRouter>
+              <Routes>
               <Route path="/" element={<Landing />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route path="/verify-email" element={<EmailVerification />} />
               <Route path="/forgot-password" element={<PasswordReset />} />
               <Route path="/reset-password" element={<PasswordReset />} />
+              <Route path="/verify/:certificateNumber" element={<CertificateVerification />} />
 
             {/* Student */}
             <Route
@@ -142,8 +146,9 @@ function App() {
 
             {/* Unmatched paths land here instead of rendering a blank screen. */}
               <Route path="*" element={<NotFound />} />
-            </Routes>
-          </BrowserRouter>
+              </Routes>
+            </BrowserRouter>
+          </AppErrorBoundary>
         </ToastProvider>
       </AuthProvider>
     </HelmetProvider>

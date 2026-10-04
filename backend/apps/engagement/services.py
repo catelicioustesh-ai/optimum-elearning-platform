@@ -118,6 +118,10 @@ def issue_certificate(student, course):
         raise ValueError("The student must complete every course module before certification.")
 
     from django.contrib.auth import get_user_model
+    from django.db.models import Max
+
+    from apps.progress.models import ActivityCompletion
+
     get_user_model().objects.select_for_update().get(pk=student.pk)
     certificate = Certificate.objects.filter(
         student=student, course=course, status=Certificate.Status.ISSUED
@@ -125,7 +129,16 @@ def issue_certificate(student, course):
     if certificate:
         return certificate, False
 
-    certificate = Certificate.objects.create(student=student, course=course)
+    completed_at = ActivityCompletion.objects.filter(
+        student=student,
+        activity__lesson__module__course=course,
+        activity__is_required=True,
+    ).aggregate(latest=Max("completed_at"))["latest"] or timezone.now()
+    certificate = Certificate.objects.create(
+        student=student,
+        course=course,
+        completed_at=completed_at,
+    )
     create_notification(
         student,
         "certificate_issued",

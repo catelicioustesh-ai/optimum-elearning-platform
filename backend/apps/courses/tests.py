@@ -135,6 +135,32 @@ class CourseBuilderApiTests(APITestCase):
         self.assertGreater(activity_count, 0)
         self.assertFalse(Activity.objects.filter(lesson__module_id=module.id).exists())
 
+    def test_code_activity_language_is_configurable_and_visible_to_students(self):
+        activity = self.world.exercise
+        updated = self.instructor.patch(
+            f"/api/activities/{activity.id}/",
+            {"language": Activity.CodeLanguage.PYTHON},
+            format="json",
+        )
+        self.assertEqual(updated.status_code, 200, updated.data)
+        self.assertEqual(updated.data["language"], Activity.CodeLanguage.PYTHON)
+
+        visible_to_student = self.student.get(f"/api/activities/{activity.id}/")
+        self.assertEqual(visible_to_student.status_code, 200, visible_to_student.data)
+        self.assertEqual(visible_to_student.data["language"], Activity.CodeLanguage.PYTHON)
+
+        html_activity = self.instructor.patch(
+            f"/api/activities/{activity.id}/",
+            {"language": Activity.CodeLanguage.HTML},
+            format="json",
+        )
+        self.assertEqual(html_activity.status_code, 200, html_activity.data)
+        self.assertEqual(html_activity.data["language"], Activity.CodeLanguage.HTML)
+        self.assertEqual(
+            self.student.get(f"/api/activities/{activity.id}/").data["language"],
+            Activity.CodeLanguage.HTML,
+        )
+
     def test_uploaded_video_is_validated_and_served_with_byte_ranges(self):
         video = SimpleUploadedFile("lesson.mp4", b"\x00\x00\x00\x18ftypisom" + b"0" * 64, content_type="video/mp4")
         response = self.instructor.post("/api/lessons/", {

@@ -149,6 +149,18 @@ body {
 @keyframes learning-node-pulse { 50% { box-shadow: 0 0 0 5px rgba(59,130,246,.12); } }
 
 .learning-path-step { min-height: 112px; }
+.learning-path-scroll {
+  max-width: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-inline: 1rem;
+  scrollbar-color: #64748b #1e293b;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+.learning-path-scroll::-webkit-scrollbar { height: 8px; }
+.learning-path-scroll::-webkit-scrollbar-track { border-radius: 999px; background: #1e293b; }
+.learning-path-scroll::-webkit-scrollbar-thumb { border: 2px solid #1e293b; border-radius: 999px; background: #64748b; }
+.learning-path-scroll:focus-visible { outline: 2px solid #93c5fd; outline-offset: 3px; }
 .learning-path-connector {
   position: absolute;
   z-index: 0;
@@ -526,6 +538,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .dg-card, .dg-card *, [class^='dg-'] { animation: none !important; transition-duration: .01ms !important; }
+  .learning-path-scroll { scroll-behavior: auto; }
 }
 
 /* =====================  MOTION LAYER  ===================== */
@@ -675,4 +688,3 @@ aside nav a:not([aria-current='page']):hover { transform: translateX(5px); }
   max-height: 150px;
   overflow-y: auto;
 }
-

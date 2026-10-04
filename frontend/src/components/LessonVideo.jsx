@@ -36,7 +36,8 @@ export default function LessonVideo({ lessonId, url, track = false, showSummary 
   const parsedUrl = parseVideoUrl(url)
   const parsed = uploadedVideo ? { kind: 'file', src: uploadedSource } : parsedUrl
   const [progress, setProgress] = useState(null)
-  const [summary, setSummary] = useState(null)
+  const [summaryResult, setSummaryResult] = useState(null)
+  const [summaryRetryCount, setSummaryRetryCount] = useState(0)
   const [playerStatus, setPlayerStatus] = useState('loading')
   const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' || navigator.onLine)
   const [progressError, setProgressError] = useState('')
@@ -45,6 +46,7 @@ export default function LessonVideo({ lessonId, url, track = false, showSummary 
   const videoRef = useRef(null)
 
   const trackable = track && (parsed?.kind === 'youtube' || parsed?.kind === 'file') && (!uploadedVideo || !!uploadedSource)
+  const summaryKey = `${lessonId}:${url}:${summaryRetryCount}`
 
   useEffect(() => {
     if (!uploadedVideo || !url) return undefined
@@ -83,9 +85,17 @@ export default function LessonVideo({ lessonId, url, track = false, showSummary 
   useEffect(() => {
     if (!showSummary || !lessonId || !parsed) return
     let cancelled = false
-    api.get(`/progress/video/${lessonId}/summary/`).then((d) => { if (!cancelled) setSummary(d) }).catch(() => {})
+    api.get(`/progress/video/${lessonId}/summary/`)
+      .then((data) => { if (!cancelled) setSummaryResult({ key: summaryKey, data, error: '' }) })
+      .catch((error) => {
+        if (!cancelled) setSummaryResult({
+          key: summaryKey,
+          data: null,
+          error: error.message || 'Unable to load video watch statistics.',
+        })
+      })
     return () => { cancelled = true }
-  }, [showSummary, lessonId, parsed?.kind, url]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showSummary, lessonId, parsed?.kind, summaryKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Student view: tracking + resume.
   useEffect(() => {
@@ -266,9 +276,17 @@ export default function LessonVideo({ lessonId, url, track = false, showSummary 
             : <>Watched {Math.round(progress.percent || 0)}%{progress.position >= 5 ? ` · you’ll resume at ${fmt(Math.max(0, progress.position - 3))}` : ''}</>}
         </p>
       )}
-      {!track && summary && (
+      {!track && summaryResult?.key === summaryKey && summaryResult.data && (
         <p className="mt-2 text-xs text-text-secondary">
-          {summary.students.filter((s) => s.completed).length} of {summary.students.length} enrolled students have watched this video.
+          {summaryResult.data.students.filter((s) => s.completed).length} of {summaryResult.data.students.length} enrolled students have watched this video.
+        </p>
+      )}
+      {!track && summaryResult?.key === summaryKey && summaryResult.error && (
+        <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-rose-700" role="alert">
+          <span>{summaryResult.error}</span>
+          <button type="button" onClick={() => setSummaryRetryCount((count) => count + 1)} className="inline-flex items-center gap-1 font-semibold underline underline-offset-2">
+            <RotateCw size={12} aria-hidden="true" /> Retry
+          </button>
         </p>
       )}
       {!track && parsed.kind === 'vimeo' && <p className="mt-2 text-xs text-text-secondary">Students can play this, but progress isn’t tracked for Vimeo.</p>}

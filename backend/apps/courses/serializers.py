@@ -7,7 +7,7 @@ from .validators import validate_video_url
 ACTIVITY_PUBLIC_FIELDS = [
     "id", "lesson", "activity_type", "title", "instructions",
     "max_score", "max_attempts", "pass_percentage", "deadline", "is_required",
-    "starter_code", "quiz_id",
+    "language", "starter_code", "quiz_id",
 ]
 
 

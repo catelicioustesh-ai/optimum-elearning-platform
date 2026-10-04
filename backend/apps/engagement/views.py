@@ -11,7 +11,7 @@ from rest_framework.views import APIView
 from apps.accounts.access import ADMIN, INSTRUCTOR, STUDENT, role_of, require_teaches
 from apps.courses.models import Course
 
-from .certificate_pdf import render_certificate
+from .certificate_pdf import certificate_completion_date, render_certificate
 from .models import Achievement, Certificate, Notification, StudentAchievement, StudentStreak
 from .serializers import CertificateSerializer, NotificationSerializer
 from .services import issue_certificate, revoke_certificate
@@ -121,7 +121,32 @@ class CertificateDownloadView(APIView):
         response = HttpResponse(render_certificate(certificate), content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         response["X-Content-Type-Options"] = "nosniff"
+        response["Cache-Control"] = "private, no-store"
         return response
+
+
+class CertificateVerifyView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+
+    def get(self, request, certificate_number):
+        certificate = get_object_or_404(
+            Certificate.objects.select_related("student", "course"),
+            certificate_number=certificate_number,
+        )
+        return Response(
+            {
+                "certificate_number": str(certificate.certificate_number),
+                "course_title": certificate.course.title,
+                "student_name": certificate.student.get_full_name()
+                or certificate.student.username,
+                "status": certificate.status,
+                "verified": certificate.status == Certificate.Status.ISSUED,
+                "completed_on": certificate_completion_date(certificate).isoformat(),
+                "issued_at": certificate.issued_at,
+            },
+            headers={"Cache-Control": "no-store"},
+        )
 
 
 class IssueCertificateView(APIView):

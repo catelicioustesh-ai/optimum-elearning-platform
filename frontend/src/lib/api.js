@@ -12,7 +12,13 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
 function getTokens() {
   const raw = localStorage.getItem('auth')
-  return raw ? JSON.parse(raw) : null
+  if (!raw) return null
+  try {
+    return JSON.parse(raw)
+  } catch {
+    clearTokens()
+    return null
+  }
 }
 
 function setTokens(tokens) {
@@ -56,12 +62,44 @@ function refreshAccessToken() {
     refreshInFlight = (async () => {
       const tokens = getTokens()
       if (!tokens?.refresh) return null
-      const res = await fetch(`${API_URL}/auth/login/refresh/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh: tokens.refresh }),
-      })
-      const refreshed = await res.json().catch(() => null)
+      let res
+      try {
+        res = await fetch(`${API_URL}/auth/login/refresh/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh: tokens.refresh }),
+        })
+      } catch (error) {
+        if (error?.name === 'AbortError') {
+          throw new ApiError('The session refresh was cancelled. Please try again.', { code: 'REQUEST_ABORTED' })
+        }
+        throw new ApiError(
+          'Unable to reach the server. Check your connection and try again.',
+          { code: 'NETWORK_ERROR', data: { cause: error?.message } },
+        )
+      }
+
+      const responseText = await res.text()
+      let refreshed = null
+      if (responseText) {
+        try {
+          refreshed = JSON.parse(responseText)
+        } catch {
+          if (res.ok) {
+            throw new ApiError('The server returned an unreadable session response. Please try again.', {
+              status: res.status,
+              code: 'INVALID_RESPONSE',
+            })
+          }
+        }
+      }
+      if (res.status >= 500) {
+        throw new ApiError(errorMessage(refreshed, res.status), {
+          status: res.status,
+          code: refreshed?.code,
+          data: refreshed,
+        })
+      }
       if (!res.ok || !refreshed?.access) return null
       const updated = { ...tokens, ...refreshed }
       setTokens(updated)
@@ -72,10 +110,17 @@ function refreshAccessToken() {
 }
 
 /** Flatten DRF error bodies ({field: [msgs]} | {detail}) into one readable string. */
-function errorMessage(data) {
-  if (!data) return 'Request failed'
+function errorMessage(data, status) {
+  if (status === 503 && data?.code === 'CODE_RUNNER_UNAVAILABLE' && data.error) return data.error
+  if (status >= 500) {
+    if (status === 503) return 'The service is temporarily unavailable. Please try again shortly.'
+    if (status === 504) return 'The server took too long to respond. Please try again.'
+    return 'The server encountered an error. Please try again shortly.'
+  }
+  if (status === 429) return 'Too many requests. Please wait a moment and try again.'
+  if (!data) return `Request failed (${status || 'unknown status'}).`
   if (typeof data === 'string') return data
-  if (data.detail) return typeof data.detail === 'string' ? data.detail : errorMessage(data.detail)
+  if (data.detail) return typeof data.detail === 'string' ? data.detail : errorMessage(data.detail, status)
   const parts = []
   const walk = (v) => {
     if (Array.isArray(v)) v.forEach(walk)
@@ -94,7 +139,19 @@ async function request(path, { method = 'GET', body, auth = true, isFormData = f
     if (tokens?.access) headers.Authorization = `Bearer ${tokens.access}`
   }
   const buildBody = () => (isFormData ? body : body ? JSON.stringify(body) : undefined)
-  const send = () => fetch(`${API_URL}${path}`, { method, headers, body: buildBody(), keepalive })
+  const send = async () => {
+    try {
+      return await fetch(`${API_URL}${path}`, { method, headers, body: buildBody(), keepalive })
+    } catch (error) {
+      if (error?.name === 'AbortError') {
+        throw new ApiError('The request was cancelled. Please try again.', { code: 'REQUEST_ABORTED' })
+      }
+      throw new ApiError(
+        'Unable to reach the server. Check your connection and try again.',
+        { code: 'NETWORK_ERROR', data: { cause: error?.message } },
+      )
+    }
+  }
 
   let res = await send()
 
@@ -113,9 +170,23 @@ async function request(path, { method = 'GET', body, auth = true, isFormData = f
 
   if (blob && res.ok) return res.blob()
 
-  const data = await res.json().catch(() => null)
+  const responseText = await res.text()
+  let data = null
+  if (responseText) {
+    try {
+      data = JSON.parse(responseText)
+    } catch {
+      if (res.ok) {
+        throw new ApiError('The server returned an unreadable response. Please try again.', {
+          status: res.status,
+          code: 'INVALID_RESPONSE',
+        })
+      }
+      data = responseText
+    }
+  }
   if (!res.ok) {
-    throw new ApiError(errorMessage(data), { status: res.status, code: data?.code, data })
+    throw new ApiError(errorMessage(data, res.status), { status: res.status, code: data?.code, data })
   }
   return data
 }
@@ -160,6 +231,8 @@ export const api = {
   me: () => request('/auth/me/'),
 
   get: (path) => request(path),
+  verifyCertificate: (certificateNumber) =>
+    request(`/engagement/certificates/${encodeURIComponent(certificateNumber)}/verify/`, { auth: false }),
   getBlob: (path) => request(path, { blob: true }),
   post: (path, body) => request(path, { method: 'POST', body }),
   patch: (path, body) => request(path, { method: 'PATCH', body }),

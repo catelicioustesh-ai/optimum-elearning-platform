@@ -150,6 +150,12 @@ class Activity(models.Model):
     completion (progress app): a module is only complete once every
     required activity in it is complete.
     """
+
+    class CodeLanguage(models.TextChoices):
+        JAVASCRIPT = "javascript", "JavaScript"
+        PYTHON = "python", "Python"
+        HTML = "html", "HTML"
+
     lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name="activities")
     activity_type = models.CharField(max_length=20, choices=ActivityType.choices)
     title = models.CharField(max_length=200)
@@ -165,7 +171,12 @@ class Activity(models.Model):
     deadline = models.DateTimeField(null=True, blank=True)
     is_required = models.BooleanField(default=True)
 
-    # for coding exercises specifically
+    # for coding activities specifically
+    language = models.CharField(
+        max_length=20,
+        choices=CodeLanguage.choices,
+        default=CodeLanguage.JAVASCRIPT,
+    )
     starter_code = models.TextField(blank=True)
     test_cases = models.JSONField(blank=True, null=True, help_text="List of {input, expected_output}")
 

@@ -1,0 +1,29 @@
+# Development-only runner for a native Django backend.
+# The loopback binding lets the host backend reach the runner without exposing it to the LAN.
+services:
+  sandbox:
+    build: ./sandbox
+    environment:
+      SANDBOX_TOKEN: ${SANDBOX_TOKEN:?set SANDBOX_TOKEN in backend/.env}
+    ports:
+      - "127.0.0.1:9000:9000"
+    networks: [runner_net]
+    read_only: true
+    tmpfs:
+      - "/tmp:size=64m,noexec,nosuid"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 128
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:9000/health',timeout=2)"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+networks:
+  runner_net:
+    internal: true

@@ -39,6 +39,7 @@ export default function InstructorDashboard() {
   const [data, setData] = useState(null)
   const [risk, setRisk] = useState(null)
   const [error, setError] = useState('')
+  const [profileError, setProfileError] = useState('')
   const [riskError, setRiskError] = useState('')
   const [loading, setLoading] = useState(true)
   const [grading, setGrading] = useState(null)
@@ -52,10 +53,14 @@ export default function InstructorDashboard() {
   const [certificateReload, setCertificateReload] = useState(0)
 
   function fetchAll() {
-    Promise.all([api.get('/dashboard/instructor/'), api.me().catch(() => null)])
-      .then(([dash, meData]) => {
+    Promise.all([
+      api.get('/dashboard/instructor/'),
+      api.me().then((data) => ({ data })).catch((profileRequestError) => ({ error: profileRequestError })),
+    ])
+      .then(([dash, profileResult]) => {
         setData(dash)
-        setMe(meData)
+        setMe(profileResult.data || null)
+        setProfileError(profileResult.error?.message || '')
       })
       .catch((err) => {
         setData(null)
@@ -178,6 +183,11 @@ export default function InstructorDashboard() {
       <div className="space-y-6" data-role="instructor">
         {loading && <Skeleton height={220} />}
         {error && <ErrorState message={`Couldn't load your dashboard: ${error}`} onRetry={load} />}
+        {profileError && data && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
+            Profile details are unavailable, so the account email is being shown instead. {profileError}
+          </p>
+        )}
 
         {data && (
           <>

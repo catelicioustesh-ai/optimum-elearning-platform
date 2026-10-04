@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import requests
 from django.core.cache import cache
+from django.test import override_settings
 from rest_framework.test import APITestCase
 
 from apps.accounts.testing import World, client_for
@@ -16,6 +17,7 @@ def runner(stdout="", exit_code=0, timed_out=False, stderr="", status=200):
     return m
 
 
+@override_settings(SANDBOX_TOKEN="test-runner-token")
 class ExecutionTests(APITestCase):
     @classmethod
     def setUpTestData(cls):
@@ -30,9 +32,10 @@ class ExecutionTests(APITestCase):
         return client_for(user).post("/api/execute/run/", body, format="json")
 
     def run_tests(self, user, activity=None, **body):
-        body.setdefault("language", "python")
+        activity = activity or self.w.exercise
+        body.setdefault("language", activity.language)
         body.setdefault("code", "print(input())")
-        body.setdefault("activity_id", (activity or self.w.exercise).id)
+        body.setdefault("activity_id", activity.id)
         return client_for(user).post("/api/execute/test/", body, format="json")
 
     # ---- /run/ ----
@@ -54,6 +57,7 @@ class ExecutionTests(APITestCase):
     def test_run_input_validation(self):
         u = self.w.student_1
         self.assertEqual(self.run_code(u, language="ruby").status_code, 400)
+        self.assertEqual(self.run_code(u, language="html").status_code, 400)
         self.assertEqual(self.run_code(u, language=["python"]).status_code, 400)
         self.assertEqual(self.run_code(u, code="").status_code, 400)
         self.assertEqual(self.run_code(u, code=123).status_code, 400)
@@ -65,8 +69,18 @@ class ExecutionTests(APITestCase):
         post.side_effect = requests.ConnectionError("HTTPConnectionPool(host='sandbox', port=9000): refused")
         r = self.run_code(self.w.student_1)
         self.assertEqual(r.status_code, 503)
+        self.assertEqual(r.data["code"], "CODE_RUNNER_UNAVAILABLE")
         self.assertNotIn("sandbox", r.content.decode().lower().replace("code runner", ""))
         self.assertNotIn("9000", r.content.decode())
+
+    @patch("apps.execution.views.requests.post")
+    def test_missing_runner_token_is_reported_without_making_a_request(self, post):
+        with self.settings(SANDBOX_TOKEN=""):
+            response = self.run_code(self.w.student_1)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.data["code"], "CODE_RUNNER_UNAVAILABLE")
+        post.assert_not_called()
 
     @patch("apps.execution.views.requests.post")
     def test_runner_garbage_response_is_handled(self, post):
@@ -132,3 +146,21 @@ class ExecutionTests(APITestCase):
     def test_activity_without_tests_or_of_wrong_type(self):
         self.assertEqual(self.run_tests(self.w.student_1, activity=self.w.assignment).status_code, 400)
         self.assertEqual(self.run_tests(self.w.student_1, activity_id="abc").status_code, 404)
+
+    def test_activity_rejects_code_in_a_different_language(self):
+        activity = self.w.exercise
+        other_language = "python" if activity.language == "javascript" else "javascript"
+        response = self.run_tests(self.w.student_1, activity=activity, language=other_language)
+        self.assertEqual(response.status_code, 400)
+
+    @patch("apps.execution.views.requests.post")
+    def test_html_activity_does_not_use_the_code_runner_for_tests(self, post):
+        activity = self.w.exercise
+        activity.language = "html"
+        activity.save(update_fields=["language"])
+
+        response = self.run_tests(self.w.student_1, activity=activity)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("HTML activities", str(response.data))
+        post.assert_not_called()

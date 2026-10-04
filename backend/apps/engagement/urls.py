@@ -4,6 +4,7 @@ from .views import (
     CertificateDetailView,
     CertificateDownloadView,
     CertificateListView,
+    CertificateVerifyView,
     IssueCertificateView,
     NotificationListView,
     NotificationReadAllView,
@@ -21,5 +22,6 @@ urlpatterns = [
     path("certificates/", CertificateListView.as_view(), name="certificate-list"),
     path("certificates/<uuid:certificate_number>/", CertificateDetailView.as_view(), name="certificate-detail"),
     path("certificates/<uuid:certificate_number>/download/", CertificateDownloadView.as_view(), name="certificate-download"),
+    path("certificates/<uuid:certificate_number>/verify/", CertificateVerifyView.as_view(), name="certificate-verify"),
     path("certificates/<uuid:certificate_number>/revoke/", RevokeCertificateView.as_view(), name="certificate-revoke"),
 ]

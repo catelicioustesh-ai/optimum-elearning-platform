@@ -139,6 +139,16 @@ export default function StudentDashboard() {
           </section>
         )}
 
+        {!loading && !error && data?.engagementError && (
+          <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950" role="status">
+            <p className="font-semibold">Achievements are temporarily unavailable.</p>
+            <p className="mt-1">{data.engagementError} Your course progress is still available.</p>
+            <button type="button" onClick={retryLoad} className="mt-2 font-semibold underline underline-offset-2">
+              Retry dashboard
+            </button>
+          </section>
+        )}
+
         {!loading && !error && !course && (
           <section className="dg-card rounded-2xl p-6 sm:p-8">
             <div className="flex max-w-xl flex-col items-start gap-4">

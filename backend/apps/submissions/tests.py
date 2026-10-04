@@ -33,6 +33,16 @@ class SubmissionUploadValidationTests(APITestCase):
         from django.core.cache import cache
         cache.clear()   # throttle counters live in the cache
 
+    def test_code_submission_includes_activity_language_for_grading(self):
+        response = client_for(self.w.student_1).post(
+            "/api/submissions/",
+            {"activity": self.w.exercise.id, "content": "print('hi')"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["activity_type"], "exercise")
+        self.assertEqual(response.data["activity_language"], self.w.exercise.language)
+
     def upload(self, name, data, **kw):
         f = SimpleUploadedFile(name, data)
         c = client_for(self.w.student_1)
