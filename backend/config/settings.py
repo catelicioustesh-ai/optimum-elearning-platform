@@ -87,6 +87,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
+    "drf_spectacular",
 
     # Our apps
     "apps.accounts",
@@ -275,6 +276,27 @@ REST_FRAMEWORK = {
         "code_run": "30/minute",
         "upload": "30/hour",
         "video_progress": "120/minute",
+    },
+
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+
+# --------------------------------------------------------------------------
+# drf-spectacular (OpenAPI / Swagger)
+# --------------------------------------------------------------------------
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Optimum ERP LMS API",
+    "DESCRIPTION": "E-Learning Management System API",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "COMPONENT_SPLIT_REQUEST": True,
+    "SCHEMA_PATH_PREFIX": r"/api/",
+    "SWAGGER_UI_SETTINGS": {
+        "persistAuthorization": True,
+        "displayOperationId": True,
+        "filter": True,
     },
 }
 
