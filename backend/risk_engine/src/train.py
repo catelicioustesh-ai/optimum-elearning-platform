@@ -159,9 +159,9 @@ def train():
     final_model = CalibratedClassifierCV(_base_model(), method="isotonic", cv=5)
     final_model.fit(X, y)
 
-    # Risk-level thresholds off the *calibrated* probability distribution's
-    # terciles, so "high" means "probability higher than most other
-    # flagged students". Tune these once you have real outcome data.
+    # Risk-level thresholds off the calibrated probabilities: medium starts
+    # at the 60th percentile, high at the 85th. Tune these with real outcome
+    # data and an agreed intervention policy.
     full_proba = final_model.predict_proba(X)[:, 1]
     medium_cutoff = float(np.quantile(full_proba, 0.60))
     high_cutoff = float(np.quantile(full_proba, 0.85))

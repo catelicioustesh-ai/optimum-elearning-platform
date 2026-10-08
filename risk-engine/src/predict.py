@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+from typing import TypedDict
 
 import joblib
 import numpy as np
@@ -55,6 +56,11 @@ FEATURE_EXPLANATIONS = {
     "retries_avg": ("Needing frequent retries on quizzes/assignments", "Rarely needs retries"),
     "relative_score_vs_class": ("Scoring below the class average", "Scoring above the class average"),
 }
+
+
+class CohortRiskScores(TypedDict):
+    scored: list[dict]
+    skipped_insufficient_history: list[str]
 
 
 def _recommend_action(risk_level: str, feat: dict) -> str:
@@ -129,16 +135,16 @@ class RiskEngine:
             "recommended_action": _recommend_action(risk_level, feat),
         }
 
-    def score_many(self, snapshots_by_student: dict[str, list[dict]]) -> list[dict]:
+    def score_many(self, snapshots_by_student: dict[str, list[dict]]) -> CohortRiskScores:
         """Convenience batch wrapper — e.g. for a nightly job that scores
         an entire cohort at once. Students without enough history are
-        skipped (not silently scored) and returned separately."""
+        skipped; errors while scoring valid histories are allowed to surface."""
         results, skipped = [], []
         for student_id, snaps in snapshots_by_student.items():
-            try:
-                results.append(self.score_student(snaps))
-            except ValueError:
+            if len(snaps) < MIN_HISTORY_WEEKS:
                 skipped.append(student_id)
+                continue
+            results.append(self.score_student(snaps))
         results.sort(key=lambda r: r["risk_probability"], reverse=True)
         return {"scored": results, "skipped_insufficient_history": skipped}
 
