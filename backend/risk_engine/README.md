@@ -77,6 +77,12 @@ and high at the 85th percentile. Because the checked-in training labels
 are synthetic, these cutoffs are provisional and should be reviewed
 against real outcomes and the intervention policy before production use.
 
+At startup, the predictor checks that the ordered `feature_columns` in
+`models/metadata.json` match the runtime feature definitions and that
+every calibrated model estimator expects that feature count. A mismatch
+raises an explicit error; regenerate the model and metadata together with
+`python src/train.py` rather than deploying incompatible artifacts.
+
 **This ships trained on synthetic data.** It proves the pipeline works
 end-to-end (schema → features → model → explainable output). It is *not*
 validated against real student outcomes yet — see the "what's simplified"

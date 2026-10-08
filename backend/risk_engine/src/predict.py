@@ -63,6 +63,25 @@ class CohortRiskScores(TypedDict):
     skipped_insufficient_history: list[str]
 
 
+def _validate_feature_contract(model, metadata: dict) -> None:
+    metadata_columns = metadata.get("feature_columns")
+    if metadata_columns != FEATURE_COLUMNS:
+        raise ValueError(
+            "Risk model feature order does not match the runtime feature definitions. "
+            "Retrain the model and regenerate metadata.json."
+        )
+
+    model_feature_counts = {
+        classifier.estimator.n_features_in_
+        for classifier in model.calibrated_classifiers_
+    }
+    if model_feature_counts != {len(FEATURE_COLUMNS)}:
+        raise ValueError(
+            "Risk model feature count does not match the runtime feature definitions. "
+            "Retrain the model and regenerate metadata.json."
+        )
+
+
 def _recommend_action(risk_level: str, feat: dict) -> str:
     if risk_level == "high":
         if feat["inactivity_streak_days"] >= 5 or feat["avg_login_frequency"] < 1:
@@ -80,6 +99,7 @@ class RiskEngine:
         self.model = joblib.load(model_dir / "risk_model.joblib")
         with open(model_dir / "metadata.json") as f:
             self.metadata = json.load(f)
+        _validate_feature_contract(self.model, self.metadata)
         self.thresholds = self.metadata["thresholds"]
         self.class_avg = self.metadata["class_avg_composite_by_course"]
         # self.model is a CalibratedClassifierCV — its predict_proba is what
