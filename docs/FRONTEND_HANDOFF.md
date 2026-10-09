@@ -32,7 +32,8 @@ For interactive API documentation during local development, open `/api/docs/`
 for Swagger UI or `/api/redoc/` for ReDoc; `/api/schema/` serves the OpenAPI
 schema. These routes are available only when Django runs with `DEBUG=True`.
 The route inventory below and [API_REFERENCE.md](./API_REFERENCE.md) remain
-the API contract, including details not yet represented in the generated schema.
+the source for usage guidance and behavior details that are not expressed by
+the generated schema.
 
 ## Run the backend and frontend locally (Windows)
 

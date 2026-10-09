@@ -3,6 +3,7 @@ from django.utils import timezone
 
 from apps.accounts.testing import World, client_for
 from apps.engagement.models import (
+    Achievement,
     Certificate,
     LearningActivityDay,
     Notification,
@@ -69,8 +70,47 @@ class EngagementApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         first_steps = next(item for item in response.data["achievements"] if item["code"] == "first-steps")
         self.assertIsNotNone(first_steps["earned_at"])
+        self.assertEqual(first_steps["progress"], 1)
+        self.assertEqual(first_steps["progress_percent"], 100)
+        getting_started = next(
+            item for item in response.data["achievements"]
+            if item["code"] == "getting-started"
+        )
+        self.assertIsNone(getting_started["earned_at"])
+        self.assertEqual(getting_started["progress"], 2)
+        self.assertEqual(getting_started["progress_percent"], 40)
+        course_graduate = next(
+            item for item in response.data["achievements"]
+            if item["code"] == "course-graduate"
+        )
+        self.assertEqual(course_graduate["progress"], 1)
+        self.assertEqual(course_graduate["progress_percent"], 100)
+        streak_badge = next(
+            item for item in response.data["achievements"]
+            if item["code"] == "streak-3"
+        )
+        self.assertEqual(streak_badge["progress"], 1)
+        self.assertEqual(streak_badge["progress_percent"], 33)
         self.assertEqual(response.data["current_streak"], 1)
         self.assertEqual(response.data["certificates"][0]["status"], Certificate.Status.ISSUED)
+
+    def test_historical_course_award_keeps_progress_complete(self):
+        course_achievement = Achievement.objects.get(code="course-graduate")
+        StudentAchievement.objects.create(
+            student=self.world.student_1,
+            achievement=course_achievement,
+        )
+
+        response = self.student.get("/api/engagement/me/")
+        course_graduate = next(
+            item for item in response.data["achievements"]
+            if item["code"] == "course-graduate"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(course_graduate["earned_at"])
+        self.assertEqual(course_graduate["progress"], course_graduate["threshold"])
+        self.assertEqual(course_graduate["progress_percent"], 100)
 
     def test_notifications_are_private_and_read_state_is_idempotent(self):
         notification = Notification.objects.create(

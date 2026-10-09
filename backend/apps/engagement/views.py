@@ -17,6 +17,9 @@ from drf_spectacular.utils import (
 
 from apps.accounts.access import ADMIN, INSTRUCTOR, STUDENT, role_of, require_teaches
 from apps.courses.models import Course
+from apps.enrollment.models import Enrollment
+from apps.progress.models import ActivityCompletion
+from apps.progress.services import is_course_complete
 
 from .certificate_pdf import certificate_completion_date, render_certificate
 from .models import Achievement, Certificate, Notification, StudentAchievement, StudentStreak
@@ -41,7 +44,10 @@ class StudentEngagementView(APIView):
                         "name": serializers.CharField(),
                         "description": serializers.CharField(),
                         "category": serializers.CharField(),
+                        "metric": serializers.CharField(),
                         "threshold": serializers.IntegerField(),
+                        "progress": serializers.IntegerField(),
+                        "progress_percent": serializers.IntegerField(),
                         "earned_at": serializers.DateTimeField(allow_null=True),
                     },
                 ),
@@ -57,21 +63,44 @@ class StudentEngagementView(APIView):
         current_streak = 0
         if streak and streak.last_activity_date and streak.last_activity_date >= timezone.localdate() - timedelta(days=1):
             current_streak = streak.current_days
+        completed_activities = ActivityCompletion.objects.filter(
+            student=request.user
+        ).count()
+        completed_courses = sum(
+            1
+            for enrollment in Enrollment.objects.filter(
+                student=request.user
+            ).select_related("course")
+            if enrollment.course.modules.exists()
+            and is_course_complete(request.user, enrollment.course)
+        )
+        metric_values = {
+            Achievement.Metric.ACTIVITIES: completed_activities,
+            Achievement.Metric.COURSES: completed_courses,
+            Achievement.Metric.STREAK_DAYS: current_streak,
+        }
         awards = {
             item.achievement_id: item.earned_at
             for item in StudentAchievement.objects.filter(student=request.user)
         }
-        achievements = [
-            {
+        achievements = []
+        for achievement in Achievement.objects.filter(active=True):
+            progress = metric_values[achievement.metric]
+            earned_at = awards.get(achievement.id)
+            if earned_at:
+                progress = max(progress, achievement.threshold)
+            progress = min(progress, achievement.threshold)
+            achievements.append({
                 "code": achievement.code,
                 "name": achievement.name,
                 "description": achievement.description,
                 "category": achievement.category,
+                "metric": achievement.metric,
                 "threshold": achievement.threshold,
-                "earned_at": awards.get(achievement.id),
-            }
-            for achievement in Achievement.objects.filter(active=True)
-        ]
+                "progress": progress,
+                "progress_percent": round(progress / achievement.threshold * 100),
+                "earned_at": earned_at,
+            })
         certificates = Certificate.objects.filter(student=request.user).select_related("course")
         return Response({
             "current_streak": current_streak,

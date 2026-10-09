@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, Award, BookOpen, CheckCircle2, Download, Flame, RotateCw } from 'lucide-react'
+import { ArrowRight, Award, BookOpen, CheckCircle2, Download, Flame, LockKeyhole, RotateCw } from 'lucide-react'
 
 import DashboardLayout from '../components/DashboardLayout.jsx'
 import LearningPath from '../components/LearningPath.jsx'
@@ -62,6 +62,11 @@ export default function StudentDashboard() {
   const completedModules = modules.filter((module) => module.status === 'done').length
   const engagement = data?.engagement
   const earnedAchievements = engagement?.achievements.filter((item) => item.earned_at) || []
+  const achievementUnits = {
+    activities: 'activities',
+    courses: 'courses',
+    streak_days: 'days',
+  }
 
   function sectionItems(section, items) {
     return expandedSections[section] ? items : items.slice(0, 5)
@@ -329,23 +334,81 @@ export default function StudentDashboard() {
                 </div>
                 <div className="mt-5 grid gap-6 lg:grid-cols-2">
                   <div>
-                    <h3 className="text-xs font-bold uppercase tracking-wide text-slate-400">Badges and milestones</h3>
-                    {earnedAchievements.length ? (
-                      <ul className="mt-3 divide-y divide-slate-700">
-                        {sectionItems('achievements', earnedAchievements).map((item) => (
-                          <li key={item.code} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
-                            <Award size={17} className="mt-0.5 shrink-0 text-amber-300" aria-hidden="true" />
-                            <div>
-                              <p className="text-sm font-semibold text-white">{item.name}</p>
-                              <p className="mt-0.5 text-xs text-slate-400">{item.description}</p>
-                            </div>
-                          </li>
-                        ))}
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-xs font-bold uppercase tracking-wide text-slate-400">Achievement progress</h3>
+                      <span className="text-xs font-semibold text-slate-300">
+                        {earnedAchievements.length} / {engagement.achievements.length} earned
+                      </span>
+                    </div>
+                    {engagement.achievements.length ? (
+                      <ul className="mt-3 grid gap-3 sm:grid-cols-2">
+                        {sectionItems('achievements', engagement.achievements).map((item) => {
+                          const earned = Boolean(item.earned_at)
+                          const unit = achievementUnits[item.metric] || 'steps'
+                          return (
+                            <li
+                              key={item.code}
+                              className={`rounded-xl border p-4 transition-colors ${
+                                earned
+                                  ? 'border-amber-400/30 bg-amber-400/10'
+                                  : 'border-slate-700 bg-slate-800/50'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${
+                                  earned ? 'bg-amber-400/15 text-amber-300' : 'bg-slate-700 text-slate-400'
+                                }`}>
+                                  {earned
+                                    ? <Award size={18} aria-hidden="true" />
+                                    : <LockKeyhole size={16} aria-hidden="true" />}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p className="text-sm font-semibold text-white">{item.name}</p>
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                                      earned ? 'bg-amber-300/15 text-amber-200' : 'bg-slate-700 text-slate-300'
+                                    }`}>
+                                      {earned ? 'Earned' : item.category}
+                                    </span>
+                                  </div>
+                                  <p className="mt-1 text-xs leading-5 text-slate-400">{item.description}</p>
+                                  <div className="mt-3 flex items-center justify-between gap-3 text-xs">
+                                    <span className="text-slate-300">
+                                      {item.progress} / {item.threshold} {unit}
+                                    </span>
+                                    {earned && item.earned_at && (
+                                      <span className="text-amber-200/80">
+                                        {new Date(item.earned_at).toLocaleDateString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div
+                                    className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-700"
+                                    role="progressbar"
+                                    aria-label={`${item.name} progress`}
+                                    aria-valuemin={0}
+                                    aria-valuemax={100}
+                                    aria-valuenow={item.progress_percent}
+                                  >
+                                    <div
+                                      className={`h-full rounded-full transition-[width] ${
+                                        earned ? 'bg-amber-300' : 'bg-blue-400'
+                                      }`}
+                                      style={{ width: `${item.progress_percent}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </li>
+                          )
+                        })}
                       </ul>
                     ) : (
-                      <p className="mt-3 text-sm text-slate-400" role="status">Complete a learning activity to earn your first badge.</p>
+                      <p className="mt-3 text-sm text-slate-400" role="status">
+                        No achievements are available yet.
+                      </p>
                     )}
-                    {sectionToggle('achievements', earnedAchievements, 'achievements')}
+                    {sectionToggle('achievements', engagement.achievements, 'achievements')}
                   </div>
                   <div>
                     <h3 className="text-xs font-bold uppercase tracking-wide text-slate-400">Certificates</h3>

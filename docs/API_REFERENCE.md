@@ -14,12 +14,10 @@ When running Django with `DEBUG=True`, open `/api/docs/` for Swagger UI,
 These documentation routes are disabled when `DEBUG=False`; the normal API
 routes and authentication behavior are unchanged.
 
-The schema is generated from DRF serializers and view metadata. Some
-`APIView` handlers do not yet declare request/response schemas and may be
-omitted from the generated OpenAPI document; run
-`python manage.py spectacular --validate` to identify those gaps. This
-hand-maintained reference remains the source for endpoint details not yet
-represented in the generated schema.
+The schema is generated from DRF serializers and explicit view metadata.
+Run `python manage.py spectacular --validate` after API changes to check it;
+the hand-maintained reference remains the source for usage guidance and
+behavioral details that are not expressed by an OpenAPI schema.
 
 ## Conventions used throughout this doc
 
@@ -324,8 +322,13 @@ milestones; verified video watch progress and newly completed activities count
 as study days. Repeated events do not duplicate awards or activity-day records.
 
 ### `GET /api/engagement/me/` 🔒 — Student
-Returns current/longest streaks, the active achievement catalog with `earned_at`
-set only for awards earned by this student, and the student's certificate history.
+Returns current/longest streaks, the active achievement catalog, and the
+student's certificate history. Each achievement includes its database-managed
+`name`, `description`, and `category`, plus `metric`, `threshold`, `progress`,
+`progress_percent`, and `earned_at` (null until earned). Progress is calculated
+from the student's completed activities, completed enrolled courses, or current
+study streak, depending on the achievement metric. The catalog definitions can
+be managed in Django Admin under **Engagement → Achievements**.
 
 ### `GET /api/engagement/notifications/` 🔒 — Any
 Returns the caller's 30 most recent notifications and their total `unread_count`.

@@ -2,6 +2,7 @@ import uuid
 
 from django.conf import settings
 from django.db import models
+from django.core.validators import MinValueValidator
 
 
 class Achievement(models.Model):
@@ -20,7 +21,7 @@ class Achievement(models.Model):
     description = models.CharField(max_length=255)
     category = models.CharField(max_length=16, choices=Category.choices)
     metric = models.CharField(max_length=20, choices=Metric.choices)
-    threshold = models.PositiveIntegerField()
+    threshold = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     active = models.BooleanField(default=True)
 
     class Meta:

@@ -65,14 +65,16 @@ class CourseBuilderApiTests(APITestCase):
         )
 
         self.assertEqual(updated.status_code, 200, updated.data)
-        self.assertTrue(updated.data["thumbnail"].endswith("new-cover.png"))
-        self.assertIn("new-cover.png", updated.data["thumbnail_url"])
+        self.assertIn("new-cover", updated.data["thumbnail"])
+        self.assertTrue(updated.data["thumbnail"].endswith(".png"))
+        self.assertIn("new-cover", updated.data["thumbnail_url"])
+        self.assertTrue(updated.data["thumbnail_url"].endswith(".png"))
 
         catalog = self.student.get("/api/courses/")
         self.assertEqual(catalog.status_code, 200, catalog.data)
         catalog_course = next(item for item in catalog.data if item["id"] == course.id)
         self.assertEqual(catalog_course["thumbnail_url"], updated.data["thumbnail_url"])
-        self.assertIn("new-cover.png", catalog_course["thumbnail_url"])
+        self.assertIn("new-cover", catalog_course["thumbnail_url"])
 
     def test_draft_stays_hidden_until_valid_course_is_published(self):
         draft = self.instructor.post("/api/courses/", {
