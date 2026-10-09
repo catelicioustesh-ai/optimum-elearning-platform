@@ -1,13 +1,23 @@
 from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
-from django.urls import path, include
+from django.urls import include, path
 
 admin.site.site_header = "Optimum ERP LMS Administration"
 admin.site.site_title = "Optimum ERP LMS Admin"
 admin.site.index_title = "Platform Administration"
 
+from drf_spectacular.views import (
+    SpectacularAPIView,
+    SpectacularRedocView,
+    SpectacularSwaggerView,
+)
+
+
+
 urlpatterns = [
+    # ------------------------------------------------------------------
+    # Admin
+    # ------------------------------------------------------------------
     path("admin/", admin.site.urls),
 ]
 
@@ -26,6 +36,9 @@ api_urlpatterns = [
     path("allocation/", include("apps.allocation.urls")),
 ]
 
+# ----------------------------------------------------------------------
+# Media files (dev only)
+# ----------------------------------------------------------------------
 if settings.DEBUG:
     from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
@@ -45,3 +58,9 @@ if settings.DEBUG:
     ]
 
 urlpatterns.append(path("api/", include(api_urlpatterns)))
+        re_path(
+            r"^media/(?P<path>course_covers/.*)$",
+            serve,
+            {"document_root": settings.MEDIA_ROOT},
+        ),
+    ]
