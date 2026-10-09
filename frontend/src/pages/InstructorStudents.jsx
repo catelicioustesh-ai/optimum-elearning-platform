@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { LayoutDashboard, BookOpen, FileCheck, Users } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout.jsx'
+import ExpandableList from '../components/ExpandableList.jsx'
 import { api } from '../lib/api.js'
 import { useAuth } from '../context/useAuth.js'
 
@@ -72,39 +73,41 @@ export default function InstructorStudents() {
                 <p className="text-xs text-text-dim">Includes learners who are not yet enrolled in any course.</p>
               </div>
             </div>
-            <div className="divide-y divide-line">
-              {allStudents.map((student) => (
-                <div key={student.id} className="flex flex-col gap-1 py-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-ink">{student.full_name || student.username}</p>
-                    <p className="text-xs text-text-dim">{student.email}</p>
+            {allStudents.length ? (
+              <ExpandableList items={allStudents} label="students" listClassName="divide-y divide-line">
+                {(student) => (
+                  <div key={student.id} className="flex flex-col gap-1 py-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-ink">{student.full_name || student.username}</p>
+                      <p className="text-xs text-text-dim">{student.email}</p>
+                    </div>
+                    <p className="text-xs text-text-dim">
+                      {student.enrolled_courses?.length
+                        ? student.enrolled_courses.map((course) => course.title).join(' · ')
+                        : 'Not enrolled yet'}
+                    </p>
                   </div>
-                  <p className="text-xs text-text-dim">
-                    {student.enrolled_courses?.length
-                      ? student.enrolled_courses.map((course) => course.title).join(' · ')
-                      : 'Not enrolled yet'}
-                  </p>
-                </div>
-              ))}
-              {allStudents.length === 0 && <p className="py-3 text-sm text-text-muted">No registered students yet.</p>}
-            </div>
+                )}
+              </ExpandableList>
+            ) : <p className="py-3 text-sm text-text-muted" role="status">No registered students yet.</p>}
           </div>
         )}
 
         {courseId && (
           <div className="rounded-2xl border border-line bg-paper p-5">
-            <div className="divide-y divide-line">
-              {enrollments.map((e) => (
-                <div key={e.id} className="flex items-center justify-between py-3">
-                  <div>
-                    <p className="text-sm font-medium text-ink">{e.student_name || e.student_email}</p>
-                    <p className="text-xs text-text-dim">{e.student_email}</p>
+            {enrollments.length ? (
+              <ExpandableList items={enrollments} label="students" listClassName="divide-y divide-line">
+                {(enrollment) => (
+                  <div key={enrollment.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
+                    <div>
+                      <p className="text-sm font-medium text-ink">{enrollment.student_name || enrollment.student_email}</p>
+                      <p className="text-xs text-text-dim">{enrollment.student_email}</p>
+                    </div>
+                    <p className="text-xs text-text-dim">Enrolled {new Date(enrollment.enrolled_at).toLocaleDateString()}</p>
                   </div>
-                  <p className="text-xs text-text-dim">Enrolled {new Date(e.enrolled_at).toLocaleDateString()}</p>
-                </div>
-              ))}
-              {enrollments.length === 0 && <p className="py-3 text-sm text-text-muted">No students enrolled in this course yet.</p>}
-            </div>
+                )}
+              </ExpandableList>
+            ) : <p className="py-3 text-sm text-text-muted" role="status">No students enrolled in this course yet.</p>}
           </div>
         )}
       </div>

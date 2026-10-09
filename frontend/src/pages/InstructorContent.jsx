@@ -3,6 +3,7 @@ import { Helmet } from 'react-helmet-async'
 import { LayoutDashboard, BookOpen, FileCheck, Users, Upload, Plus, FileText, ChevronUp, ChevronDown, Trash2, Eye, CirclePlus } from 'lucide-react'
 import LessonVideo from '../components/LessonVideo.jsx'
 import DashboardLayout from '../components/DashboardLayout.jsx'
+import ExpandableList from '../components/ExpandableList.jsx'
 import { api } from '../lib/api.js'
 import { useAuth } from '../context/useAuth.js'
 
@@ -577,8 +578,8 @@ export default function InstructorContent() {
               </div>
               <span className="text-xs text-text-muted">{courses.length} course{courses.length === 1 ? '' : 's'}</span>
             </div>
-            <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {courses.map((course) => {
+            <ExpandableList items={courses} label="courses" listClassName="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {(course) => {
                 const image = course.thumbnail_url || (course.thumbnail ? `http://localhost:8000/${course.thumbnail}` : null)
                 return (
                   <article key={course.id} className={`overflow-hidden rounded-xl border bg-slate-50 ${String(courseId) === String(course.id) ? 'border-blue-500 ring-2 ring-blue-100' : 'border-line'}`}>
@@ -605,8 +606,8 @@ export default function InstructorContent() {
                     </div>
                   </article>
                 )
-              })}
-            </div>
+              }}
+            </ExpandableList>
           </div>
         )}
 
@@ -725,9 +726,11 @@ export default function InstructorContent() {
               <h3 className="font-semibold text-ink">Modules</h3>
               <p className="mt-1 text-sm text-text-muted">Add a module, then select it to create lessons and videos.</p>
 
-              <div className="mt-4 space-y-2">
-                {modules.map((m, index) => (
-                  <div key={m.id} className="flex items-center gap-1">
+              <div className="mt-4">
+                {modules.length ? (
+                  <ExpandableList items={modules} label="modules" listClassName="space-y-2">
+                    {(m, index) => (
+                      <div key={m.id} className="flex items-center gap-1">
                     <button type="button" onClick={() => handleSelectModule(String(m.id))} className={`min-w-0 flex-1 rounded-md border px-3 py-2 text-left text-sm ${String(moduleId) === String(m.id) ? 'border-coral bg-coral-tint text-coral-dim' : 'border-line text-ink hover:border-text-dim'}`}>
                       {m.order}. {m.title}
                     </button>
@@ -735,8 +738,9 @@ export default function InstructorContent() {
                     <button type="button" aria-label={`Move ${m.title} down`} title="Move down" disabled={busy || index === modules.length - 1} onClick={() => moveItem('module', index, 1)} className="rounded border border-line p-2 text-ink disabled:opacity-35"><ChevronDown size={15} /></button>
                     <button type="button" aria-label={`Delete ${m.title}`} title="Delete module" disabled={busy} onClick={() => deleteModule(m)} className="rounded border border-rose-200 p-2 text-rose-700 disabled:opacity-35"><Trash2 size={15} /></button>
                   </div>
-                ))}
-                {modules.length === 0 && <p className="text-sm text-text-muted">No modules yet. Add the first module to start the course outline.</p>}
+                    )}
+                  </ExpandableList>
+                ) : <p className="text-sm text-text-muted" role="status">No modules yet. Add the first module to start the course outline.</p>}
               </div>
 
               <form onSubmit={handleAddModule} className="mt-4 flex gap-2 border-t border-line pt-4">
@@ -760,9 +764,11 @@ export default function InstructorContent() {
               <div className="rounded-2xl border border-line bg-paper p-6">
                 <h3 className="font-semibold text-ink">Lessons</h3>
 
-                <div className="mt-4 space-y-2">
-                  {lessons.map((l, index) => (
-                    <div key={l.id} className="flex items-center gap-1">
+                <div className="mt-4">
+                  {lessons.length ? (
+                    <ExpandableList items={lessons} label="lessons" listClassName="space-y-2">
+                      {(l, index) => (
+                        <div key={l.id} className="flex items-center gap-1">
                       <button type="button" onClick={() => handleSelectLesson(l)} className={`min-w-0 flex-1 rounded-md border px-3 py-2 text-left text-sm ${String(lessonId) === String(l.id) ? 'border-coral bg-coral-tint text-coral-dim' : 'border-line text-ink hover:border-text-dim'}`}>
                         {l.order}. {l.title}
                       </button>
@@ -770,8 +776,9 @@ export default function InstructorContent() {
                       <button type="button" aria-label={`Move ${l.title} down`} title="Move down" disabled={busy || index === lessons.length - 1} onClick={() => moveItem('lesson', index, 1)} className="rounded border border-line p-2 text-ink disabled:opacity-35"><ChevronDown size={15} /></button>
                       <button type="button" aria-label={`Delete ${l.title}`} title="Delete lesson" disabled={busy} onClick={() => deleteLesson(l)} className="rounded border border-rose-200 p-2 text-rose-700 disabled:opacity-35"><Trash2 size={15} /></button>
                     </div>
-                  ))}
-                  {lessons.length === 0 && <p className="text-sm text-text-muted">No lessons yet.</p>}
+                      )}
+                    </ExpandableList>
+                  ) : <p className="text-sm text-text-muted" role="status">No lessons yet.</p>}
                 </div>
 
                 <form onSubmit={handleAddLesson} className="mt-4 space-y-2 border-t border-line pt-4">

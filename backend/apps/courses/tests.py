@@ -1,10 +1,13 @@
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APITestCase
+from datetime import timedelta
 
 from apps.accounts.models import User
 from apps.accounts.testing import World, client_for
 from apps.courses.models import Activity, Course, Lesson, Module
+from apps.progress.models import ActivityCompletion
 
 
 class CourseThumbnailTests(TestCase):
@@ -160,6 +163,19 @@ class CourseBuilderApiTests(APITestCase):
             self.student.get(f"/api/activities/{activity.id}/").data["language"],
             Activity.CodeLanguage.HTML,
         )
+
+    def test_student_activity_status_shows_completion_and_overdue_state(self):
+        activity = self.world.exercise
+        activity.deadline = timezone.now() - timedelta(hours=1)
+        activity.save(update_fields=["deadline"])
+
+        overdue = self.student.get(f"/api/activities/{activity.id}/")
+        self.assertEqual(overdue.status_code, 200, overdue.data)
+        self.assertEqual(overdue.data["completion_status"], "overdue")
+
+        ActivityCompletion.objects.create(student=self.world.student_1, activity=activity)
+        completed = self.student.get(f"/api/activities/{activity.id}/")
+        self.assertEqual(completed.data["completion_status"], "completed")
 
     def test_uploaded_video_is_validated_and_served_with_byte_ranges(self):
         video = SimpleUploadedFile("lesson.mp4", b"\x00\x00\x00\x18ftypisom" + b"0" * 64, content_type="video/mp4")

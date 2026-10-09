@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { LayoutDashboard, BookOpen, GraduationCap, CircleCheckBig, Clock3 } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout.jsx'
+import ExpandableList from '../components/ExpandableList.jsx'
 import { api } from '../lib/api.js'
 import { useAuth } from '../context/useAuth.js'
 
@@ -42,9 +43,10 @@ export default function StudentGrades() {
 
         <div className="rounded-2xl border border-line bg-paper p-5">
           <h3 className="font-semibold text-ink">Exercises, labs & assignments</h3>
-          <div className="mt-3 divide-y divide-line">
-            {submissions.map((s) => (
-              <div key={s.id} className="flex items-center justify-between py-3">
+          {submissions.length ? (
+            <ExpandableList items={submissions} label="submissions" listClassName="mt-3 divide-y divide-line">
+              {(s) => (
+                <div key={s.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                 <div>
                   <p className="text-sm font-medium text-ink">{s.activity_title}</p>
                   <p className="text-xs text-text-dim">Attempt {s.attempt_number} · {new Date(s.submitted_at).toLocaleDateString()}</p>
@@ -59,17 +61,18 @@ export default function StudentGrades() {
                     <Clock3 size={14} /> Pending
                   </span>
                 )}
-              </div>
-            ))}
-            {submissions.length === 0 && <p className="py-3 text-sm text-text-muted">No submissions yet.</p>}
-          </div>
+                </div>
+              )}
+            </ExpandableList>
+          ) : <p className="mt-3 py-3 text-sm text-text-muted" role="status">No submissions yet.</p>}
         </div>
 
         <div className="rounded-2xl border border-line bg-paper p-5">
           <h3 className="font-semibold text-ink">Quizzes</h3>
-          <div className="mt-3 divide-y divide-line">
-            {quizAttempts.map((q) => (
-              <div key={q.id} className="flex items-center justify-between py-3">
+          {quizAttempts.length ? (
+            <ExpandableList items={quizAttempts} label="quiz attempts" listClassName="mt-3 divide-y divide-line">
+              {(q) => (
+                <div key={q.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
                 <div>
                   <p className="text-sm font-medium text-ink">Attempt {q.attempt_number}</p>
                   <p className="text-xs text-text-dim">{new Date(q.submitted_at).toLocaleDateString()}</p>
@@ -77,10 +80,10 @@ export default function StudentGrades() {
                 <span className={`rounded-full px-3 py-1 text-sm font-medium ${q.passed ? 'bg-mint/15 text-mint' : 'bg-coral-tint text-coral-dim'}`}>
                   {q.score}/{q.total_marks} ({q.percentage}%)
                 </span>
-              </div>
-            ))}
-            {quizAttempts.length === 0 && <p className="py-3 text-sm text-text-muted">No quiz attempts yet.</p>}
-          </div>
+                </div>
+              )}
+            </ExpandableList>
+          ) : <p className="mt-3 py-3 text-sm text-text-muted" role="status">No quiz attempts yet.</p>}
         </div>
       </div>
     </DashboardLayout>

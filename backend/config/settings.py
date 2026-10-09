@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     "corsheaders",
+    "drf_spectacular",
 
     # our apps
     "apps.accounts",
@@ -155,6 +156,7 @@ NUM_PROXIES_ENV = int(os.environ.get("NUM_PROXIES", "0"))
 
 REST_FRAMEWORK = {
     "NUM_PROXIES": NUM_PROXIES_ENV,
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
@@ -174,6 +176,13 @@ REST_FRAMEWORK = {
         "upload": "30/hour",          # submission file uploads
         "video_progress": "120/minute",  # heartbeat pings every ~10s per open player
     },
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Optimum ERP LMS API",
+    "DESCRIPTION": "API reference for the Optimum ERP LMS backend.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
 }
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip("/")

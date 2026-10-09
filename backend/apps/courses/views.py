@@ -1,7 +1,7 @@
 import mimetypes
 
 from django.db import transaction
-from django.db.models import Max, Q
+from django.db.models import Max, Prefetch, Q
 from django.http import FileResponse, HttpResponse, StreamingHttpResponse
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -13,6 +13,7 @@ from apps.accounts.access import (
     STUDENT, require_teaches, role_of, scope_by_course, scope_unlocked,
 )
 from apps.accounts.permissions import ReadOnlyOrInstructorAdmin
+from apps.progress.models import ActivityCompletion
 from .models import Activity, Course, Lesson, LessonAttachment, Module
 from .serializers import (
     ActivitySerializer, ActivityStudentSerializer, CourseDetailSerializer, CourseSerializer,
@@ -196,7 +197,14 @@ class LessonViewSet(viewsets.ModelViewSet):
         module_id = self.request.query_params.get("module")
         if module_id:
             qs = qs.filter(module_id=module_id)
-        return scope_unlocked(qs, self.request.user, "module", "module__course")
+        qs = scope_unlocked(qs, self.request.user, "module", "module__course")
+        if _is_student(self.request):
+            qs = qs.prefetch_related(Prefetch(
+                "activities__completions",
+                queryset=ActivityCompletion.objects.filter(student=self.request.user),
+                to_attr="_student_completions",
+            ))
+        return qs
 
     def perform_create(self, serializer):
         require_teaches(self.request.user, serializer.validated_data["module"].course)
@@ -282,7 +290,14 @@ class ActivityViewSet(viewsets.ModelViewSet):
         lesson_id = self.request.query_params.get("lesson")
         if lesson_id:
             qs = qs.filter(lesson_id=lesson_id)
-        return scope_unlocked(qs, self.request.user, "lesson__module", "lesson__module__course")
+        qs = scope_unlocked(qs, self.request.user, "lesson__module", "lesson__module__course")
+        if _is_student(self.request):
+            qs = qs.prefetch_related(Prefetch(
+                "completions",
+                queryset=ActivityCompletion.objects.filter(student=self.request.user),
+                to_attr="_student_completions",
+            ))
+        return qs
 
     def perform_create(self, serializer):
         require_teaches(self.request.user, serializer.validated_data["lesson"].module.course)

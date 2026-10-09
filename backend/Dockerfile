@@ -12,7 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 RUN python manage.py collectstatic --noinput
 # No .env, no secrets in the image: configuration is injected at run time (env_file / secrets).
-RUN useradd --uid 10002 --no-create-home app && mkdir -p /app/media && chown app /app/media && chmod -R a+rX /app/staticfiles
+RUN useradd --uid 10002 --create-home --home-dir /home/app app && mkdir -p /app/media && chown app /app/media && chmod -R a+rX /app/staticfiles
 USER app
 EXPOSE 8000
 CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "60"]

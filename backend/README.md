@@ -6,12 +6,36 @@ Django + Django REST Framework, one app per domain (matches the project brief
 
 ## Setup
 
-```bash
-cd django_backend
-python3 -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
+From the repository root, install Python and Microsoft ODBC Driver 18 for
+SQL Server, then configure SQL Server and `backend/.env` as described in the
+root [DATABASE_SETUP.md](../DATABASE_SETUP.md). The backend requires SQL Server;
+SQLite is not a supported runtime database.
+
+### Windows (PowerShell)
+
+```powershell
+cd backend
+python -m venv venv
+.\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-cp .env.example .env            # edit DJANGO_SECRET_KEY at minimum
+Copy-Item .env.example .env
+# Edit .env with this developer's own SQL Server connection values.
+python manage.py check
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver
+```
+
+### macOS / Linux (bash)
+
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+# Edit .env with this developer's own SQL Server connection values.
+python manage.py check
 python manage.py migrate
 python manage.py createsuperuser
 python manage.py runserver

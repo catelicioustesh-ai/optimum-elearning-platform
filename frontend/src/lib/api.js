@@ -3,12 +3,12 @@
  * - Reads the API base URL from env (VITE_API_URL), so dev/staging/prod
  *   just swap .env files instead of editing code.
  * - Attaches the JWT access token to every request automatically.
- * - On a 401, clears stored tokens and forces a redirect to /login —
- *   so an expired/invalid token can't leave the app in a broken half-
- *   logged-in state.
+ * - Refreshes near-expiry access tokens before requests; if a 401 still
+ *   occurs and refresh cannot recover the session, redirects to /login.
  */
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+const ACCESS_TOKEN_REFRESH_SKEW_MS = 30_000
 
 function getTokens() {
   const raw = localStorage.getItem('auth')
@@ -41,6 +41,12 @@ function decodeToken(token) {
   } catch {
     return null
   }
+}
+
+function accessTokenNeedsRefresh(token) {
+  const payload = decodeToken(token)
+  return Number.isFinite(payload?.exp)
+    && payload.exp * 1000 <= Date.now() + ACCESS_TOKEN_REFRESH_SKEW_MS
 }
 
 export class ApiError extends Error {
@@ -134,6 +140,17 @@ function errorMessage(data, status) {
 async function request(path, { method = 'GET', body, auth = true, isFormData = false, blob = false, keepalive = false } = {}) {
   const headers = {}
   if (!isFormData) headers['Content-Type'] = 'application/json'
+  if (auth) {
+    const tokens = getTokens()
+    if (tokens?.refresh && (!tokens.access || accessTokenNeedsRefresh(tokens.access))) {
+      const access = await refreshAccessToken()
+      if (!access) {
+        clearTokens()
+        window.location.href = '/login'
+        return null
+      }
+    }
+  }
   if (auth) {
     const tokens = getTokens()
     if (tokens?.access) headers.Authorization = `Bearer ${tokens.access}`

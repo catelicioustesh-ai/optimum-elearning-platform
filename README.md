@@ -68,6 +68,50 @@ and use `copy` instead of `Copy-Item`:
 copy .env.example .env
 ```
 
+## Run the complete app with Docker
+
+If you want the frontend, API, and isolated code runner to start together, use
+Docker Compose instead of starting `runserver` and Vite in separate terminals:
+
+1. Start Docker Desktop and wait until its engine is ready.
+2. From the repository root, copy `backend/.env.docker.example` to
+   `backend/.env.docker` and set the local Django and SQL Server settings.
+   For SQL Server running on this Windows PC, set `MSSQL_DB_HOST=host.docker.internal`.
+3. Follow the one-time `SANDBOX_TOKEN` setup in [CONTAINERS.md](./CONTAINERS.md),
+   then start the stack:
+
+   ```powershell
+   docker compose up --build -d
+   docker compose ps
+   ```
+
+   The app is at **http://localhost:8080**. After pulling changes that include
+   database migrations, run `docker compose run --rm backend python manage.py migrate`.
+   Stop the containers with `docker compose down`; your SQL Server database is
+   outside Compose and is not removed.
+
+Docker Desktop can be configured to start when you sign in to Windows, but the
+project stack still needs `docker compose up -d` after the engine is ready. Do
+not also run the native Django and Vite servers while using the Compose stack.
+For the native quick start above, Docker is only needed for the separate code
+runner described below.
+
+## Local code runner
+
+The **Run** and **Run tests** buttons require the isolated sandbox service. The
+native Django development server does not start it. Set `SANDBOX_TOKEN` in
+`backend/.env` to a long random secret (do not leave it blank), then, from the
+repository root with Docker running, start the sandbox:
+
+```sh
+docker compose --env-file backend/.env -f docker-compose.runner.yml up --build -d
+```
+
+Keep `SANDBOX_URL=http://localhost:9000` in `backend/.env`. If you changed the
+token while Django was already running, restart `python manage.py runserver`
+so it reads the new value. Without a configured token or a reachable sandbox,
+`POST /api/execute/run/` returns `503 CODE_RUNNER_UNAVAILABLE`.
+
 Frontend: `http://localhost:5173`
 Backend API: `http://localhost:8000/api`
 Django admin: `http://localhost:8000/admin`
@@ -89,6 +133,9 @@ The backend uses Microsoft SQL Server in every environment. Install ODBC Driver 
 
 ## Further reading
 
+- **[docs/FRONTEND_HANDOFF.md](./docs/FRONTEND_HANDOFF.md)** — frontend
+  connection setup, authentication lifecycle, full route inventory, and
+  integration boundaries
 - **[docs/API_REFERENCE.md](./docs/API_REFERENCE.md)** — every endpoint,
   request/response shapes, auth requirements, and exactly how
   module-locking is enforced server-side (verified against the actual

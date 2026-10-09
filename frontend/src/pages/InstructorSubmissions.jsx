@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { LayoutDashboard, BookOpen, FileCheck, Users, CircleCheckBig, Clock3 } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout.jsx'
+import ExpandableList from '../components/ExpandableList.jsx'
 import { api } from '../lib/api.js'
 import { useAuth } from '../context/useAuth.js'
 
@@ -18,13 +19,24 @@ export default function InstructorSubmissions() {
   const [filter, setFilter] = useState('submitted')
   const [error, setError] = useState('')
   const [status, setStatus] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [reloadKey, setReloadKey] = useState(0)
 
   function reload() {
-    const query = filter ? `?status=${filter}` : ''
-    api.get(`/submissions/${query}`).then(setSubmissions).catch((err) => setError(err.message))
+    setLoading(true)
+    setError('')
+    setReloadKey((value) => value + 1)
   }
 
-  useEffect(reload, [filter])
+  useEffect(() => {
+    let cancelled = false
+    const query = filter ? `?status=${filter}` : ''
+    api.get(`/submissions/${query}`)
+      .then((result) => { if (!cancelled) setSubmissions(result) })
+      .catch((err) => { if (!cancelled) setError(`Unable to load submissions: ${err.message}`) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [filter, reloadKey])
 
   return (
     <DashboardLayout navItems={navItems} user={{ name: auth?.email || 'Instructor' }}>
@@ -38,7 +50,12 @@ export default function InstructorSubmissions() {
           </div>
           <select
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => {
+              setLoading(true)
+              setError('')
+              setStatus('')
+              setFilter(e.target.value)
+            }}
             className="rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink"
           >
             <option value="submitted">Pending review</option>
@@ -48,16 +65,28 @@ export default function InstructorSubmissions() {
         </div>
 
         {error && <div className="rounded-lg border border-line bg-coral-tint px-4 py-3 text-sm text-coral-dim">{error}</div>}
-        {status && <div className="rounded-lg border border-mint/40 bg-mint/10 px-4 py-3 text-sm text-mint">{status}</div>}
+        {status && <div className="rounded-lg border border-mint/40 bg-mint/10 px-4 py-3 text-sm text-mint" role="status">{status}</div>}
 
-        <div className="space-y-3">
-          {submissions.map((s) => (
-            <SubmissionRow key={s.id} submission={s} onGraded={() => { setStatus('Grade saved.'); reload() }} />
-          ))}
-          {submissions.length === 0 && (
-            <p className="rounded-2xl border border-line bg-paper p-6 text-sm text-text-muted">Nothing here.</p>
-          )}
-        </div>
+        {loading ? (
+          <p className="rounded-2xl border border-line bg-paper p-6 text-sm text-text-muted" role="status">Loading submissions…</p>
+        ) : submissions.length ? (
+          <ExpandableList
+            items={submissions}
+            label="submissions"
+            listClassName="space-y-3"
+            className="mt-4 rounded-lg border border-line bg-paper px-4 py-2.5 text-sm font-semibold text-ink hover:bg-panel"
+          >
+            {(submission) => (
+              <SubmissionRow
+                key={submission.id}
+                submission={submission}
+                onGraded={() => { setStatus('Grade saved.'); reload() }}
+              />
+            )}
+          </ExpandableList>
+        ) : (
+          <p className="rounded-2xl border border-line bg-paper p-6 text-sm text-text-muted" role="status">No submissions match this filter.</p>
+        )}
       </div>
     </DashboardLayout>
   )

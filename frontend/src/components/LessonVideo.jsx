@@ -149,7 +149,13 @@ export default function LessonVideo({ lessonId, url, track = false, showSummary 
       ytPlayer = new YT.Player(mount, {
         videoId: parsed.id,
         width: '100%', height: '100%',
-        playerVars: { rel: 0, modestbranding: 1, playsinline: 1, start: Math.floor(resumeAt) },
+        playerVars: {
+          rel: 0,
+          modestbranding: 1,
+          playsinline: 1,
+          start: Math.floor(resumeAt),
+          origin: window.location.origin,
+        },
         events: {
           onReady: () => {
             setPlayerStatus('ready')
@@ -243,7 +249,7 @@ export default function LessonVideo({ lessonId, url, track = false, showSummary 
         {parsed.kind === 'youtube' && !track && (
           <iframe
             key={retryCount}
-            src={`https://www.youtube-nocookie.com/embed/${parsed.id}?rel=0`}
+            src={`https://www.youtube-nocookie.com/embed/${parsed.id}?rel=0&origin=${encodeURIComponent(window.location.origin)}`}
             title="Lesson video" className="h-full w-full" allowFullScreen referrerPolicy="strict-origin-when-cross-origin"
             allow="accelerometer; encrypted-media; picture-in-picture"
             onLoad={() => setPlayerStatus('ready')}
