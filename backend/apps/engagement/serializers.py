@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
 
 from .models import Certificate, Notification
 
@@ -10,6 +11,7 @@ class NotificationSerializer(serializers.ModelSerializer):
         model = Notification
         fields = ("id", "kind", "title", "message", "url", "created_at", "read_at", "unread")
 
+    @extend_schema_field(serializers.BooleanField())
     def get_unread(self, obj):
         return obj.read_at is None
 
@@ -27,9 +29,11 @@ class CertificateSerializer(serializers.ModelSerializer):
             "status", "completed_at", "issued_at", "revoked_at", "revocation_reason", "revoked_by_name",
         )
 
+    @extend_schema_field(serializers.CharField())
     def get_student_name(self, obj):
         return obj.student.get_full_name() or obj.student.username
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_revoked_by_name(self, obj):
         if not obj.revoked_by:
             return None

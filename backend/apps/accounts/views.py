@@ -13,9 +13,11 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.views import TokenBlacklistView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.settings import api_settings
+from drf_spectacular.utils import extend_schema
 
 from .models import User
 from .serializers import (
+    DetailResponseSerializer,
     EmailActionSerializer,
     EmailTokenSerializer,
     PasswordResetSerializer,
@@ -94,6 +96,7 @@ class MeView(APIView):
     """GET /api/auth/me/ — the currently authenticated user."""
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(responses=UserSerializer)
     def get(self, request):
         return Response(UserSerializer(request.user).data)
 
@@ -102,6 +105,10 @@ class ResendVerificationView(APIView):
     permission_classes = [permissions.AllowAny]
     throttle_scope = "password_reset"
 
+    @extend_schema(
+        request=EmailActionSerializer,
+        responses={200: DetailResponseSerializer},
+    )
     def post(self, request):
         serializer = EmailActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -121,6 +128,10 @@ class VerifyEmailView(APIView):
     permission_classes = [permissions.AllowAny]
     throttle_scope = "auth"
 
+    @extend_schema(
+        request=EmailTokenSerializer,
+        responses={200: DetailResponseSerializer, 400: DetailResponseSerializer},
+    )
     def post(self, request):
         serializer = EmailTokenSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -138,6 +149,10 @@ class PasswordResetRequestView(APIView):
     permission_classes = [permissions.AllowAny]
     throttle_scope = "password_reset"
 
+    @extend_schema(
+        request=EmailActionSerializer,
+        responses={200: DetailResponseSerializer},
+    )
     def post(self, request):
         serializer = EmailActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -157,6 +172,10 @@ class PasswordResetConfirmView(APIView):
     permission_classes = [permissions.AllowAny]
     throttle_scope = "password_reset"
 
+    @extend_schema(
+        request=PasswordResetSerializer,
+        responses={200: DetailResponseSerializer, 400: DetailResponseSerializer},
+    )
     def post(self, request):
         serializer = PasswordResetSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

@@ -1,5 +1,6 @@
 from django.urls import reverse
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
 
 from .models import Submission
 
@@ -28,9 +29,11 @@ class SubmissionSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {"file": {"write_only": True}, "content": {"max_length": 50_000}}
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_file_name(self, obj):
         return obj.file.name.rsplit("/", 1)[-1] if obj.file else None
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_download_url(self, obj):
         return reverse("submission-download", args=[obj.pk]) if obj.file else None
 

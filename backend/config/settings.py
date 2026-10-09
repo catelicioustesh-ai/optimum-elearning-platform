@@ -298,6 +298,15 @@ SPECTACULAR_SETTINGS = {
         "displayOperationId": True,
         "filter": True,
     },
+    "ENUM_NAME_OVERRIDES": {
+        "CourseStatusEnum": [("draft", "Draft"), ("published", "Published")],
+        "CertificateStatusEnum": [("issued", "Issued"), ("revoked", "Revoked")],
+        "SubmissionStatusEnum": [
+            ("submitted", "Submitted"),
+            ("graded", "Graded"),
+            ("not_completed", "Not Completed"),
+        ],
+    },
 }
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip("/")

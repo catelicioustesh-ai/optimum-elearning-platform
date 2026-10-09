@@ -3,10 +3,17 @@ from datetime import timedelta
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework import permissions, status
+from rest_framework import permissions, serializers, status
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    inline_serializer,
+)
 
 from apps.accounts.access import ADMIN, INSTRUCTOR, STUDENT, role_of, require_teaches
 from apps.courses.models import Course
@@ -20,6 +27,28 @@ from .services import issue_certificate, revoke_certificate
 class StudentEngagementView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        responses=inline_serializer(
+            name="StudentEngagement",
+            fields={
+                "current_streak": serializers.IntegerField(),
+                "longest_streak": serializers.IntegerField(),
+                "achievements": inline_serializer(
+                    name="StudentAchievement",
+                    many=True,
+                    fields={
+                        "code": serializers.CharField(),
+                        "name": serializers.CharField(),
+                        "description": serializers.CharField(),
+                        "category": serializers.CharField(),
+                        "threshold": serializers.IntegerField(),
+                        "earned_at": serializers.DateTimeField(allow_null=True),
+                    },
+                ),
+                "certificates": CertificateSerializer(many=True),
+            },
+        )
+    )
     def get(self, request):
         if role_of(request.user) != STUDENT:
             raise PermissionDenied("Student engagement data is only available to students.")
@@ -55,6 +84,15 @@ class StudentEngagementView(APIView):
 class NotificationListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        responses=inline_serializer(
+            name="NotificationList",
+            fields={
+                "results": NotificationSerializer(many=True),
+                "unread_count": serializers.IntegerField(),
+            },
+        )
+    )
     def get(self, request):
         notifications = Notification.objects.filter(recipient=request.user)
         return Response({
@@ -66,6 +104,7 @@ class NotificationListView(APIView):
 class NotificationReadView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(request=None, responses=NotificationSerializer)
     def patch(self, request, notification_id):
         notification = get_object_or_404(
             Notification, pk=notification_id, recipient=request.user
@@ -79,6 +118,13 @@ class NotificationReadView(APIView):
 class NotificationReadAllView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        request=None,
+        responses=inline_serializer(
+            name="NotificationReadAll",
+            fields={"unread_count": serializers.IntegerField()},
+        )
+    )
     def post(self, request):
         Notification.objects.filter(
             recipient=request.user, read_at__isnull=True
@@ -105,6 +151,7 @@ def _certificate_for_user(request, certificate_number):
 class CertificateDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(responses=CertificateSerializer)
     def get(self, request, certificate_number):
         certificate = _certificate_for_user(request, certificate_number)
         return Response(CertificateSerializer(certificate).data)
@@ -113,6 +160,14 @@ class CertificateDetailView(APIView):
 class CertificateDownloadView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        responses={
+            200: OpenApiResponse(
+                response=OpenApiTypes.BINARY,
+                description="Certificate PDF download.",
+            )
+        }
+    )
     def get(self, request, certificate_number):
         certificate = _certificate_for_user(request, certificate_number)
         if certificate.status != Certificate.Status.ISSUED:
@@ -129,6 +184,20 @@ class CertificateVerifyView(APIView):
     permission_classes = [permissions.AllowAny]
     authentication_classes = []
 
+    @extend_schema(
+        responses=inline_serializer(
+            name="CertificateVerification",
+            fields={
+                "certificate_number": serializers.CharField(),
+                "course_title": serializers.CharField(),
+                "student_name": serializers.CharField(),
+                "status": serializers.CharField(),
+                "verified": serializers.BooleanField(),
+                "completed_on": serializers.DateField(),
+                "issued_at": serializers.DateTimeField(allow_null=True),
+            },
+        )
+    )
     def get(self, request, certificate_number):
         certificate = get_object_or_404(
             Certificate.objects.select_related("student", "course"),
@@ -152,6 +221,16 @@ class CertificateVerifyView(APIView):
 class IssueCertificateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        request=inline_serializer(
+            name="IssueCertificateRequest",
+            fields={
+                "course_id": serializers.IntegerField(),
+                "student_id": serializers.IntegerField(),
+            },
+        ),
+        responses={200: CertificateSerializer},
+    )
     def post(self, request):
         if role_of(request.user) not in (ADMIN, INSTRUCTOR):
             raise PermissionDenied("Only the course instructor or an admin can issue certificates.")
@@ -177,6 +256,13 @@ class IssueCertificateView(APIView):
 class RevokeCertificateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        request=inline_serializer(
+            name="RevokeCertificateRequest",
+            fields={"reason": serializers.CharField(max_length=500)},
+        ),
+        responses=CertificateSerializer,
+    )
     def post(self, request, certificate_number):
         certificate = _certificate_for_user(request, certificate_number)
         if role_of(request.user) not in (ADMIN, INSTRUCTOR):
@@ -193,6 +279,17 @@ class RevokeCertificateView(APIView):
 class CertificateListView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        responses=CertificateSerializer(many=True),
+        parameters=[
+            OpenApiParameter(
+                name="course_id",
+                type=int,
+                location=OpenApiParameter.QUERY,
+                required=False,
+            )
+        ],
+    )
     def get(self, request):
         role = role_of(request.user)
         if role not in (ADMIN, INSTRUCTOR):

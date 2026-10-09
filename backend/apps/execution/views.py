@@ -28,6 +28,8 @@ from rest_framework.exceptions import NotFound, PermissionDenied, ValidationErro
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
+from rest_framework import serializers
+from drf_spectacular.utils import extend_schema, inline_serializer
 
 from apps.accounts.access import STUDENT, require_student_access, require_teaches, role_of
 
@@ -100,6 +102,36 @@ class RunCodeView(APIView):
     def get_throttles(self):
         return [CodeRunThrottle()]
 
+    @extend_schema(
+        request=inline_serializer(
+            name="RunCodeRequest",
+            fields={
+                "language": serializers.ChoiceField(choices=["python", "javascript"]),
+                "code": serializers.CharField(max_length=MAX_CODE_LENGTH),
+                "stdin": serializers.CharField(
+                    max_length=MAX_STDIN_LENGTH, required=False, allow_blank=True
+                ),
+            },
+        ),
+        responses={
+            200: inline_serializer(
+                name="RunCodeResponse",
+                fields={
+                    "stdout": serializers.CharField(allow_blank=True),
+                    "stderr": serializers.CharField(allow_blank=True),
+                    "exit_code": serializers.IntegerField(allow_null=True),
+                    "timed_out": serializers.BooleanField(),
+                },
+            ),
+            503: inline_serializer(
+                name="CodeRunnerUnavailable",
+                fields={
+                    "code": serializers.CharField(),
+                    "error": serializers.CharField(),
+                },
+            ),
+        },
+    )
     def post(self, request):
         language, code = _clean_request(request)
         stdin = request.data.get("stdin", "")
@@ -133,6 +165,48 @@ class RunTestsView(APIView):
     def get_throttles(self):
         return [CodeRunThrottle()]
 
+    @extend_schema(
+        request=inline_serializer(
+            name="RunTestsRequest",
+            fields={
+                "language": serializers.ChoiceField(
+                    choices=["python", "javascript", "html"]
+                ),
+                "code": serializers.CharField(max_length=MAX_CODE_LENGTH),
+                "activity_id": serializers.IntegerField(),
+            },
+        ),
+        responses={
+            200: inline_serializer(
+                name="RunTestsResponse",
+                fields={
+                    "passed": serializers.IntegerField(),
+                    "total": serializers.IntegerField(),
+                    "score": serializers.FloatField(),
+                    "results": inline_serializer(
+                        name="RunTestCaseResult",
+                        many=True,
+                        fields={
+                            "index": serializers.IntegerField(),
+                            "passed": serializers.BooleanField(),
+                            "timed_out": serializers.BooleanField(),
+                            "error": serializers.CharField(required=False),
+                            "input": serializers.CharField(required=False),
+                            "expected_output": serializers.CharField(required=False),
+                            "actual_output": serializers.CharField(required=False),
+                        },
+                    ),
+                },
+            ),
+            503: inline_serializer(
+                name="CodeTestRunnerUnavailable",
+                fields={
+                    "code": serializers.CharField(),
+                    "error": serializers.CharField(),
+                },
+            ),
+        },
+    )
     def post(self, request):
         from apps.courses.models import Activity, ActivityType
 

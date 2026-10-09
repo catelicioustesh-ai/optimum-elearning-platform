@@ -1,6 +1,7 @@
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
 
 from .models import Course, Module, Lesson, Activity, LessonAttachment, validate_video_file
 from .validators import validate_video_url
@@ -24,6 +25,7 @@ class LessonAttachmentSerializer(serializers.ModelSerializer):
         read_only_fields = ["uploaded_by_name", "uploaded_at", "download_url"]
         extra_kwargs = {"file": {"write_only": True}}
 
+    @extend_schema_field(serializers.CharField())
     def get_download_url(self, obj):
         return reverse("lesson-attachment-download", args=[obj.pk])
 
@@ -31,6 +33,7 @@ class LessonAttachmentSerializer(serializers.ModelSerializer):
 class _ActivityBase(serializers.ModelSerializer):
     quiz_id = serializers.SerializerMethodField()
 
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
     def get_quiz_id(self, obj):
         quiz = getattr(obj, "quiz", None)
         return quiz.id if quiz else None
@@ -95,6 +98,7 @@ class LessonSerializer(serializers.ModelSerializer):
             "video_url", "video_file", "video_file_url", "tutorial_content", "activities", "attachments",
         ]
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
     def get_video_file_url(self, obj):
         if not obj.video_file:
             return None
@@ -155,6 +159,7 @@ class CourseSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Cover image must be smaller than 5MB.")
         return value
 
+    @extend_schema_field(serializers.URLField(allow_null=True))
     def get_thumbnail_url(self, obj):
         if not obj.thumbnail:
             return None

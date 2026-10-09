@@ -62,6 +62,10 @@ class EmailActionSerializer(serializers.Serializer):
         return value.strip().lower()
 
 
+class DetailResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+
+
 class EmailTokenSerializer(serializers.Serializer):
     uid = serializers.CharField()
     token = serializers.CharField()

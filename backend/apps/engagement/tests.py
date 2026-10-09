@@ -27,14 +27,20 @@ class EngagementEventTests(TestCase):
         streak = StudentStreak.objects.get(student=w.student_1)
         self.assertEqual((streak.current_days, streak.longest_days), (1, 1))
         self.assertEqual(LearningActivityDay.objects.filter(student=w.student_1).count(), 1)
-        self.assertEqual(StudentAchievement.objects.filter(student=w.student_1).count(), 1)
+        self.assertSetEqual(
+            set(
+                StudentAchievement.objects.filter(student=w.student_1)
+                .values_list("achievement__code", flat=True)
+            ),
+            {"first-steps", "course-graduate"},
+        )
         certificate = Certificate.objects.get(student=w.student_1, course=w.course_a)
         self.assertEqual(certificate.status, Certificate.Status.ISSUED)
         self.assertIsNotNone(certificate.completed_at)
         self.assertLessEqual(certificate.completed_at, certificate.issued_at)
         self.assertEqual(
             Notification.objects.filter(recipient=w.student_1, kind="achievement_earned").count(),
-            1,
+            2,
         )
 
     def test_activity_completion_only_awards_the_affected_student(self):

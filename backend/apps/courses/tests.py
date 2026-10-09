@@ -1,13 +1,22 @@
+from io import BytesIO
+
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APITestCase
+from PIL import Image
 from datetime import timedelta
 
 from apps.accounts.models import User
 from apps.accounts.testing import World, client_for
 from apps.courses.models import Activity, Course, Lesson, Module
 from apps.progress.models import ActivityCompletion
+
+
+def _image_upload(name):
+    image = BytesIO()
+    Image.new("RGB", (2, 2), color="navy").save(image, format="PNG")
+    return SimpleUploadedFile(name, image.getvalue(), content_type="image/png")
 
 
 class CourseThumbnailTests(TestCase):
@@ -20,11 +29,7 @@ class CourseThumbnailTests(TestCase):
         )
 
     def test_course_accepts_thumbnail_file(self):
-        cover = SimpleUploadedFile(
-            "cover.png",
-            b"fake-image-bytes",
-            content_type="image/png",
-        )
+        cover = _image_upload("cover.png")
 
         course = Course.objects.create(
             title="AI Foundations",
@@ -49,14 +54,10 @@ class CourseBuilderApiTests(APITestCase):
 
     def test_instructor_can_replace_course_cover_with_multipart_put_for_student_catalog(self):
         course = self.world.course_a
-        course.thumbnail = SimpleUploadedFile(
-            "old-cover.png", b"old-cover", content_type="image/png",
-        )
+        course.thumbnail = _image_upload("old-cover.png")
         course.save()
 
-        replacement = SimpleUploadedFile(
-            "new-cover.png", b"new-cover", content_type="image/png",
-        )
+        replacement = _image_upload("new-cover.png")
         updated = self.instructor.put(
             f"/api/courses/{course.id}/",
             {"title": course.title, "description": course.description, "thumbnail": replacement},
