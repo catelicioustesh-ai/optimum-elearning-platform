@@ -3,7 +3,7 @@ from django.utils import timezone
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
 
-from .models import Course, Module, Lesson, Activity, LessonAttachment, validate_video_file
+from .models import Course, LiveSession, Module, Lesson, Activity, LessonAttachment, validate_video_file
 from .validators import validate_video_url
 
 ACTIVITY_PUBLIC_FIELDS = [
@@ -181,3 +181,20 @@ class CourseDetailSerializer(CourseSerializer):
 
     class Meta(CourseSerializer.Meta):
         fields = CourseSerializer.Meta.fields + ["modules"]
+
+
+class LiveSessionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = LiveSession
+        fields = ["id", "course", "title", "starts_at", "meeting_url", "created_at"]
+        read_only_fields = ["created_at"]
+
+    def validate_meeting_url(self, value):
+        if not value.lower().startswith("https://"):
+            raise serializers.ValidationError("Use a secure meeting link starting with https://.")
+        return value
+
+    def validate_starts_at(self, value):
+        if value <= timezone.now():
+            raise serializers.ValidationError("Schedule the session for a future date and time.")
+        return value

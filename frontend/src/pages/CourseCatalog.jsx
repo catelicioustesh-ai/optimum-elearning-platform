@@ -19,6 +19,7 @@ export default function CourseCatalog() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [updatingCourseId, setUpdatingCourseId] = useState(null)
+  const [learningModes, setLearningModes] = useState({})
   const [searchTerm, setSearchTerm] = useState('')
   const [showAllCourses, setShowAllCourses] = useState(false)
 
@@ -42,11 +43,14 @@ export default function CourseCatalog() {
   const availableCourses = filteredCourses.filter((course) => !enrolledCourseIds.has(String(course.id)))
   const visibleCourses = showAllCourses ? availableCourses : availableCourses.slice(0, 6)
 
-  async function handleEnroll(courseId) {
+  async function handleEnroll(courseId, learningMode) {
     setUpdatingCourseId(courseId)
     setError('')
     try {
-      const enrollment = await api.post('/enrollments/', { course: courseId })
+      const enrollment = await api.post('/enrollments/', {
+        course: courseId,
+        learning_mode: learningMode,
+      })
       setEnrollments((current) => [...current, enrollment])
     } catch (err) {
       setError(err.message)
@@ -77,6 +81,7 @@ export default function CourseCatalog() {
 
   function renderCourseCard(course) {
     const isEnrolled = enrolledCourseIds.has(String(course.id))
+    const enrollment = enrollments.find((item) => String(item.course) === String(course.id))
     const coverImage = course.thumbnail_url || (course.thumbnail ? `http://localhost:8000/${course.thumbnail}` : null)
     const isUpdating = String(updatingCourseId) === String(course.id)
 
@@ -99,9 +104,14 @@ export default function CourseCatalog() {
               </div>
             )}
             {isEnrolled && (
-              <span className="absolute left-3 top-3 rounded-full bg-emerald-700 px-2.5 py-1 text-xs font-bold text-white shadow-sm">
-                Enrolled
-              </span>
+              <div className="absolute left-3 top-3 flex flex-wrap gap-1.5">
+                <span className="rounded-full bg-emerald-700 px-2.5 py-1 text-xs font-bold text-white shadow-sm">
+                  Enrolled
+                </span>
+                <span className="rounded-full bg-slate-900/80 px-2.5 py-1 text-xs font-bold text-white shadow-sm">
+                  {enrollment?.learning_mode === 'instructor_led' ? 'Instructor-led' : 'Self-paced'}
+                </span>
+              </div>
             )}
           </div>
 
@@ -135,14 +145,29 @@ export default function CourseCatalog() {
                   </button>
                 </>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => handleEnroll(course.id)}
-                  disabled={isUpdating}
-                  className="dg-btn w-full bg-blue-700 text-white hover:bg-blue-800 disabled:opacity-60"
-                >
-                  {isUpdating ? 'Enrolling…' : 'Enroll'}
-                </button>
+                <>
+                  <label className="sr-only" htmlFor={`learning-mode-${course.id}`}>Choose how to learn {course.title}</label>
+                  <select
+                    id={`learning-mode-${course.id}`}
+                    value={learningModes[course.id] || 'self_paced'}
+                    onChange={(event) => setLearningModes((current) => ({
+                      ...current,
+                      [course.id]: event.target.value,
+                    }))}
+                    className="min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800"
+                  >
+                    <option value="self_paced">Self-paced · Learn on your schedule</option>
+                    <option value="instructor_led">Instructor-led · Live sessions and reminders</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => handleEnroll(course.id, learningModes[course.id] || 'self_paced')}
+                    disabled={isUpdating}
+                    className="dg-btn w-full bg-blue-700 text-white hover:bg-blue-800 disabled:opacity-60"
+                  >
+                    {isUpdating ? 'Enrolling…' : 'Enroll'}
+                  </button>
+                </>
               )}
             </div>
           </div>

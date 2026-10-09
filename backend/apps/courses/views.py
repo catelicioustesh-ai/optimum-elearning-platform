@@ -3,6 +3,7 @@ import mimetypes
 from django.db import transaction
 from django.db.models import Max, Prefetch, Q
 from django.http import FileResponse, HttpResponse, StreamingHttpResponse
+from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, ValidationError
@@ -10,20 +11,69 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from apps.accounts.access import (
-    STUDENT, require_teaches, role_of, scope_by_course, scope_unlocked,
+    ADMIN, INSTRUCTOR, STUDENT, require_teaches, role_of, scope_by_course, scope_unlocked,
 )
 from apps.accounts.permissions import ReadOnlyOrInstructorAdmin
+from apps.engagement.models import Notification
+from apps.enrollment.models import Enrollment
 from apps.progress.models import ActivityCompletion
-from .models import Activity, Course, Lesson, LessonAttachment, Module
+from .models import Activity, Course, Lesson, LessonAttachment, LiveSession, Module
 from .serializers import (
     ActivitySerializer, ActivityStudentSerializer, CourseDetailSerializer, CourseSerializer,
-    LessonAttachmentSerializer, LessonSerializer, LessonStudentSerializer,
+    LessonAttachmentSerializer, LessonSerializer, LessonStudentSerializer, LiveSessionSerializer,
     ModuleListSerializer, ModuleSerializer,
 )
 
 
 def _is_student(request):
     return role_of(request.user) == STUDENT
+
+
+class LiveSessionViewSet(viewsets.ModelViewSet):
+    serializer_class = LiveSessionSerializer
+    permission_classes = [ReadOnlyOrInstructorAdmin]
+
+    def get_queryset(self):
+        user = self.request.user
+        role = role_of(user)
+        qs = LiveSession.objects.select_related("course", "course__instructor")
+        if role == STUDENT:
+            qs = qs.filter(
+                course__enrollments__student=user,
+                course__enrollments__learning_mode=Enrollment.LearningMode.INSTRUCTOR_LED,
+                starts_at__gte=timezone.now(),
+            ).distinct()
+        elif role == INSTRUCTOR:
+            qs = qs.filter(course__instructor=user)
+        elif role != ADMIN:
+            return qs.none()
+        course_id = self.request.query_params.get("course")
+        return qs.filter(course_id=course_id) if course_id else qs
+
+    def perform_create(self, serializer):
+        course = serializer.validated_data["course"]
+        require_teaches(self.request.user, course)
+        serializer.save()
+
+    def perform_update(self, serializer):
+        require_teaches(self.request.user, serializer.instance.course)
+        course = serializer.validated_data.get("course", serializer.instance.course)
+        require_teaches(self.request.user, course)
+        if (
+            "starts_at" in serializer.validated_data
+            and serializer.validated_data["starts_at"] != serializer.instance.starts_at
+        ):
+            Notification.objects.filter(
+                dedupe_key__startswith=f"live-session:{serializer.instance.pk}:"
+            ).delete()
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        require_teaches(self.request.user, instance.course)
+        Notification.objects.filter(
+            dedupe_key__startswith=f"live-session:{instance.pk}:"
+        ).delete()
+        instance.delete()
 
 
 class CourseViewSet(viewsets.ModelViewSet):

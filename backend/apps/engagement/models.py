@@ -89,6 +89,7 @@ class Notification(models.Model):
     title = models.CharField(max_length=160)
     message = models.CharField(max_length=500)
     url = models.CharField(max_length=255, blank=True)
+    dedupe_key = models.CharField(max_length=150, unique=True, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     read_at = models.DateTimeField(null=True, blank=True)
 

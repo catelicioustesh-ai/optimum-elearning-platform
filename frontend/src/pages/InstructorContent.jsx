@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
-import { LayoutDashboard, BookOpen, FileCheck, Users, Upload, Plus, FileText, ChevronUp, ChevronDown, Trash2, Eye, CirclePlus } from 'lucide-react'
+import { LayoutDashboard, BookOpen, FileCheck, Users, Upload, Plus, FileText, ChevronUp, ChevronDown, Trash2, Eye, CirclePlus, CalendarDays } from 'lucide-react'
 import LessonVideo from '../components/LessonVideo.jsx'
 import DashboardLayout from '../components/DashboardLayout.jsx'
 import ExpandableList from '../components/ExpandableList.jsx'
@@ -23,6 +23,8 @@ export default function InstructorContent() {
   const [courseId, setCourseId] = useState('')
   const [newCourse, setNewCourse] = useState({ title: '', description: '' })
   const [courseEdit, setCourseEdit] = useState({ title: '', description: '' })
+  const [liveSessions, setLiveSessions] = useState([])
+  const [newLiveSession, setNewLiveSession] = useState({ title: '', starts_at: '', meeting_url: '' })
   const [thumbnailFile, setThumbnailFile] = useState(null)
   const [courseCoverFile, setCourseCoverFile] = useState(null)
   const [thumbnailPreview, setThumbnailPreview] = useState('')
@@ -78,14 +80,20 @@ export default function InstructorContent() {
     setLessons([])
     setVideoUrl('')
     setAttachments([])
+    setLiveSessions([])
     if (!id) return
     const course = courses.find((item) => String(item.id) === String(id))
     setCourseEdit({ title: course?.title || '', description: course?.description || '' })
-    Promise.all([api.get(`/courses/${id}/`), api.get(`/modules/?course=${id}`)])
-      .then(([detail, rows]) => {
+    Promise.all([
+      api.get(`/courses/${id}/`),
+      api.get(`/modules/?course=${id}`),
+      api.get(`/live-sessions/?course=${id}`),
+    ])
+      .then(([detail, rows, sessions]) => {
         setCourses((items) => items.map((item) => item.id === detail.id ? detail : item))
         setCourseEdit({ title: detail.title, description: detail.description || '' })
         setModules(rows)
+        setLiveSessions(sessions)
       })
       .catch((err) => setError(err.message))
   }
@@ -204,6 +212,43 @@ export default function InstructorContent() {
       const updated = await api.post(`/courses/${courseId}/${action}/`)
       setCourses((items) => items.map((item) => item.id === updated.id ? updated : item))
       flash(action === 'publish' ? 'Course published.' : 'Changes saved as draft.')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleAddLiveSession(event) {
+    event.preventDefault()
+    if (!courseId || !newLiveSession.title.trim() || !newLiveSession.starts_at || !newLiveSession.meeting_url.trim()) return
+    setBusy(true)
+    try {
+      const created = await api.post('/live-sessions/', {
+        course: Number(courseId),
+        title: newLiveSession.title.trim(),
+        starts_at: new Date(newLiveSession.starts_at).toISOString(),
+        meeting_url: newLiveSession.meeting_url.trim(),
+      })
+      setLiveSessions((current) => [...current, created].sort(
+        (left, right) => new Date(left.starts_at) - new Date(right.starts_at),
+      ))
+      setNewLiveSession({ title: '', starts_at: '', meeting_url: '' })
+      flash('Live session scheduled. Enrolled instructor-led students will receive reminders.')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDeleteLiveSession(session) {
+    if (!window.confirm(`Cancel “${session.title}”?`)) return
+    setBusy(true)
+    try {
+      await api.del(`/live-sessions/${session.id}/`)
+      setLiveSessions((current) => current.filter((item) => item.id !== session.id))
+      flash('Live session cancelled.')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -716,6 +761,89 @@ export default function InstructorContent() {
                 <button type="button" disabled={busy} onClick={handleDeleteCourse} className="inline-flex items-center gap-1 rounded-md border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-700 disabled:opacity-60"><Trash2 size={15} /> Delete course</button>
               </div>
             </form>
+          </section>
+        )}
+
+        {courseId && (
+          <section className="rounded-2xl border border-blue-200 bg-paper p-6" aria-labelledby="instructor-sessions-heading">
+            <div className="flex items-start gap-3">
+              <span className="rounded-xl bg-blue-100 p-2 text-blue-800">
+                <CalendarDays size={20} aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h3 id="instructor-sessions-heading" className="font-semibold text-ink">Live sessions</h3>
+                <p className="mt-1 text-sm text-text-muted">
+                  Schedule sessions for students who choose instructor-led learning. They receive in-app reminders 24 hours and 1 hour before.
+                </p>
+                <form onSubmit={handleAddLiveSession} className="mt-4 grid gap-3 md:grid-cols-3">
+                  <label className="grid gap-1 text-sm font-medium text-ink">
+                    Session title
+                    <input
+                      required
+                      maxLength={200}
+                      value={newLiveSession.title}
+                      onChange={(event) => setNewLiveSession((current) => ({ ...current, title: event.target.value }))}
+                      placeholder="e.g. Weekly question and answer"
+                      className="rounded-md border border-line bg-paper px-3 py-2"
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium text-ink">
+                    Date and time
+                    <input
+                      type="datetime-local"
+                      required
+                      value={newLiveSession.starts_at}
+                      onChange={(event) => setNewLiveSession((current) => ({ ...current, starts_at: event.target.value }))}
+                      className="rounded-md border border-line bg-paper px-3 py-2"
+                    />
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium text-ink">
+                    Secure meeting link
+                    <input
+                      type="url"
+                      required
+                      value={newLiveSession.meeting_url}
+                      onChange={(event) => setNewLiveSession((current) => ({ ...current, meeting_url: event.target.value }))}
+                      placeholder="https://..."
+                      className="rounded-md border border-line bg-paper px-3 py-2"
+                    />
+                  </label>
+                  <div className="md:col-span-3">
+                    <button
+                      type="submit"
+                      disabled={busy || !newLiveSession.title.trim() || !newLiveSession.starts_at || !newLiveSession.meeting_url.trim()}
+                      className="inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+                    >
+                      <Plus size={16} aria-hidden="true" /> Schedule session
+                    </button>
+                  </div>
+                </form>
+                {liveSessions.length ? (
+                  <ul className="mt-4 space-y-2">
+                    {liveSessions.map((session) => (
+                      <li key={session.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-panel/50 p-3">
+                        <div>
+                          <p className="text-sm font-semibold text-ink">{session.title}</p>
+                          <p className="mt-1 text-xs text-text-muted">
+                            {new Date(session.starts_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => handleDeleteLiveSession(session)}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                        >
+                          <Trash2 size={15} aria-hidden="true" /> Cancel
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-4 text-sm text-text-muted" role="status">No live sessions scheduled for this course.</p>
+                )}
+              </div>
+            </div>
           </section>
         )}
 

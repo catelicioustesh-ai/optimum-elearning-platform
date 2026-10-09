@@ -23,6 +23,39 @@ def create_notification(recipient, kind, title, message, url=""):
     )
 
 
+def create_due_live_session_reminders(student):
+    from apps.courses.models import LiveSession
+    from apps.enrollment.models import Enrollment
+
+    now = timezone.now()
+    course_ids = Enrollment.objects.filter(
+        student=student,
+        learning_mode=Enrollment.LearningMode.INSTRUCTOR_LED,
+    ).values_list("course_id", flat=True)
+    sessions = LiveSession.objects.filter(
+        course_id__in=course_ids,
+        starts_at__gt=now,
+        starts_at__lte=now + timedelta(hours=24),
+    ).select_related("course")
+
+    for session in sessions:
+        remaining = session.starts_at - now
+        reminder = "1-hour" if remaining <= timedelta(hours=1) else "24-hour"
+        Notification.objects.get_or_create(
+            dedupe_key=f"live-session:{session.pk}:{student.pk}:{reminder}",
+            defaults={
+                "recipient": student,
+                "kind": "live_session_reminder",
+                "title": f"Upcoming live session: {session.title}",
+                "message": (
+                    f"{session.course.title} starts "
+                    f"{timezone.localtime(session.starts_at):%b %d at %I:%M %p}."
+                ),
+                "url": f"/dashboard/student/courses/{session.course_id}",
+            },
+        )
+
+
 def _award_achievements(student, metrics):
     for metric, value in metrics.items():
         eligible = Achievement.objects.filter(

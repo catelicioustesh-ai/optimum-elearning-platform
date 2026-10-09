@@ -1,7 +1,10 @@
+from datetime import timedelta
+
 from django.test import TestCase
 from django.utils import timezone
 
 from apps.accounts.testing import World, client_for
+from apps.courses.models import LiveSession
 from apps.engagement.models import (
     Achievement,
     Certificate,
@@ -11,6 +14,7 @@ from apps.engagement.models import (
     StudentStreak,
 )
 from apps.engagement.services import record_activity_completion, revoke_certificate
+from apps.enrollment.models import Enrollment
 from apps.progress.services import mark_activity_complete
 
 
@@ -129,6 +133,50 @@ class EngagementApiTests(TestCase):
         self.assertEqual(marked.status_code, 200)
         self.assertIsNotNone(marked.data["read_at"])
         self.assertEqual(self.student.patch(f"/api/engagement/notifications/{notification.id}/read/").status_code, 200)
+
+    def test_live_session_reminders_are_sent_once_at_24_hours_and_one_hour(self):
+        w = self.world
+        Enrollment.objects.filter(student=w.student_1, course=w.course_a).update(
+            learning_mode=Enrollment.LearningMode.INSTRUCTOR_LED
+        )
+        session = LiveSession.objects.create(
+            course=w.course_a,
+            title="Live workshop",
+            starts_at=timezone.now() + timedelta(hours=12),
+            meeting_url="https://meet.example.com/workshop",
+        )
+
+        first = self.student.get("/api/engagement/notifications/")
+        repeated = self.student.get("/api/engagement/notifications/")
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(repeated.status_code, 200)
+        self.assertEqual(
+            Notification.objects.filter(
+                recipient=w.student_1,
+                kind="live_session_reminder",
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            Notification.objects.filter(
+                recipient=w.student_2,
+                kind="live_session_reminder",
+            ).count(),
+            0,
+        )
+
+        session.starts_at = timezone.now() + timedelta(minutes=30)
+        session.save(update_fields=["starts_at"])
+        near_session = self.student.get("/api/engagement/notifications/")
+
+        self.assertEqual(near_session.status_code, 200)
+        self.assertEqual(
+            Notification.objects.filter(
+                recipient=w.student_1,
+                kind="live_session_reminder",
+            ).count(),
+            2,
+        )
 
     def test_student_can_download_issued_certificate_but_not_revoke_it(self):
         mark_activity_complete(self.world.student_1, self.world.exercise, score=90)

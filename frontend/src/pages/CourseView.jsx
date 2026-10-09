@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link, useParams } from 'react-router-dom'
-import { LayoutDashboard, BookOpen, GraduationCap, Lock, CircleCheckBig, Circle, ChevronRight } from 'lucide-react'
+import { LayoutDashboard, BookOpen, GraduationCap, Lock, CircleCheckBig, Circle, ChevronRight, CalendarDays, ExternalLink } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout.jsx'
 import ExpandableList from '../components/ExpandableList.jsx'
 import { api } from '../lib/api.js'
@@ -27,20 +27,33 @@ export default function CourseView() {
   const [progress, setProgress] = useState([])
   const [expandedModuleId, setExpandedModuleId] = useState(null)
   const [lessonsByModule, setLessonsByModule] = useState({})
+  const [enrollment, setEnrollment] = useState(null)
+  const [liveSessions, setLiveSessions] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let cancelled = false
     Promise.all([
       api.get(`/courses/${courseId}/`),
       api.get(`/progress/course/${courseId}/`),
+      api.get(`/enrollments/?course=${courseId}`),
+      api.get(`/live-sessions/?course=${courseId}`),
     ])
-      .then(([courseData, progressData]) => {
+      .then(([courseData, progressData, enrollments, sessions]) => {
+        if (cancelled) return
         setCourse(courseData)
         setProgress(progressData)
+        setEnrollment(enrollments[0] || null)
+        setLiveSessions(sessions)
       })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
+      .catch((err) => {
+        if (!cancelled) setError(err.message)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
   }, [courseId])
 
   async function toggleModule(moduleId, status) {
@@ -74,10 +87,56 @@ export default function CourseView() {
           )}
           <h2 className="mt-2 text-2xl font-bold text-ink">{course?.title || (loading ? 'Loading…' : '')}</h2>
           {course?.description && <p className="mt-1 text-sm text-text-muted">{course.description}</p>}
+          {enrollment && (
+            <span className="mt-3 inline-flex rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-900">
+              {enrollment.learning_mode === 'instructor_led' ? 'Instructor-led learning' : 'Self-paced learning'}
+            </span>
+          )}
         </div>
 
         {error && (
           <div className="rounded-lg border border-line bg-coral-tint px-4 py-3 text-sm text-coral-dim">{error}</div>
+        )}
+
+        {enrollment?.learning_mode === 'instructor_led' && (
+          <section className="rounded-2xl border border-blue-200 bg-linear-to-br from-blue-50 to-white p-5" aria-labelledby="live-sessions-heading">
+            <div className="flex items-start gap-3">
+              <span className="rounded-xl bg-blue-100 p-2 text-blue-800">
+                <CalendarDays size={20} aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h3 id="live-sessions-heading" className="font-semibold text-slate-900">Live sessions</h3>
+                <p className="mt-1 text-sm text-slate-600">Your instructor’s upcoming sessions and join links.</p>
+                {liveSessions.length ? (
+                  <ul className="mt-4 space-y-3">
+                    {liveSessions.map((session) => (
+                      <li key={session.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-white p-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{session.title}</p>
+                          <p className="mt-1 text-xs text-slate-600">
+                            {new Date(session.starts_at).toLocaleString(undefined, {
+                              dateStyle: 'medium',
+                              timeStyle: 'short',
+                            })}
+                          </p>
+                        </div>
+                        <a
+                          href={session.meeting_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+                        >
+                          Join session <ExternalLink size={15} aria-hidden="true" />
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-3 text-sm text-slate-600" role="status">No upcoming live sessions have been scheduled yet.</p>
+                )}
+              </div>
+            </div>
+          </section>
         )}
 
         {progress.length ? (

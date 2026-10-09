@@ -73,22 +73,31 @@ export default function DashboardLayout({
   }, [])
 
   useEffect(() => {
-    if (!notifOpen) return undefined
+    if (!notifOpen && role !== 'student') return undefined
     let cancelled = false
-    api.get('/engagement/notifications/')
-      .then((result) => {
-        if (cancelled) return
-        setNotifications(result.results || [])
-        setUnreadCount(result.unread_count || 0)
-      })
-      .catch((error) => {
-        if (!cancelled) setNotificationsError(error.message || 'Notifications are unavailable.')
-      })
-      .finally(() => {
-        if (!cancelled) setNotificationsLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [notifOpen, notificationReload])
+    function refreshNotifications() {
+      api.get('/engagement/notifications/')
+        .then((result) => {
+          if (cancelled) return
+          setNotifications(result.results || [])
+          setUnreadCount(result.unread_count || 0)
+        })
+        .catch((error) => {
+          if (!cancelled) setNotificationsError(error.message || 'Notifications are unavailable.')
+        })
+        .finally(() => {
+          if (!cancelled) setNotificationsLoading(false)
+        })
+    }
+    refreshNotifications()
+    const intervalId = role === 'student'
+      ? window.setInterval(refreshNotifications, 5 * 60 * 1000)
+      : null
+    return () => {
+      cancelled = true
+      if (intervalId) window.clearInterval(intervalId)
+    }
+  }, [notifOpen, notificationReload, role])
 
   useEffect(() => {
     function onClickOutside(e) {

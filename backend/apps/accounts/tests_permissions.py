@@ -239,7 +239,33 @@ class EnrollmentBoundaryTests(Base):
         w = self.w
         self.assertEqual(self.as_(w.instructor_a).post("/api/enrollments/", {"course": w.course_a.id}, format="json").status_code, 403)
         self.assertEqual(self.as_(w.student_1).post("/api/enrollments/", {"course": w.course_a.id}, format="json").status_code, 400)
-        self.assertEqual(self.as_(w.student_1).post("/api/enrollments/", {"course": w.course_b.id}, format="json").status_code, 201)
+        response = self.as_(w.student_1).post(
+            "/api/enrollments/", {"course": w.course_b.id}, format="json"
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["learning_mode"], "self_paced")
+
+    def test_student_can_choose_learning_mode_when_enrolling(self):
+        w = self.w
+        response = self.as_(w.outsider).post(
+            "/api/enrollments/",
+            {"course": w.course_b.id, "learning_mode": "instructor_led"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["learning_mode"], "instructor_led")
+
+    def test_student_cannot_enroll_with_unknown_learning_mode(self):
+        w = self.w
+        response = self.as_(w.outsider).post(
+            "/api/enrollments/",
+            {"course": w.course_b.id, "learning_mode": "self-directed"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(w.outsider.enrollments.filter(course=w.course_b).exists())
 
     def test_student_cannot_spoof_the_student_field(self):
         w = self.w

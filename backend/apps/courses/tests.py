@@ -9,7 +9,8 @@ from datetime import timedelta
 
 from apps.accounts.models import User
 from apps.accounts.testing import World, client_for
-from apps.courses.models import Activity, Course, Lesson, Module
+from apps.courses.models import Activity, Course, Lesson, LiveSession, Module
+from apps.enrollment.models import Enrollment
 from apps.progress.models import ActivityCompletion
 
 
@@ -207,3 +208,46 @@ class CourseBuilderApiTests(APITestCase):
         }, format="multipart")
         self.assertEqual(rejected.status_code, 400)
         self.assertFalse(Lesson.objects.filter(pk=lesson_id + 1).exists())
+
+    def test_instructor_manages_sessions_and_only_instructor_led_students_can_list(self):
+        w = self.world
+        starts_at = (timezone.now() + timedelta(days=2)).isoformat()
+        response = self.instructor.post(
+            "/api/live-sessions/",
+            {
+                "course": w.course_a.id,
+                "title": "Weekly workshop",
+                "starts_at": starts_at,
+                "meeting_url": "https://meet.example.com/workshop",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        session_id = response.data["id"]
+        self.assertEqual(self.student.get("/api/live-sessions/").data, [])
+        Enrollment.objects.filter(student=w.student_1, course=w.course_a).update(
+            learning_mode=Enrollment.LearningMode.INSTRUCTOR_LED
+        )
+        available = self.student.get(f"/api/live-sessions/?course={w.course_a.id}")
+        self.assertEqual(available.status_code, 200, available.data)
+        self.assertEqual([item["id"] for item in available.data], [session_id])
+        self.assertEqual(
+            client_for(w.instructor_b).delete(f"/api/live-sessions/{session_id}/").status_code,
+            404,
+        )
+
+    def test_live_session_requires_secure_meeting_link_and_instructor_ownership(self):
+        w = self.world
+        payload = {
+            "course": w.course_a.id,
+            "title": "Weekly workshop",
+            "starts_at": (timezone.now() + timedelta(days=2)).isoformat(),
+            "meeting_url": "http://meet.example.com/workshop",
+        }
+        self.assertEqual(self.instructor.post("/api/live-sessions/", payload, format="json").status_code, 400)
+        payload["meeting_url"] = "https://meet.example.com/workshop"
+        self.assertEqual(
+            client_for(w.instructor_b).post("/api/live-sessions/", payload, format="json").status_code,
+            403,
+        )

@@ -24,7 +24,11 @@ from apps.progress.services import is_course_complete
 from .certificate_pdf import certificate_completion_date, render_certificate
 from .models import Achievement, Certificate, Notification, StudentAchievement, StudentStreak
 from .serializers import CertificateSerializer, NotificationSerializer
-from .services import issue_certificate, revoke_certificate
+from .services import (
+    create_due_live_session_reminders,
+    issue_certificate,
+    revoke_certificate,
+)
 
 
 class StudentEngagementView(APIView):
@@ -123,6 +127,8 @@ class NotificationListView(APIView):
         )
     )
     def get(self, request):
+        if role_of(request.user) == STUDENT:
+            create_due_live_session_reminders(request.user)
         notifications = Notification.objects.filter(recipient=request.user)
         return Response({
             "results": NotificationSerializer(notifications[:30], many=True).data,

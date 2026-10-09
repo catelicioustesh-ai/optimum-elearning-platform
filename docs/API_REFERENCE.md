@@ -276,14 +276,37 @@ with `?course={id}` to see everyone enrolled in a course they teach.
 
 ### `POST /api/enrollments/` 🔒 — Student only
 ```json
-{ "course": 1 }
+{ "course": 1, "learning_mode": "self_paced" }
 ```
-`student` is set automatically. A non-student calling this gets a `400`
-validation error, not silently ignored.
+`learning_mode` is `self_paced` or `instructor_led` and defaults to
+`self_paced` for existing clients and historical enrollments. The student
+chooses the mode at enrollment; module unlocking remains automatic in either
+mode. `student` is set automatically.
 
 ### `DELETE /api/enrollments/{id}/` 🔒 — Student only
 Students may unenroll only from their own courses. This revokes course access
 but preserves submissions, grades, quiz attempts, and progress records.
+
+### `GET /api/live-sessions/` 🔒 — Student, instructor, or admin
+Students see upcoming sessions only for courses where they selected
+`instructor_led`; instructors see sessions for their own courses. Optional
+`?course={id}` narrows the results within that permission scope.
+
+### `POST /api/live-sessions/` 🔒 — Instructor or admin
+```json
+{
+  "course": 1,
+  "title": "Weekly workshop",
+  "starts_at": "2026-10-10T16:00:00+03:00",
+  "meeting_url": "https://meet.example.com/workshop"
+}
+```
+Sessions require a future start time and an HTTPS meeting link. Instructors
+may only manage sessions for courses they teach. While a student is signed in,
+the dashboard checks for due reminders every five minutes; instructor-led
+students receive idempotent in-app notifications when a session is within
+24 hours and again within one hour. Opening the session notification links to
+the course page, where the meeting link is available.
 
 ---
 
