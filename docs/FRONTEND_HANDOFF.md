@@ -28,9 +28,11 @@ shapes; update it whenever a serializer or endpoint changes.
 - Collection endpoints currently return JSON arrays, not paginated DRF
   envelopes.
 
-There is no OpenAPI/Swagger schema route registered at present. The route
-inventory below and [API_REFERENCE.md](./API_REFERENCE.md) are the available
-API contract.
+For interactive API documentation during local development, open `/api/docs/`
+for Swagger UI or `/api/redoc/` for ReDoc; `/api/schema/` serves the OpenAPI
+schema. These routes are available only when Django runs with `DEBUG=True`.
+The route inventory below and [API_REFERENCE.md](./API_REFERENCE.md) remain
+the API contract, including details not yet represented in the generated schema.
 
 ## Run the backend and frontend locally (Windows)
 

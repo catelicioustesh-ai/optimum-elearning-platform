@@ -215,7 +215,7 @@ class EnrollmentBoundaryTests(Base):
 
     def test_student_cannot_remove_another_students_enrollment(self):
         w = self.w
-        enrollment = w.student_2.enrollments.get()
+        enrollment = w.student_2.enrollments.get(course=w.course_a)
 
         self.assertEqual(
             self.as_(w.student_1).delete(f"/api/enrollments/{enrollment.id}/").status_code,

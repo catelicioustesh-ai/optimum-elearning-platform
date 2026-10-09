@@ -1,18 +1,15 @@
 from django.conf import settings
 from django.contrib import admin
 from django.urls import include, path
-
-admin.site.site_header = "Optimum ERP LMS Administration"
-admin.site.site_title = "Optimum ERP LMS Admin"
-admin.site.index_title = "Platform Administration"
-
 from drf_spectacular.views import (
     SpectacularAPIView,
     SpectacularRedocView,
     SpectacularSwaggerView,
 )
 
-
+admin.site.site_header = "Optimum ERP LMS Administration"
+admin.site.site_title = "Optimum ERP LMS Admin"
+admin.site.index_title = "Platform Administration"
 
 urlpatterns = [
     # ------------------------------------------------------------------
@@ -40,8 +37,6 @@ api_urlpatterns = [
 # Media files (dev only)
 # ----------------------------------------------------------------------
 if settings.DEBUG:
-    from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
-
     # Dev-only. Serve ONLY public assets (course cover images). Submissions and
     # lesson PDFs are private: they're delivered by authenticated API endpoints
     # (/api/submissions/<id>/download/, /api/lesson-attachments/<id>/download/)
@@ -58,9 +53,3 @@ if settings.DEBUG:
     ]
 
 urlpatterns.append(path("api/", include(api_urlpatterns)))
-        re_path(
-            r"^media/(?P<path>course_covers/.*)$",
-            serve,
-            {"document_root": settings.MEDIA_ROOT},
-        ),
-    ]
