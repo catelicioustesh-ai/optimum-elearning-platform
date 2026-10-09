@@ -283,6 +283,10 @@ with `?course={id}` to see everyone enrolled in a course they teach.
 `student` is set automatically. A non-student calling this gets a `400`
 validation error, not silently ignored.
 
+### `DELETE /api/enrollments/{id}/` 🔒 — Student only
+Students may unenroll only from their own courses. This revokes course access
+but preserves submissions, grades, quiz attempts, and progress records.
+
 ---
 
 ## Progress / module locking

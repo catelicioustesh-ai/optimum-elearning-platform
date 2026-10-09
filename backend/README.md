@@ -57,7 +57,8 @@ Every endpoint below was tested against a running server, not just written:
   embedded in token), token refresh, `/me/`
 - **Courses**: full CRUD for Course → Module → Lesson → Activity,
   instructor-only writes, verified a student gets 403 trying to write
-- **Enrollment**: student self-enrolls
+- **Enrollment**: students self-enroll and may unenroll from their own courses;
+  unenrolling preserves submissions, grades, quiz attempts, and progress
 - **Progress / module locking**: verified live — Module 2 was `locked`
   before Module 1's activity was graded, `active` after, and `done` once
   its own required activity (a quiz) was passed. This is the brief's

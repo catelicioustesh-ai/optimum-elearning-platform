@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link } from 'react-router-dom'
-import { LayoutDashboard, BookOpen, ClipboardList, GraduationCap, Check, Search } from 'lucide-react'
+import { LayoutDashboard, BookOpen, ClipboardList, GraduationCap, Search, ArrowUpRight, X } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout.jsx'
 import { api } from '../lib/api.js'
 import { useAuth } from '../context/useAuth.js'
@@ -18,7 +18,7 @@ export default function CourseCatalog() {
   const [enrollments, setEnrollments] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [enrollingId, setEnrollingId] = useState(null)
+  const [updatingCourseId, setUpdatingCourseId] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [showAllCourses, setShowAllCourses] = useState(false)
 
@@ -32,25 +32,123 @@ export default function CourseCatalog() {
       .finally(() => setLoading(false))
   }, [])
 
-  const enrolledCourseIds = new Set(enrollments.map((e) => e.course))
+  const enrolledCourseIds = new Set(enrollments.map((enrollment) => String(enrollment.course)))
   const filteredCourses = courses.filter((course) => (
     `${course.title} ${course.description || ''} ${course.instructor_name || ''}`
       .toLowerCase()
       .includes(searchTerm.trim().toLowerCase())
   ))
-  const visibleCourses = showAllCourses ? filteredCourses : filteredCourses.slice(0, 6)
+  const myCourses = filteredCourses.filter((course) => enrolledCourseIds.has(String(course.id)))
+  const availableCourses = filteredCourses.filter((course) => !enrolledCourseIds.has(String(course.id)))
+  const visibleCourses = showAllCourses ? availableCourses : availableCourses.slice(0, 6)
 
   async function handleEnroll(courseId) {
-    setEnrollingId(courseId)
+    setUpdatingCourseId(courseId)
     setError('')
     try {
       const enrollment = await api.post('/enrollments/', { course: courseId })
-      setEnrollments([...enrollments, enrollment])
+      setEnrollments((current) => [...current, enrollment])
     } catch (err) {
       setError(err.message)
     } finally {
-      setEnrollingId(null)
+      setUpdatingCourseId(null)
     }
+  }
+
+  async function handleUnenroll(course) {
+    if (!window.confirm(`Unenroll from "${course.title}"? Your submitted work and grades will be kept if you enroll again later.`)) {
+      return
+    }
+
+    const enrollment = enrollments.find((item) => String(item.course) === String(course.id))
+    if (!enrollment) return
+
+    setUpdatingCourseId(course.id)
+    setError('')
+    try {
+      await api.del(`/enrollments/${enrollment.id}/`)
+      setEnrollments((current) => current.filter((item) => item.id !== enrollment.id))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setUpdatingCourseId(null)
+    }
+  }
+
+  function renderCourseCard(course) {
+    const isEnrolled = enrolledCourseIds.has(String(course.id))
+    const coverImage = course.thumbnail_url || (course.thumbnail ? `http://localhost:8000/${course.thumbnail}` : null)
+    const isUpdating = String(updatingCourseId) === String(course.id)
+
+    return (
+      <article key={course.id} className="dg-card group relative flex flex-col overflow-hidden rounded-3xl p-0">
+        {isEnrolled && (
+          <Link
+            to={`/dashboard/student/courses/${course.id}`}
+            aria-label={`Open ${course.title}`}
+            className="absolute inset-0 z-0 rounded-3xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+          />
+        )}
+        <div className="pointer-events-none relative z-10 flex flex-1 flex-col">
+          <div className="relative h-36 w-full overflow-hidden bg-slate-100">
+            {coverImage ? (
+              <img src={coverImage} alt="" className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-linear-to-br from-blue-100 to-blue-50 text-blue-700">
+                <ClipboardList size={28} aria-hidden="true" />
+              </div>
+            )}
+            {isEnrolled && (
+              <span className="absolute left-3 top-3 rounded-full bg-emerald-700 px-2.5 py-1 text-xs font-bold text-white shadow-sm">
+                Enrolled
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-1 flex-col p-5">
+            <div className="flex items-start justify-between gap-2">
+              <h3 className="font-bold text-slate-900">{course.title}</h3>
+              <span className="dg-pill shrink-0">{course.module_count} module{course.module_count === 1 ? '' : 's'}</span>
+            </div>
+            <p className="mt-2 line-clamp-3 flex-1 text-sm leading-6 text-slate-600">{course.description || 'Course overview and learning materials.'}</p>
+            <p className="mt-3 text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+              {course.instructor_name || 'Optimum LMS instructor'}
+            </p>
+
+            <div className="pointer-events-auto relative z-10 mt-4 flex flex-wrap gap-2">
+              {isEnrolled ? (
+                <>
+                  <Link
+                    to={`/dashboard/student/courses/${course.id}`}
+                    className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-700 px-3 py-2.5 text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-emerald-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700"
+                  >
+                    <ArrowUpRight size={16} aria-hidden="true" /> Continue course
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => handleUnenroll(course)}
+                    disabled={isUpdating}
+                    className="inline-flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-white px-3 py-2.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-wait disabled:opacity-60"
+                    aria-label={`Unenroll from ${course.title}`}
+                  >
+                    <X size={15} aria-hidden="true" /> {isUpdating ? 'Removing…' : 'Unenroll'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleEnroll(course.id)}
+                  disabled={isUpdating}
+                  className="dg-btn w-full bg-blue-700 text-white hover:bg-blue-800 disabled:opacity-60"
+                >
+                  {isUpdating ? 'Enrolling…' : 'Enroll'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </article>
+    )
   }
 
   return (
@@ -93,69 +191,50 @@ export default function CourseCatalog() {
           <>
             <p className="text-sm text-slate-600" role="status" aria-live="polite">
               {filteredCourses.length} course{filteredCourses.length === 1 ? '' : 's'} found
-              {filteredCourses.length > 6 && !showAllCourses ? ` · showing 6` : ''}
+              {availableCourses.length > 6 && !showAllCourses ? ` · showing ${myCourses.length} enrolled and 6 available` : ''}
             </p>
             {filteredCourses.length === 0 ? (
               <div className="dg-card rounded-2xl p-6 text-sm text-slate-600">
                 No courses match “{searchTerm}”. Try a broader title or topic.
               </div>
             ) : (
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {visibleCourses.map((course) => {
-              const isEnrolled = enrolledCourseIds.has(course.id)
-              const coverImage = course.thumbnail_url || (course.thumbnail ? `http://localhost:8000/${course.thumbnail}` : null)
-
-              return (
-                <div key={course.id} className="dg-card group flex flex-col overflow-hidden rounded-3xl p-0">
-                  <div className="relative h-36 w-full overflow-hidden bg-slate-100">
-                    {coverImage ? (
-                      <img src={coverImage} alt={course.title} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center bg-linear-to-br from-blue-100 to-blue-50 text-blue-700">
-                        <ClipboardList size={28} />
+              <div className="space-y-8">
+                {myCourses.length > 0 && (
+                  <section aria-labelledby="my-courses-heading" className="space-y-4">
+                    <div className="flex flex-wrap items-end justify-between gap-2">
+                      <div>
+                        <h3 id="my-courses-heading" className="text-lg font-bold text-slate-900">My courses</h3>
+                        <p className="mt-1 text-sm text-slate-600">Pick up where you left off.</p>
                       </div>
-                    )}
-                  </div>
-
-                  <div className="flex flex-1 flex-col p-5">
-                    <div className="flex items-center justify-between gap-2">
-                      <h3 className="font-bold text-slate-900">{course.title}</h3>
-                      <span className="dg-pill">{course.module_count} module{course.module_count === 1 ? '' : 's'}</span>
+                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800">{myCourses.length} enrolled</span>
                     </div>
-                    <p className="mt-2 line-clamp-2 flex-1 text-sm leading-6 text-slate-600">{course.description}</p>
-                    <p className="mt-3 text-xs font-medium uppercase tracking-[0.12em] text-slate-400">
-                      {course.instructor_name}
-                    </p>
-
-                    {isEnrolled ? (
-                      <Link
-                        to={`/dashboard/student/courses/${course.id}`}
-                        className="mt-4 flex items-center justify-center gap-1.5 rounded-xl bg-emerald-50 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100"
-                      >
-                        <Check size={16} /> Enrolled — continue
-                      </Link>
-                    ) : (
-                      <button
-                        onClick={() => handleEnroll(course.id)}
-                        disabled={enrollingId === course.id}
-                        className="dg-btn mt-4 w-full bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-60"
-                      >
-                        {enrollingId === course.id ? 'Enrolling…' : 'Enroll'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
+                    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                      {myCourses.map(renderCourseCard)}
+                    </div>
+                  </section>
+                )}
+                {availableCourses.length > 0 && (
+                  <section aria-labelledby="available-courses-heading" className="space-y-4">
+                    <div className="flex flex-wrap items-end justify-between gap-2">
+                      <div>
+                        <h3 id="available-courses-heading" className="text-lg font-bold text-slate-900">Explore courses</h3>
+                        <p className="mt-1 text-sm text-slate-600">Discover another learning path.</p>
+                      </div>
+                    </div>
+                    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                      {visibleCourses.map(renderCourseCard)}
+                    </div>
+                  </section>
+                )}
               </div>
             )}
-            {filteredCourses.length > 6 && (
+            {availableCourses.length > 6 && (
               <button
                 type="button"
                 onClick={() => setShowAllCourses((value) => !value)}
                 className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
-                {showAllCourses ? 'Show fewer courses' : `View all ${filteredCourses.length} courses`}
+                {showAllCourses ? 'Show fewer courses' : `View all ${availableCourses.length} available courses`}
               </button>
             )}
           </>

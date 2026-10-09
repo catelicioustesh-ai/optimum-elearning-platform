@@ -7,6 +7,7 @@ from .models import Submission
 class SubmissionSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source="student.get_full_name", read_only=True)
     activity_title = serializers.CharField(source="activity.title", read_only=True)
+    course_title = serializers.CharField(source="activity.lesson.module.course.title", read_only=True)
     activity_type = serializers.CharField(source="activity.activity_type", read_only=True)
     activity_language = serializers.CharField(source="activity.language", read_only=True)
     max_score = serializers.IntegerField(source="activity.max_score", read_only=True)
@@ -16,7 +17,7 @@ class SubmissionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Submission
         fields = [
-            "id", "student", "student_name", "activity", "activity_title", "activity_type",
+            "id", "student", "student_name", "activity", "activity_title", "course_title", "activity_type",
             "activity_language", "max_score",
             "content", "file", "file_name", "download_url", "github_url", "attempt_number", "status",
             "submitted_at", "grade", "feedback", "graded_at",

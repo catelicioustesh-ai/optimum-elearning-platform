@@ -43,8 +43,23 @@ export default function DashboardLayout({
   const [notificationReload, setNotificationReload] = useState(0)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark')
+  const [studentProfile, setStudentProfile] = useState(null)
+  const [profileError, setProfileError] = useState('')
   const menuRef = useRef(null)
   const notifRef = useRef(null)
+
+  useEffect(() => {
+    if (role !== 'student') return undefined
+    let cancelled = false
+    api.me()
+      .then((profile) => {
+        if (!cancelled) setStudentProfile(profile)
+      })
+      .catch((error) => {
+        if (!cancelled) setProfileError(error.message || 'Your registered name could not be loaded.')
+      })
+    return () => { cancelled = true }
+  }, [role])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -88,7 +103,11 @@ export default function DashboardLayout({
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))
   }
 
-  const initials = (user.name || 'User')
+  const registeredName = `${studentProfile?.first_name || ''} ${studentProfile?.last_name || ''}`.trim()
+  const displayName = role === 'student'
+    ? registeredName || studentProfile?.username || user.name || 'Student'
+    : user.name
+  const initials = (displayName || 'User')
     .split(' ')
     .filter(Boolean)
     .slice(0, 2)
@@ -180,7 +199,7 @@ export default function DashboardLayout({
               {initials.slice(0, 2)}
             </div>
             <div className="min-w-0">
-              <div className="truncate text-sm font-semibold text-slate-900">{user.name}</div>
+              <div className="truncate text-sm font-semibold text-slate-900">{displayName}</div>
               <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{roleLabels[role] || 'User'}</div>
             </div>
           </div>
@@ -302,16 +321,21 @@ export default function DashboardLayout({
                 <span className="flex h-7 w-7 items-center justify-center rounded-full bg-linear-to-tr from-blue-600 to-blue-600 text-[10px] font-bold text-white">
                   {initials.slice(0, 2)}
                 </span>
-                <span className="hidden text-xs font-semibold text-slate-700 sm:inline">{user.name}</span>
+                <span className="hidden text-xs font-semibold text-slate-700 sm:inline">{displayName}</span>
                 <ChevronDown size={14} className="text-slate-500" />
               </button>
 
               {menuOpen && (
                 <div className="absolute right-0 z-80 mt-2 w-48 rounded-2xl border border-slate-200 bg-white py-1.5 shadow-2xl backdrop-blur-xl">
                   <div className="border-b border-slate-200 px-3 py-2 text-xs">
-                    <div className="font-bold text-slate-900">{user.name}</div>
+                    <div className="font-bold text-slate-900">{displayName}</div>
                     <div className="text-[10px] capitalize text-slate-500">{role} Account</div>
                   </div>
+                  {profileError && role === 'student' && (
+                    <p className="px-3 py-2 text-[10px] text-amber-800" role="status">
+                      Showing the sign-in name because your registered profile could not be loaded.
+                    </p>
+                  )}
                   <button
                     type="button"
                     onClick={logout}

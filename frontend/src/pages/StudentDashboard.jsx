@@ -226,40 +226,91 @@ export default function StudentDashboard() {
               </div>
             </section>
 
-            <section className="dg-card rounded-2xl p-5 sm:p-6">
-              <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-                <div>
-                  <h2 className="text-base font-bold text-white">Learning path</h2>
-                  <p className="dg-sub mt-1">{course.course_title}</p>
-                </div>
-                <span className="text-xs text-slate-400">{modules.length} modules</span>
-              </div>
-              {modules.length ? (
-                <LearningPath
-                  modules={modules}
-                  completedPct={course.progress_percent}
-                  onSelectModule={(module) => {
-                    if (module.status !== 'locked') navigate(`/dashboard/student/courses/${course.course_id}`)
-                  }}
-                />
-              ) : (
-                <p className="text-sm text-slate-300" role="status">Learning path unavailable. This course has no modules yet.</p>
-              )}
-            </section>
-
             <div className="grid gap-4 md:grid-cols-3">
-              <div className="dg-card rounded-xl p-5">
+              <div className="dg-card rounded-2xl border-l-4 border-l-blue-500 p-5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Enrolled courses</p>
                 <p className="mt-2 text-2xl font-bold text-white">{courses.length}</p>
               </div>
-              <div className="dg-card rounded-xl p-5">
+              <div className="dg-card rounded-2xl border-l-4 border-l-emerald-500 p-5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Modules completed</p>
                 <p className="mt-2 text-2xl font-bold text-white">{completedModules} / {modules.length}</p>
               </div>
-              <div className="dg-card rounded-xl p-5">
+              <div className="dg-card rounded-2xl border-l-4 border-l-amber-500 p-5">
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Awaiting review</p>
                 <p className="mt-2 text-2xl font-bold text-white">{data.pending_labs}</p>
               </div>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+              <section className="dg-card rounded-2xl border-t-4 border-t-amber-400 p-5 sm:p-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-bold text-white">Upcoming deadlines</h2>
+                    <p className="dg-sub mt-1">Your next work to complete</p>
+                  </div>
+                  <span className="rounded-full bg-amber-400/15 px-2.5 py-1 text-xs font-bold text-amber-200">{data.upcoming_deadlines.length} due</span>
+                </div>
+                {data.upcoming_deadlines.length ? (
+                  <ul className="mt-4 divide-y divide-slate-700">
+                    {sectionItems('deadlines', data.upcoming_deadlines).map((item) => (
+                      <li key={item.activity_id} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-white">{item.title}</p>
+                          <p className="mt-1 text-xs text-slate-400">{item.course_title} · {item.activity_type}</p>
+                          <p className="mt-1 text-xs font-semibold text-amber-200">Due {formatDeadline(item.deadline)}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/dashboard/student/courses/${item.course_id}`)}
+                          className="rounded-lg border border-slate-600 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-blue-400 hover:bg-slate-800 lms-focus-ring"
+                        >
+                          Open course
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-4 rounded-xl bg-slate-800/60 px-4 py-5 text-sm text-slate-300" role="status">You’re all caught up — no upcoming deadlines.</p>
+                )}
+                {sectionToggle('deadlines', data.upcoming_deadlines, 'deadlines')}
+              </section>
+
+              <section className="dg-card rounded-2xl border-t-4 border-t-blue-400 p-5 sm:p-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-bold text-white">Recent results</h2>
+                    <p className="dg-sub mt-1">Latest graded submissions</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/dashboard/student/grades')}
+                    className="rounded-lg border border-slate-600 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-blue-400 hover:bg-slate-800 lms-focus-ring"
+                  >
+                    All grades
+                  </button>
+                </div>
+                {data.recent_grades.length ? (
+                  <ul className="mt-4 divide-y divide-slate-700">
+                    {sectionItems('recentGrades', data.recent_grades).map((result, index) => (
+                      <li key={`${result.activity}-${index}`} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-white">{result.activity}</p>
+                          <p className="mt-1 text-xs text-slate-400">
+                            {result.graded_at ? `Graded ${new Date(result.graded_at).toLocaleDateString()}` : 'Recently graded'}
+                            {result.feedback ? ` · ${result.feedback}` : ''}
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-blue-500/15 px-3 py-1.5 text-sm font-bold text-blue-200">
+                          {result.grade}{result.max_score != null ? ` / ${result.max_score}` : ''} pts
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-4 rounded-xl bg-slate-800/60 px-4 py-5 text-sm text-slate-300" role="status">Graded work will appear here after your instructor reviews it.</p>
+                )}
+                {sectionToggle('recentGrades', data.recent_grades, 'results')}
+              </section>
             </div>
 
             {engagement && (
@@ -332,49 +383,24 @@ export default function StudentDashboard() {
             )}
 
             <section className="dg-card rounded-2xl p-5 sm:p-6">
-              <h2 className="text-base font-bold text-white">Upcoming deadlines</h2>
-              {data.upcoming_deadlines.length ? (
-                <ul className="mt-4 divide-y divide-slate-700">
-                  {sectionItems('deadlines', data.upcoming_deadlines).map((item) => (
-                    <li key={item.activity_id} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
-                      <div>
-                        <p className="text-sm font-semibold text-white">{item.title}</p>
-                        <p className="mt-1 text-xs text-slate-400">{item.course_title} · {item.activity_type} · Due {formatDeadline(item.deadline)}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/dashboard/student/courses/${item.course_id}`)}
-                        className="rounded-lg border border-slate-600 px-3 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-800 lms-focus-ring"
-                      >
-                        Open course
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <h2 className="text-base font-bold text-white">Learning path</h2>
+                  <p className="dg-sub mt-1">{course.course_title}</p>
+                </div>
+                <span className="text-xs text-slate-400">{modules.length} modules</span>
+              </div>
+              {modules.length ? (
+                <LearningPath
+                  modules={modules}
+                  completedPct={course.progress_percent}
+                  onSelectModule={(module) => {
+                    if (module.status !== 'locked') navigate(`/dashboard/student/courses/${course.course_id}`)
+                  }}
+                />
               ) : (
-                <p className="mt-2 text-sm text-slate-400" role="status">No upcoming deadlines.</p>
+                <p className="text-sm text-slate-300" role="status">Learning path unavailable. This course has no modules yet.</p>
               )}
-              {sectionToggle('deadlines', data.upcoming_deadlines, 'deadlines')}
-            </section>
-
-            <section className="dg-card rounded-2xl p-5 sm:p-6">
-              <h2 className="text-base font-bold text-white">Recent results</h2>
-              {data.recent_grades.length ? (
-                <ul className="mt-4 divide-y divide-slate-700">
-                  {sectionItems('recentGrades', data.recent_grades).map((result, index) => (
-                    <li key={`${result.activity}-${index}`} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
-                      <div>
-                        <p className="text-sm font-semibold text-white">{result.activity}</p>
-                        {result.feedback && <p className="mt-1 text-xs text-slate-400">{result.feedback}</p>}
-                      </div>
-                      <span className="rounded-full bg-blue-500/15 px-3 py-1 text-sm font-semibold text-blue-200">{result.grade}%</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-2 text-sm text-slate-400" role="status">No graded work yet.</p>
-              )}
-              {sectionToggle('recentGrades', data.recent_grades, 'results')}
             </section>
           </>
         )}

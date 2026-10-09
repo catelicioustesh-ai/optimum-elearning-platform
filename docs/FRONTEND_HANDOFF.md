@@ -156,7 +156,10 @@ to courses that instructor owns.
 | GET, PUT, PATCH, DELETE | `/lesson-attachments/{id}/` | 🔒; writes owning instructor/admin |
 | GET | `/lesson-attachments/{id}/download/` | 🔒; authenticated file download |
 | GET, POST | `/enrollments/` | 🔒; POST student self-enrollment |
-| GET | `/enrollments/{id}/` | 🔒; scoped to caller's permitted records |
+| GET, DELETE | `/enrollments/{id}/` | 🔒; DELETE only the student's own enrollment |
+
+Unenrolling revokes course access but preserves the student's submissions,
+grades, quiz attempts, and progress records.
 
 Student lesson/activity reads are filtered by enrollment and module unlocking.
 Locked content is deliberately not made available by calling a detail URL

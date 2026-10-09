@@ -87,6 +87,8 @@ class StudentDashboardView(APIView):
             {
                 "activity": s.activity.title,
                 "grade": s.grade,
+                "max_score": s.activity.max_score,
+                "graded_at": s.graded_at.isoformat() if s.graded_at else None,
                 "feedback": s.feedback,
             }
             for s in recent_grades

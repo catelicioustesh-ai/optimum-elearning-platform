@@ -201,11 +201,39 @@ class EnrollmentBoundaryTests(Base):
         self.assertEqual({e["course"] for e in b.get("/api/enrollments/").data}, {w.course_b.id})
         self.assertEqual(b.get(f"/api/enrollments/?course={w.course_a.id}").data, [])   # filter can't widen scope
 
-    def test_student_cannot_change_or_remove_enrollments(self):
+    def test_student_can_remove_only_their_own_enrollment_and_work_is_retained(self):
         w, s = self.w, self.as_(self.w.student_1)
         enrollment = w.student_1.enrollments.get()
         self.assertEqual(s.patch(f"/api/enrollments/{enrollment.id}/", {"course": w.course_b.id}, format="json").status_code, 405)
-        self.assertEqual(s.delete(f"/api/enrollments/{enrollment.id}/").status_code, 405)
+
+        completion = ActivityCompletion.objects.create(student=w.student_1, activity=w.exercise)
+        response = s.delete(f"/api/enrollments/{enrollment.id}/")
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(w.student_1.enrollments.filter(pk=enrollment.id).exists())
+        self.assertTrue(ActivityCompletion.objects.filter(pk=completion.pk).exists())
+
+    def test_student_cannot_remove_another_students_enrollment(self):
+        w = self.w
+        enrollment = w.student_2.enrollments.get()
+
+        self.assertEqual(
+            self.as_(w.student_1).delete(f"/api/enrollments/{enrollment.id}/").status_code,
+            404,
+        )
+        self.assertTrue(w.student_2.enrollments.filter(pk=enrollment.id).exists())
+
+    def test_non_students_cannot_remove_enrollments(self):
+        w = self.w
+        enrollment = w.student_1.enrollments.get()
+
+        for user in (w.instructor_a, w.admin):
+            with self.subTest(role=user.role):
+                self.assertEqual(
+                    self.as_(user).delete(f"/api/enrollments/{enrollment.id}/").status_code,
+                    403,
+                )
+        self.assertTrue(w.student_1.enrollments.filter(pk=enrollment.id).exists())
 
     def test_non_students_cannot_enroll_and_double_enroll_is_rejected(self):
         w = self.w
@@ -271,6 +299,7 @@ class SubmissionOwnershipTests(Base):
         r = self.as_(w.student_1).post("/api/submissions/", {"activity": w.assignment.id, "file": f}, format="multipart")
         self.assertEqual(r.status_code, 201, r.data)
         sid = r.data["id"]
+        self.assertEqual(r.data["course_title"], w.course_a.title)
         self.assertNotIn("file", r.data)                         # raw storage path never exposed
         url = f"/api/submissions/{sid}/download/"
         self.assertEqual(self.as_(w.student_1).get(url).status_code, 200)
@@ -333,7 +362,9 @@ class QuizBoundaryTests(Base):
 
     def test_attempts_only_visible_to_owner_and_course_instructor(self):
         w = self.w
-        self.submit(w.student_1)
+        result = self.submit(w.student_1)
+        self.assertEqual(result.data["quiz_title"], w.quiz.activity.title)
+        self.assertEqual(result.data["course_title"], w.course_a.title)
         self.submit(w.student_2)
         self.assertEqual(len(self.as_(w.student_1).get("/api/quiz-attempts/").data), 1)
         self.assertEqual(len(self.as_(w.instructor_a).get("/api/quiz-attempts/").data), 2)
