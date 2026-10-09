@@ -1,0 +1,13 @@
+**
+!frontend/
+!frontend/**
+!images/
+!images/**
+
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+**/venv
+**/__pycache__
+**/*.py[cod]

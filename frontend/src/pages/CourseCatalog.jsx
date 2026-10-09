@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link } from 'react-router-dom'
-import { LayoutDashboard, BookOpen, ClipboardList, GraduationCap, Check } from 'lucide-react'
+import { LayoutDashboard, BookOpen, ClipboardList, GraduationCap, Check, Search } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout.jsx'
 import { api } from '../lib/api.js'
 import { useAuth } from '../context/useAuth.js'
@@ -19,6 +19,8 @@ export default function CourseCatalog() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [enrollingId, setEnrollingId] = useState(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [showAllCourses, setShowAllCourses] = useState(false)
 
   useEffect(() => {
     Promise.all([api.get('/courses/'), api.get('/enrollments/')])
@@ -31,6 +33,12 @@ export default function CourseCatalog() {
   }, [])
 
   const enrolledCourseIds = new Set(enrollments.map((e) => e.course))
+  const filteredCourses = courses.filter((course) => (
+    `${course.title} ${course.description || ''} ${course.instructor_name || ''}`
+      .toLowerCase()
+      .includes(searchTerm.trim().toLowerCase())
+  ))
+  const visibleCourses = showAllCourses ? filteredCourses : filteredCourses.slice(0, 6)
 
   async function handleEnroll(courseId) {
     setEnrollingId(courseId)
@@ -53,7 +61,23 @@ export default function CourseCatalog() {
         <div className="rounded-3xl border border-slate-200 bg-[radial-gradient(circle_at_top_left,rgba(59, 130, 246,0.17),transparent_35%),white] p-6 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Catalog</p>
           <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-900">Explore your learning paths</h2>
+          <p className="mt-2 max-w-2xl text-sm text-slate-600">Find a course by title, topic, or instructor. Your enrolled courses are ready to continue.</p>
         </div>
+
+        <label className="relative block max-w-xl">
+          <Search size={18} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <span className="sr-only">Search courses</span>
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={(event) => {
+              setSearchTerm(event.target.value)
+              setShowAllCourses(false)
+            }}
+            placeholder="Search courses, topics, or instructors"
+            className="w-full rounded-xl border border-slate-300 bg-white py-3 pl-10 pr-3 text-sm text-slate-900 shadow-sm placeholder:text-slate-500"
+          />
+        </label>
 
         {error && (
           <div className="rounded-lg border border-line bg-coral-tint px-4 py-3 text-sm text-coral-dim">{error}</div>
@@ -66,8 +90,18 @@ export default function CourseCatalog() {
             No courses have been created yet. Ask an instructor to add one.
           </div>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {courses.map((course) => {
+          <>
+            <p className="text-sm text-slate-600" role="status" aria-live="polite">
+              {filteredCourses.length} course{filteredCourses.length === 1 ? '' : 's'} found
+              {filteredCourses.length > 6 && !showAllCourses ? ` · showing 6` : ''}
+            </p>
+            {filteredCourses.length === 0 ? (
+              <div className="dg-card rounded-2xl p-6 text-sm text-slate-600">
+                No courses match “{searchTerm}”. Try a broader title or topic.
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {visibleCourses.map((course) => {
               const isEnrolled = enrolledCourseIds.has(course.id)
               const coverImage = course.thumbnail_url || (course.thumbnail ? `http://localhost:8000/${course.thumbnail}` : null)
 
@@ -86,7 +120,7 @@ export default function CourseCatalog() {
                   <div className="flex flex-1 flex-col p-5">
                     <div className="flex items-center justify-between gap-2">
                       <h3 className="font-bold text-slate-900">{course.title}</h3>
-                      <span className="dg-pill">{course.module_count} mod</span>
+                      <span className="dg-pill">{course.module_count} module{course.module_count === 1 ? '' : 's'}</span>
                     </div>
                     <p className="mt-2 line-clamp-2 flex-1 text-sm leading-6 text-slate-600">{course.description}</p>
                     <p className="mt-3 text-xs font-medium uppercase tracking-[0.12em] text-slate-400">
@@ -113,7 +147,18 @@ export default function CourseCatalog() {
                 </div>
               )
             })}
-          </div>
+              </div>
+            )}
+            {filteredCourses.length > 6 && (
+              <button
+                type="button"
+                onClick={() => setShowAllCourses((value) => !value)}
+                className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                {showAllCourses ? 'Show fewer courses' : `View all ${filteredCourses.length} courses`}
+              </button>
+            )}
+          </>
         )}
       </div>
     </DashboardLayout>

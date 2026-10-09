@@ -3,6 +3,7 @@ import { Helmet } from 'react-helmet-async'
 import { Link, useParams } from 'react-router-dom'
 import { LayoutDashboard, BookOpen, GraduationCap, Lock, CircleCheckBig, Circle, ChevronRight } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout.jsx'
+import ExpandableList from '../components/ExpandableList.jsx'
 import { api } from '../lib/api.js'
 import { useAuth } from '../context/useAuth.js'
 
@@ -79,16 +80,20 @@ export default function CourseView() {
           <div className="rounded-lg border border-line bg-coral-tint px-4 py-3 text-sm text-coral-dim">{error}</div>
         )}
 
-        <div className="space-y-3">
-          {progress.map((m) => {
+        {progress.length ? (
+          <ExpandableList items={progress} label="modules" listClassName="space-y-3">
+            {(m) => {
             const style = STATUS_STYLE[m.status]
             const Icon = style.icon
             const isExpanded = expandedModuleId === m.module_id
             return (
               <div key={m.module_id} className="overflow-hidden rounded-2xl border border-line bg-paper">
                 <button
+                  type="button"
                   onClick={() => toggleModule(m.module_id, m.status)}
                   disabled={m.status === 'locked'}
+                  aria-expanded={isExpanded}
+                  aria-controls={`module-lessons-${m.module_id}`}
                   className={`flex w-full items-center justify-between px-5 py-4 text-left ${
                     m.status === 'locked' ? 'cursor-not-allowed opacity-60' : 'hover:bg-panel'
                   }`}
@@ -98,6 +103,9 @@ export default function CourseView() {
                     <div>
                       <p className="font-medium text-ink">Module {m.order}: {m.title}</p>
                       <p className={`text-xs ${style.color}`}>{style.label}</p>
+                      {m.status === 'locked' && (
+                        <p className="mt-1 text-xs text-text-muted">Complete the previous module to unlock this one.</p>
+                      )}
                     </div>
                   </div>
                   {m.status !== 'locked' && (
@@ -106,7 +114,7 @@ export default function CourseView() {
                 </button>
 
                 {isExpanded && (
-                  <div className="space-y-1 border-t border-line bg-panel/50 px-5 py-3">
+                  <div id={`module-lessons-${m.module_id}`} className="space-y-1 border-t border-line bg-panel/50 px-5 py-3">
                     {(lessonsByModule[m.module_id] || []).map((lesson) => (
                       <Link
                         key={lesson.id}
@@ -124,11 +132,11 @@ export default function CourseView() {
                 )}
               </div>
             )
-          })}
-          {!loading && progress.length === 0 && (
-            <p className="text-sm text-text-muted">This course doesn't have any modules yet.</p>
-          )}
-        </div>
+            }}
+          </ExpandableList>
+        ) : !loading && (
+          <p className="text-sm text-text-muted" role="status">This course doesn't have any modules yet.</p>
+        )}
       </div>
     </DashboardLayout>
   )

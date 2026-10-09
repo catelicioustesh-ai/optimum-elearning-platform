@@ -31,6 +31,7 @@ export default function StudentDashboard() {
   const [error, setError] = useState('')
   const [certificateError, setCertificateError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
+  const [expandedSections, setExpandedSections] = useState({})
   const { auth } = useAuth()
   const navigate = useNavigate()
 
@@ -60,6 +61,25 @@ export default function StudentDashboard() {
   const modules = course?.modules || []
   const completedModules = modules.filter((module) => module.status === 'done').length
   const engagement = data?.engagement
+  const earnedAchievements = engagement?.achievements.filter((item) => item.earned_at) || []
+
+  function sectionItems(section, items) {
+    return expandedSections[section] ? items : items.slice(0, 5)
+  }
+
+  function sectionToggle(section, items, label) {
+    if (items.length <= 5) return null
+    const expanded = Boolean(expandedSections[section])
+    return (
+      <button
+        type="button"
+        onClick={() => setExpandedSections((current) => ({ ...current, [section]: !current[section] }))}
+        className="mt-4 rounded-lg border border-slate-600 px-3 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-800 lms-focus-ring"
+      >
+        {expanded ? 'Show fewer' : `View all ${items.length} ${label}`}
+      </button>
+    )
+  }
 
   function retryLoad() {
     setError('')
@@ -259,9 +279,9 @@ export default function StudentDashboard() {
                 <div className="mt-5 grid gap-6 lg:grid-cols-2">
                   <div>
                     <h3 className="text-xs font-bold uppercase tracking-wide text-slate-400">Badges and milestones</h3>
-                    {engagement.achievements.some((item) => item.earned_at) ? (
+                    {earnedAchievements.length ? (
                       <ul className="mt-3 divide-y divide-slate-700">
-                        {engagement.achievements.filter((item) => item.earned_at).map((item) => (
+                        {sectionItems('achievements', earnedAchievements).map((item) => (
                           <li key={item.code} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
                             <Award size={17} className="mt-0.5 shrink-0 text-amber-300" aria-hidden="true" />
                             <div>
@@ -274,12 +294,13 @@ export default function StudentDashboard() {
                     ) : (
                       <p className="mt-3 text-sm text-slate-400" role="status">Complete a learning activity to earn your first badge.</p>
                     )}
+                    {sectionToggle('achievements', earnedAchievements, 'achievements')}
                   </div>
                   <div>
                     <h3 className="text-xs font-bold uppercase tracking-wide text-slate-400">Certificates</h3>
                     {engagement.certificates.length ? (
                       <ul className="mt-3 divide-y divide-slate-700">
-                        {engagement.certificates.map((certificate) => (
+                        {sectionItems('certificates', engagement.certificates).map((certificate) => (
                           <li key={certificate.certificate_number} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                             <div>
                               <p className="text-sm font-semibold text-white">{certificate.course_title}</p>
@@ -303,6 +324,7 @@ export default function StudentDashboard() {
                     ) : (
                       <p className="mt-3 text-sm text-slate-400" role="status">Certificates appear here after course completion.</p>
                     )}
+                    {sectionToggle('certificates', engagement.certificates, 'certificates')}
                     {certificateError && <p className="mt-3 text-sm text-rose-300" role="alert">{certificateError}</p>}
                   </div>
                 </div>
@@ -313,7 +335,7 @@ export default function StudentDashboard() {
               <h2 className="text-base font-bold text-white">Upcoming deadlines</h2>
               {data.upcoming_deadlines.length ? (
                 <ul className="mt-4 divide-y divide-slate-700">
-                  {data.upcoming_deadlines.map((item) => (
+                  {sectionItems('deadlines', data.upcoming_deadlines).map((item) => (
                     <li key={item.activity_id} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                       <div>
                         <p className="text-sm font-semibold text-white">{item.title}</p>
@@ -332,13 +354,14 @@ export default function StudentDashboard() {
               ) : (
                 <p className="mt-2 text-sm text-slate-400" role="status">No upcoming deadlines.</p>
               )}
+              {sectionToggle('deadlines', data.upcoming_deadlines, 'deadlines')}
             </section>
 
             <section className="dg-card rounded-2xl p-5 sm:p-6">
               <h2 className="text-base font-bold text-white">Recent results</h2>
               {data.recent_grades.length ? (
                 <ul className="mt-4 divide-y divide-slate-700">
-                  {data.recent_grades.map((result, index) => (
+                  {sectionItems('recentGrades', data.recent_grades).map((result, index) => (
                     <li key={`${result.activity}-${index}`} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
                       <div>
                         <p className="text-sm font-semibold text-white">{result.activity}</p>
@@ -351,6 +374,7 @@ export default function StudentDashboard() {
               ) : (
                 <p className="mt-2 text-sm text-slate-400" role="status">No graded work yet.</p>
               )}
+              {sectionToggle('recentGrades', data.recent_grades, 'results')}
             </section>
           </>
         )}

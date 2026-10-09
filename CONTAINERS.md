@@ -11,12 +11,14 @@
 
 Containers hold code + dependencies only. Secrets are read from `backend/.env.docker` at start-up
 (git-ignored, excluded from the image by `.dockerignore`). Never bake passwords into an image.
+The frontend image uses a repository-root build context so it can include the shared `images/`
+logo assets; the root `.dockerignore` limits that context to the frontend and those assets.
 
 ## First run
 
 ```bash
 cp backend/.env.docker.example backend/.env.docker      # fill in real values
-export SANDBOX_TOKEN=$(openssl rand -hex 32)             # one secret, shared by backend + sandbox
+printf 'SANDBOX_TOKEN=%s\n' "$(openssl rand -hex 32)" > .env # git-ignored Compose settings
 docker compose up --build -d
 docker compose run --rm backend python manage.py migrate # NEW migrations are included — run this
 docker compose run --rm backend python manage.py createsuperuser   # if you need one
@@ -26,6 +28,49 @@ Open http://localhost:8080. For a quick **local trial over plain http** set `DJA
 `.env.docker` (production mode requires https `FRONTEND_URL`, real SMTP settings and SQL Server settings).
 For a real deployment put a TLS terminator (Caddy, Traefik, your cloud load balancer) in front of
 port 8080 and set `DJANGO_DEBUG=False`, `DJANGO_ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, `FRONTEND_URL`.
+
+### Windows PowerShell
+
+Docker Desktop's WSL 2 backend does not require a separate Ubuntu distribution. Start Docker Desktop
+and wait for its engine to be running, then check it from PowerShell:
+
+```powershell
+docker info
+docker run --rm hello-world
+```
+
+Create the local settings file and edit it with the actual Django, SQL Server, and (if used) email
+settings. Do not leave the example placeholder values in place:
+
+```powershell
+Copy-Item backend/.env.docker.example backend/.env.docker
+notepad backend/.env.docker
+```
+
+Save one sandbox token in the ignored root `.env` file. Compose loads it for both backend and
+sandbox on every command; do not generate a different token per PowerShell command or the services
+will no longer authenticate to each other.
+
+```powershell
+$tokenBytes = [byte[]]::new(32)
+$rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+$rng.GetBytes($tokenBytes)
+$token = [Convert]::ToBase64String($tokenBytes)
+$rng.Dispose()
+Set-Content -Path .env -Value "SANDBOX_TOKEN=$token" -NoNewline -Encoding ascii
+
+docker compose up --build -d
+docker compose run --rm backend python manage.py migrate
+docker compose run --rm backend python manage.py createsuperuser
+```
+
+Keep `.env` private; it contains the shared code-runner secret. To rotate the token, generate a new
+one and recreate both services with `docker compose up -d`.
+
+`MSSQL_DB_HOST=host.docker.internal` in the settings file reaches SQL Server on this Windows host.
+SQL Server must have TCP/IP enabled, accept SQL authentication, and allow connections from Docker.
+If `docker info` cannot connect, confirm Docker Desktop is running and its engine has finished
+starting before retrying.
 
 ## Reaching your SQL Server from a container
 
@@ -45,10 +90,8 @@ port 8080 and set `DJANGO_DEBUG=False`, `DJANGO_ALLOWED_HOSTS`, `CORS_ALLOWED_OR
   `--set-password` for one user).
 - A missing `SANDBOX_TOKEN` only disables code execution; login is unaffected.
 
-## What I could NOT verify (no Docker in my environment)
+## Deployment checks
 
-Image builds, the compose networking, and that the sandbox container really has no network / a read-only
-filesystem. Verify after the first `up` with the commands in `sandbox/README.md`.
-Verified without Docker: compose YAML parses, `npm ci` works from the lockfile, `pip` resolves every
-requirement (including `mssql-django`/`pyodbc`), `collectstatic` succeeds, and the runner passes its
-adversarial test-suite when run as an unprivileged user.
+After the first `up`, verify the built services and confirm the sandbox remains isolated and
+read-only with the checks in `sandbox/README.md`. Compose startup also requires a configured
+`backend/.env.docker` and a non-empty `SANDBOX_TOKEN`.

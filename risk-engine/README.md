@@ -71,8 +71,17 @@ Evaluated with 5-fold stratified cross-validation (more reliable than a
 single train/test split on ~900 students) plus a final held-out test set:
 **ROC-AUC ~0.90-0.92, precision ~0.87-0.91, recall ~0.66-0.78** depending
 on split. Full numbers are in `models/metadata.json` after training.
-Risk-level cutoffs (`low`/`medium`/`high`) are the calibrated probability
-distribution's terciles.
+Risk-level cutoffs (`low`/`medium`/`high`) are data-derived from the
+calibrated training probabilities: medium begins at the 60th percentile
+and high at the 85th percentile. Because the checked-in training labels
+are synthetic, these cutoffs are provisional and should be reviewed
+against real outcomes and the intervention policy before production use.
+
+At startup, the predictor checks that the ordered `feature_columns` in
+`models/metadata.json` match the runtime feature definitions and that
+every calibrated model estimator expects that feature count. A mismatch
+raises an explicit error; regenerate the model and metadata together with
+`python src/train.py` rather than deploying incompatible artifacts.
 
 **This ships trained on synthetic data.** It proves the pipeline works
 end-to-end (schema → features → model → explainable output). It is *not*

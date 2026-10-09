@@ -200,17 +200,39 @@ export default function LessonView() {
   )
 }
 
+const ACTIVITY_LABELS = {
+  exercise: 'Coding exercise',
+  lab: 'Lab',
+  quiz: 'Quiz',
+  assignment: 'Assignment',
+}
+
 function ActivityCard({ activity, onSubmitted }) {
+  const completionLabels = {
+    completed: { text: 'Completed', classes: 'bg-emerald-50 text-emerald-800' },
+    overdue: { text: 'Not completed · deadline passed', classes: 'bg-rose-50 text-rose-800' },
+    not_completed: { text: 'Not completed', classes: 'bg-slate-100 text-slate-700' },
+  }
+  const completion = completionLabels[activity.completion_status] || completionLabels.not_completed
+
   return (
     <div className="rounded-2xl border border-line bg-paper p-5">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <span className="rounded-full bg-panel px-2 py-0.5 text-xs font-medium capitalize text-text-muted">
-            {activity.activity_type}
+          <span className="rounded-full bg-panel px-2.5 py-1 text-xs font-semibold text-text-muted">
+            {ACTIVITY_LABELS[activity.activity_type] || 'Activity'}
           </span>
           <h4 className="mt-1.5 font-medium text-ink">{activity.title}</h4>
+          <p className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${completion.classes}`} role="status">
+            {completion.text}
+          </p>
+          {activity.deadline && (
+            <p className="mt-2 text-xs text-text-muted">
+              Deadline: {new Date(activity.deadline).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+            </p>
+          )}
         </div>
-        <span className="text-xs text-text-dim">
+        <span className="text-xs text-text-muted">
           {activity.max_attempts} attempt{activity.max_attempts === 1 ? '' : 's'} · {activity.max_score} pts
         </span>
       </div>
@@ -223,7 +245,7 @@ function ActivityCard({ activity, onSubmitted }) {
           </Suspense>
         )}
         {activity.activity_type === 'assignment' && (
-          <SubmissionForm activity={activity} onSubmitted={onSubmitted} />
+          <SubmissionForm key={activity.id} activity={activity} onSubmitted={onSubmitted} />
         )}
         {activity.activity_type === 'quiz' && activity.quiz_id && (
           <Link
@@ -238,13 +260,48 @@ function ActivityCard({ activity, onSubmitted }) {
   )
 }
 
+function restoreAssignmentDraft(key) {
+  try {
+    const saved = sessionStorage.getItem(key)
+    const draft = saved ? JSON.parse(saved) : {}
+    return {
+      content: typeof draft.content === 'string' ? draft.content : '',
+      githubUrl: typeof draft.githubUrl === 'string' ? draft.githubUrl : '',
+      status: saved ? 'Draft restored from this tab.' : 'Autosave ready.',
+    }
+  } catch {
+    return {
+      content: '',
+      githubUrl: '',
+      status: 'Could not restore the saved draft. Your new changes will still be autosaved.',
+    }
+  }
+}
+
 function SubmissionForm({ activity, onSubmitted }) {
-  const [content, setContent] = useState('')
-  const [githubUrl, setGithubUrl] = useState('')
+  const { auth } = useAuth()
+  const draftKey = `optimum-lms:assignment-draft:${encodeURIComponent(auth?.email?.toLowerCase() || 'guest')}:${activity.id}`
+  const [initialDraft] = useState(() => restoreAssignmentDraft(draftKey))
+  const [content, setContent] = useState(initialDraft.content)
+  const [githubUrl, setGithubUrl] = useState(initialDraft.githubUrl)
+  const [draftStatus, setDraftStatus] = useState(initialDraft.status)
   const [file, setFile] = useState(null)
   const [status, setStatus] = useState('')
   const [isError, setIsError] = useState(false)
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      try {
+        if (content || githubUrl) sessionStorage.setItem(draftKey, JSON.stringify({ content, githubUrl }))
+        else sessionStorage.removeItem(draftKey)
+        setDraftStatus(content || githubUrl ? 'Draft saved on this device.' : 'No unsent draft saved.')
+      } catch {
+        setDraftStatus('Could not save your draft on this device. Keep this lesson open and copy your work as a backup.')
+      }
+    }, 350)
+    return () => window.clearTimeout(timeoutId)
+  }, [content, draftKey, githubUrl])
 
   function pickFile(e) {
     const picked = e.target.files?.[0] || null
@@ -276,6 +333,11 @@ function SubmissionForm({ activity, onSubmitted }) {
       } else {
         await api.post('/submissions/', { activity: activity.id, content, github_url: githubUrl })
       }
+      try {
+        sessionStorage.removeItem(draftKey)
+      } catch {
+        setDraftStatus('Submitted successfully, but the saved draft could not be cleared from this tab.')
+      }
       setStatus('Submitted successfully.')
       setIsError(false)
       setContent('')
@@ -294,14 +356,15 @@ function SubmissionForm({ activity, onSubmitted }) {
     <form onSubmit={handleSubmit} className="space-y-2">
       <textarea
         value={content}
-        onChange={(e) => setContent(e.target.value)}
+        onChange={(e) => { setContent(e.target.value); setDraftStatus('Saving draft…') }}
         rows={4}
         placeholder="Write your answer or paste code…"
         className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink placeholder:text-text-dim"
       />
+      <p className="text-xs text-text-muted" role="status" aria-live="polite">{draftStatus}</p>
       <input
         value={githubUrl}
-        onChange={(e) => setGithubUrl(e.target.value)}
+        onChange={(e) => { setGithubUrl(e.target.value); setDraftStatus('Saving draft…') }}
         placeholder="GitHub repo URL — optional"
         className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink placeholder:text-text-dim"
       />

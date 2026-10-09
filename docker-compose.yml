@@ -5,7 +5,9 @@
 #   docker compose up --build
 services:
   frontend:
-    build: ./frontend
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
     ports: ["8080:80"]
     volumes:
       - media:/media:ro

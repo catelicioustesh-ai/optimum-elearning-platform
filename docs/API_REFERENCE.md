@@ -7,13 +7,27 @@ Every field name below is taken directly from the serializers in the
 codebase, not written from memory — if something changes in the code,
 update it here too.
 
+## Interactive API documentation
+
+When running Django with `DEBUG=True`, open `/api/docs/` for Swagger UI,
+`/api/redoc/` for ReDoc, or fetch the OpenAPI schema at `/api/schema/`.
+These documentation routes are disabled when `DEBUG=False`; the normal API
+routes and authentication behavior are unchanged.
+
+The schema is generated from DRF serializers and view metadata. Some
+`APIView` handlers do not yet declare request/response schemas and may be
+omitted from the generated OpenAPI document; run
+`python manage.py spectacular --validate` to identify those gaps. This
+hand-maintained reference remains the source for endpoint details not yet
+represented in the generated schema.
+
 ## Conventions used throughout this doc
 
 - 🔒 = requires `Authorization: Bearer <access_token>` header
 - Role column shows who can call it: **Any** (any logged-in user),
   **Student**, **Instructor**, **Admin**, or a combination
 - Request/response bodies are JSON unless noted
-- All list endpoints support standard DRF pagination unless noted
+- List endpoints currently return plain JSON arrays; pagination is not configured.
 
 ---
 
@@ -117,7 +131,13 @@ does **not** consume the link).
 Public. Exchange a refresh token for a new access token.
 
 Request: `{ "refresh": "<refresh_token>" }`
-Response: `{ "access": "<new_access_token>" }`
+With refresh rotation enabled, response: `{ "access": "<new_access_token>", "refresh": "<new_refresh_token>" }`.
+Persist both returned tokens; the submitted refresh token is blacklisted.
+
+### `POST /api/auth/logout/` 🔒 — Any
+Revokes the submitted refresh token. Send `{ "refresh": "<refresh_token>" }`
+with the access-token bearer header, then clear the local session. A successful
+logout returns an empty response.
 
 ### `GET /api/auth/me/` 🔒 — Any
 Returns the logged-in user.
@@ -232,6 +252,11 @@ respect the same course/module permissions.
 }]
 ```
 `activity_type` is one of: `exercise`, `lab`, `quiz`, `assignment`.
+Student lesson and activity responses include `completion_status` with
+`completed`, `not_completed`, or `overdue`. A passing activity completion
+takes precedence over its deadline; overdue activities remain incomplete
+until the progress service records completion. This field is not returned to
+instructors or admins.
 Code activities (`exercise` and `lab`) use the persisted `language` setting:
 `javascript`, `python`, or `html`; run-tests requests must match it.
 JavaScript/Python activities use the Monaco editor and isolated code runner.
@@ -432,6 +457,17 @@ subsequent correct attempt (within `max_attempts`) does.
 Same module-lock and attempt-limit checks as submissions, enforced the
 same way.
 
+### `GET /api/quiz-questions/?quiz={id}` 🔒 — Instructor/Admin
+Lists the quiz's questions, including `correct_choice_index` for authoring.
+Students cannot call this endpoint. Question CRUD is available to the owning
+instructor/admin; fields are `quiz`, `text`, `marks`, `choices`, and
+`correct_choice_index`.
+
+### `GET /api/quiz-attempts/?quiz={id}&student={id}` 🔒 — Any
+Read-only attempt history. Students are always scoped to their own attempts;
+instructors see only attempts in courses they teach; admins can see all.
+Optional `quiz` and `student` filters narrow that visibility.
+
 ---
 
 ## Code execution
@@ -543,6 +579,54 @@ days. See `backend/README.md` for the scaling caveat on this query.
   "active_enrollments": 340, "pending_submissions": 22
 }
 ```
+
+---
+
+## Adaptive sequencing and instructor risk
+
+### `GET /api/sequencing/me/` 🔒 — Any authenticated user
+Returns a `recommendations` array with one item per enrolled course that has
+an active, unlocked module. Each item includes `course_id`, `course_title`,
+`current_module`, `current_module_mastery` (0–100 or `null`), `pace`
+(`reinforce`, `steady`, or `accelerate`), `recommendation`, and
+`mastery_by_module`. Recommendation actions include `review`, `continue`,
+`practice_first`, and `advance`. These suggestions do not override the
+server-enforced module access rules.
+
+### `GET /api/risk/cohort/` 🔒 — Instructor/Admin
+Scores enrolled students in courses the instructor teaches; admins receive
+the whole platform cohort. Response:
+```json
+{
+  "scored": [{
+    "student_id": 4, "course_id": 1, "student_name": "Brian Kimani",
+    "course_title": "Database Course", "student_health_score": 80,
+    "risk_level": "low", "risk_probability": 0.1,
+    "top_factors": ["Recent average score is strong"],
+    "recommended_action": "On track — no action needed."
+  }],
+  "skipped_insufficient_history": []
+}
+```
+Students need at least three weekly performance snapshots to be scored.
+Those with insufficient history appear in `skipped_insufficient_history`.
+`503` means the optional model is unavailable. The model is trained on
+synthetic data at present: treat these scores as an instructor prompt, not
+as an authoritative academic decision.
+
+### `GET /api/risk/student/{student_id}/course/{course_id}/` 🔒 — Instructor/Admin
+Returns one student's risk card with `student_id`, `course_id`,
+`student_health_score`, `risk_level`, `risk_probability`, `top_factors`,
+and `recommended_action`. Instructors may request only students enrolled in
+their own courses. A `204` response means there is not enough history yet;
+render it as "not scored" and do not attempt to parse a response body.
+
+### `GET /api/allocation/recommendations/` 🔒 — Admin only
+Returns `{ "average_instructor_load", "instructor_loads", "course_metrics", "recommendations" }`.
+Recommendations are transparent workload heuristics, with `type` values
+such as `single_course_overload`, `backlog`, and `rebalance`; each includes
+priority, a human-readable reason, and supporting metrics. This endpoint is
+read-only and does not reassign courses or instructors.
 
 ---
 

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Editor, { loader } from '@monaco-editor/react'
 import * as monaco from 'monaco-editor/editor/editor.api.js'
 import EditorWorker from 'monaco-editor/editor/editor.worker?worker'
@@ -11,6 +11,7 @@ import 'monaco-editor/languages/definitions/python/register.js'
 import 'monaco-editor/languages/definitions/html/register.js'
 import { CircleCheckBig, Eye, Play, RotateCcw, Send } from 'lucide-react'
 import { api } from '../lib/api.js'
+import { useAuth } from '../context/useAuth.js'
 
 globalThis.MonacoEnvironment = {
   getWorker(_workerId, label) {
@@ -44,11 +45,31 @@ const LANGUAGE_LABELS = {
 
 const MAX_RUN_CODE_LENGTH = 20_000
 const MAX_SUBMISSION_CODE_LENGTH = 50_000
+const RUNNER_UNAVAILABLE_MESSAGE = 'Your code could not run because the isolated runner is unavailable. You can still submit your code for grading; Run and Run tests will work once the runner is started and configured.'
 const HTML_PREVIEW_POLICY = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'none\'; style-src \'unsafe-inline\'; img-src data:; font-src data:; media-src data:; connect-src \'none\'; frame-src \'none\'; object-src \'none\'; base-uri \'none\'; form-action \'none\'; navigate-to \'none\'">'
+
+function restoreCodeDraft(key, starterCode) {
+  try {
+    const savedCode = sessionStorage.getItem(key)
+    return {
+      code: savedCode ?? starterCode,
+      status: savedCode === null ? 'Autosave ready.' : 'Draft restored from this tab.',
+    }
+  } catch {
+    return {
+      code: starterCode,
+      status: 'Autosave is unavailable in this browser tab. Keep this lesson open to avoid losing your code.',
+    }
+  }
+}
 
 export default function CodeActivityEditor({ activity, onSubmitted }) {
   const language = activity.language
-  const [code, setCode] = useState(activity.starter_code || '')
+  const { auth } = useAuth()
+  const draftKey = `optimum-lms:activity-draft:${encodeURIComponent(auth?.email?.toLowerCase() || 'guest')}:${activity.id}`
+  const [initialDraft] = useState(() => restoreCodeDraft(draftKey, activity.starter_code || ''))
+  const [code, setCode] = useState(initialDraft.code)
+  const [draftStatus, setDraftStatus] = useState(initialDraft.status)
   const [output, setOutput] = useState(null)
   const [previewHtml, setPreviewHtml] = useState(null)
   const [testResults, setTestResults] = useState(null)
@@ -59,8 +80,22 @@ export default function CodeActivityEditor({ activity, onSubmitted }) {
   const runCodeIsTooLong = code.length > MAX_RUN_CODE_LENGTH
   const submissionIsTooLong = code.length > MAX_SUBMISSION_CODE_LENGTH
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      try {
+        if (code) sessionStorage.setItem(draftKey, code)
+        else sessionStorage.removeItem(draftKey)
+        setDraftStatus('Draft saved on this device.')
+      } catch {
+        setDraftStatus('Could not save your draft on this device. Keep this lesson open and copy your code as a backup.')
+      }
+    }, 350)
+    return () => window.clearTimeout(timeoutId)
+  }, [code, draftKey])
+
   function handleCodeChange(value) {
     setCode(value ?? '')
+    setDraftStatus('Saving draft…')
     setOutput(null)
     setTestResults(null)
     setPreviewHtml(null)
@@ -71,12 +106,14 @@ export default function CodeActivityEditor({ activity, onSubmitted }) {
   async function handleRun() {
     setBusy(true)
     setOutput(null)
+    setTestResults(null)
+    setPreviewHtml(null)
     setStatus('')
     setIsError(false)
     try {
       setOutput(await api.post('/execute/run/', { language, code }))
     } catch (err) {
-      setOutput({ error: err.message })
+      setOutput({ error: err.code === 'CODE_RUNNER_UNAVAILABLE' ? RUNNER_UNAVAILABLE_MESSAGE : err.message })
     } finally {
       setBusy(false)
     }
@@ -90,7 +127,9 @@ export default function CodeActivityEditor({ activity, onSubmitted }) {
   }
 
   function handleReset() {
+    if (code !== (activity.starter_code || '') && !window.confirm('Discard your current code and restore the instructor-provided starter code?')) return
     setCode(activity.starter_code || '')
+    setDraftStatus('Saving draft…')
     setOutput(null)
     setPreviewHtml(null)
     setTestResults(null)
@@ -100,12 +139,14 @@ export default function CodeActivityEditor({ activity, onSubmitted }) {
 
   async function handleRunTests() {
     setBusy(true)
+    setOutput(null)
     setTestResults(null)
+    setPreviewHtml(null)
     setStatus('')
     try {
       setTestResults(await api.post('/execute/test/', { language, code, activity_id: activity.id }))
     } catch (err) {
-      setTestResults({ error: err.message })
+      setTestResults({ error: err.code === 'CODE_RUNNER_UNAVAILABLE' ? RUNNER_UNAVAILABLE_MESSAGE : err.message })
     } finally {
       setBusy(false)
     }
@@ -113,6 +154,9 @@ export default function CodeActivityEditor({ activity, onSubmitted }) {
 
   async function handleSubmit() {
     setBusy(true)
+    setOutput(null)
+    setTestResults(null)
+    setPreviewHtml(null)
     setStatus('')
     try {
       await api.post('/submissions/', { activity: activity.id, content: code })
@@ -136,7 +180,7 @@ export default function CodeActivityEditor({ activity, onSubmitted }) {
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-[#30363d] bg-[#1e1e1e] text-white shadow-sm">
+    <div className="code-activity-editor overflow-hidden rounded-xl border border-[#30363d] bg-[#1e1e1e] text-white shadow-sm">
       <div className="flex items-center justify-between border-b border-[#30363d] bg-[#252526] px-4 py-2.5">
         <div className="flex items-center gap-2 text-xs text-[#cccccc]">
           <span className="h-2 w-2 rounded-full bg-[#4ec9b0]" />
@@ -148,6 +192,7 @@ export default function CodeActivityEditor({ activity, onSubmitted }) {
 
       <Editor
         height="380px"
+        onMount={(editor) => editor.layout()}
         path={`activities/${activity.id}.${language === 'python' ? 'py' : language === 'html' ? 'html' : 'js'}`}
         language={language}
         value={code}
@@ -159,9 +204,11 @@ export default function CodeActivityEditor({ activity, onSubmitted }) {
           readOnly: busy,
           minimap: { enabled: false },
           scrollBeyondLastLine: false,
+          alwaysConsumeMouseWheel: false,
           fontSize: 14,
           lineNumbers: 'on',
           renderLineHighlight: 'line',
+          wordWrap: 'on',
           tabSize: language === 'python' ? 4 : 2,
           insertSpaces: true,
           autoIndent: 'full',
@@ -199,8 +246,11 @@ export default function CodeActivityEditor({ activity, onSubmitted }) {
           <Send size={14} /> {busy ? 'Submitting…' : 'Submit'}
         </button>
       </div>
+      <p className="editor-muted border-t border-[#30363d] px-4 py-2 text-xs" role="status" aria-live="polite">
+        {draftStatus}
+      </p>
       {(codeIsBlank || runCodeIsTooLong || submissionIsTooLong) && (
-        <ul className="space-y-1 border-t border-[#30363d] px-4 py-2 text-xs text-[#f48771]" role="status">
+        <ul className="editor-error space-y-1 border-t border-[#30363d] px-4 py-2 text-xs" role="status">
           {codeIsBlank && <li>Enter code before running, testing, or submitting.</li>}
           {runCodeIsTooLong && <li>Code is over the {MAX_RUN_CODE_LENGTH.toLocaleString()}-character run limit.</li>}
           {submissionIsTooLong && <li>Code is over the {MAX_SUBMISSION_CODE_LENGTH.toLocaleString()}-character limit.</li>}
@@ -224,15 +274,15 @@ export default function CodeActivityEditor({ activity, onSubmitted }) {
         <div className="space-y-3 border-t border-[#30363d] bg-[#1e1e1e] p-4 text-sm">
           {output && (
             <div aria-live="polite">
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#858585]">Terminal</p>
+              <p className="editor-muted mb-1 text-xs font-semibold uppercase tracking-wide">Terminal</p>
               {output.error ? (
                 <pre className="whitespace-pre-wrap font-mono text-xs text-[#f48771]">{output.error}</pre>
               ) : (
                 <div className="font-mono text-xs">
-                  {output.timed_out && <p className="mb-1 text-[#f48771]">Stopped: your code ran too long (time limit).</p>}
+                  {output.timed_out && <p className="editor-error mb-1">Stopped: your code ran too long (time limit).</p>}
                   {output.stdout && <pre className="whitespace-pre-wrap text-[#d4d4d4]">{output.stdout}</pre>}
                   {output.stderr && <pre className="whitespace-pre-wrap text-[#f48771]">{output.stderr}</pre>}
-                  {!output.stdout && !output.stderr && !output.timed_out && <span className="text-[#858585]">(no output)</span>}
+                  {!output.stdout && !output.stderr && !output.timed_out && <span className="editor-muted">(no output)</span>}
                 </div>
               )}
             </div>
@@ -240,18 +290,18 @@ export default function CodeActivityEditor({ activity, onSubmitted }) {
 
           {testResults && (
             <div aria-live="polite">
-              <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#858585]">Tests</p>
+              <p className="editor-muted mb-1 text-xs font-semibold uppercase tracking-wide">Tests</p>
               {testResults.error ? (
-                <span className="text-[#f48771]">{testResults.error}</span>
+                <span className="editor-error">{testResults.error}</span>
               ) : (
                 <>
-                  <p className="font-semibold text-[#d4d4d4]">{testResults.passed} of {testResults.total} tests passed</p>
+                  <p className="font-semibold">{testResults.passed} of {testResults.total} tests passed</p>
                   <ul className="mt-2 space-y-1.5">
                     {testResults.results.map((result) => (
-                      <li key={result.index} className={result.passed ? 'text-[#89d185]' : 'text-[#f48771]'}>
+                      <li key={result.index} className={result.passed ? 'editor-success' : 'editor-error'}>
                         Test {result.index}: {result.passed ? 'passed' : result.timed_out ? 'timed out' : 'failed'}
                         {result.expected_output !== undefined && !result.passed && (
-                          <span className="block font-mono text-xs text-[#aaa]">expected “{result.expected_output}” · got “{result.actual_output}”</span>
+                          <span className="editor-subtle block font-mono text-xs">expected “{result.expected_output}” · got “{result.actual_output}”</span>
                         )}
                         {result.error && <span className="block whitespace-pre-wrap font-mono text-xs">{result.error}</span>}
                       </li>
@@ -262,7 +312,7 @@ export default function CodeActivityEditor({ activity, onSubmitted }) {
             </div>
           )}
 
-          {status && <p role={isError ? 'alert' : 'status'} className={isError ? 'text-[#f48771]' : 'text-[#89d185]'}>{status}</p>}
+          {status && <p role={isError ? 'alert' : 'status'} className={isError ? 'editor-error' : 'editor-success'}>{status}</p>}
         </div>
       )}
     </div>

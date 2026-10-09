@@ -1,4 +1,5 @@
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Course, Module, Lesson, Activity, LessonAttachment, validate_video_file
@@ -54,9 +55,29 @@ class ActivitySerializer(_ActivityBase):
 
 class ActivityStudentSerializer(_ActivityBase):
     """Student view: `test_cases` (expected outputs) are never sent."""
+    completion_status = serializers.SerializerMethodField()
+
+    def get_completion_status(self, obj):
+        completions = getattr(obj, "_student_completions", None)
+        if completions is None:
+            request = self.context.get("request")
+            is_completed = bool(
+                request
+                and request.user.is_authenticated
+                and obj.completions.filter(student=request.user).exists()
+            )
+        else:
+            is_completed = bool(completions)
+
+        if is_completed:
+            return "completed"
+        if obj.deadline and obj.deadline <= timezone.now():
+            return "overdue"
+        return "not_completed"
+
     class Meta:
         model = Activity
-        fields = ACTIVITY_PUBLIC_FIELDS
+        fields = ACTIVITY_PUBLIC_FIELDS + ["completion_status"]
         read_only_fields = fields
 
 

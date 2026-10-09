@@ -300,6 +300,15 @@ SPECTACULAR_SETTINGS = {
     },
 }
 
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Optimum ERP LMS API",
+    "DESCRIPTION": "API reference for the Optimum ERP LMS backend.",
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+}
+
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip("/")
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "Optimum LMS <no-reply@localhost>")
 
 # --------------------------------------------------------------------------
 # Frontend

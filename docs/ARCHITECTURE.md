@@ -172,6 +172,23 @@ frontend/src/
 └── Landing.jsx              public marketing page
 ```
 
+## Frontend interaction patterns
+
+- The shared dashboard shell keeps role navigation consistent on desktop and
+  provides a fixed, thumb-friendly bottom navigation on small screens. Its
+  skip link and visible keyboard focus preserve keyboard access.
+- Long course, module, submission, roster, grade, achievement, certificate,
+  deadline, and notification lists start with a short visible set and provide
+  an explicit "View all" control when there are more items.
+- Student activity status is derived from the server's activity-completion
+  record and deadline, not inferred only from browser time. Overdue activities
+  remain incomplete until the existing completion service records a pass;
+  module unlocking continues to use that same service.
+- Code and quiz drafts autosave in the current browser tab, namespaced by
+  account and activity/quiz. The interface reports whether a draft is saving,
+  saved, restored, or could not be saved. This is a client-side recovery aid,
+  not a server-side backup.
+
 **Why `ProtectedRoute` is explicitly documented as not-the-real-boundary:**
 it's tempting to think hiding a route client-side is "enough" security.
 It isn't — anyone can call the API directly with curl, bypassing the

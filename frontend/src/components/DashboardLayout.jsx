@@ -35,6 +35,7 @@ export default function DashboardLayout({
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
+  const [showAllNotifications, setShowAllNotifications] = useState(false)
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [notificationsLoading, setNotificationsLoading] = useState(false)
@@ -96,6 +97,7 @@ export default function DashboardLayout({
     .toUpperCase()
 
   const goalPercent = Math.min(100, Math.max(0, Number(weeklyGoal) || 0))
+  const visibleNotifications = showAllNotifications ? notifications : notifications.slice(0, 5)
 
   async function openNotification(notification) {
     if (notification.unread) {
@@ -128,6 +130,7 @@ export default function DashboardLayout({
       <ScrollProgress />
       <GlobalFx />
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <a className="dashboard-skip-link" href="#dashboard-main">Skip to main content</a>
 
       {/* Left Sidebar */}
       <aside className="dashboard-sidebar relative z-10 hidden w-62.5 shrink-0 border-r border-slate-200 bg-white text-slate-700 md:flex md:flex-col shadow-[10px_0_30px_-18px_rgba(15,23,42,0.14)]">
@@ -138,7 +141,7 @@ export default function DashboardLayout({
           )}
         </div>
 
-        <nav className="flex-1 space-y-1.5 px-3 py-5">
+        <nav aria-label="Primary navigation" className="flex-1 space-y-1.5 px-3 py-5">
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -185,13 +188,14 @@ export default function DashboardLayout({
       </aside>
 
       {/* Main Area */}
-      <div className="dashboard-content relative z-0 flex flex-1 flex-col bg-slate-100">
+      <div className="dashboard-content relative z-0 flex min-w-0 flex-1 flex-col bg-slate-100">
         <header className="dashboard-header relative z-50 flex items-center justify-between border-b border-slate-200 bg-white/90 px-5 py-3 backdrop-blur-md">
           {/* Left: Quick Search */}
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setPaletteOpen(true)}
+              aria-label="Search courses and labs"
               className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
             >
               <Search size={14} />
@@ -258,7 +262,7 @@ export default function DashboardLayout({
                     {!notificationsLoading && !notificationsError && notifications.length === 0 && (
                       <p className="px-4 py-6 text-center text-sm text-slate-500">You’re all caught up.</p>
                     )}
-                    {!notificationsLoading && !notificationsError && notifications.map((notification) => (
+                    {!notificationsLoading && !notificationsError && visibleNotifications.map((notification) => (
                       <button
                         type="button"
                         key={notification.id}
@@ -273,6 +277,15 @@ export default function DashboardLayout({
                         <span className="mt-0.5 block text-xs text-slate-600">{notification.message}</span>
                       </button>
                     ))}
+                    {!notificationsLoading && !notificationsError && notifications.length > 5 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllNotifications((value) => !value)}
+                        className="w-full rounded-lg px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+                      >
+                        {showAllNotifications ? 'Show fewer' : `View all ${notifications.length} notifications`}
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -312,8 +325,22 @@ export default function DashboardLayout({
           </div>
         </header>
 
-        <main key={pathname} className="dashboard-main dg-page relative z-0 flex-1 bg-slate-50 p-4 md:p-6">{children}</main>
+        <main id="dashboard-main" tabIndex="-1" key={pathname} className="dashboard-main dg-page relative z-0 min-w-0 flex-1 bg-slate-50 p-4 pb-24 md:p-6">{children}</main>
       </div>
+
+      <nav className="dashboard-mobile-nav md:hidden" aria-label="Primary navigation">
+        {navItems.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            className={({ isActive }) => `dashboard-mobile-nav-link${isActive ? ' is-active' : ''}`}
+          >
+            <item.icon size={19} aria-hidden="true" />
+            <span>{item.label}</span>
+          </NavLink>
+        ))}
+      </nav>
     </div>
   )
 }

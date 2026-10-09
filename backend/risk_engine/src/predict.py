@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+from typing import TypedDict
 
 import joblib
 import numpy as np
@@ -57,6 +58,30 @@ FEATURE_EXPLANATIONS = {
 }
 
 
+class CohortRiskScores(TypedDict):
+    scored: list[dict]
+    skipped_insufficient_history: list[str]
+
+
+def _validate_feature_contract(model, metadata: dict) -> None:
+    metadata_columns = metadata.get("feature_columns")
+    if metadata_columns != FEATURE_COLUMNS:
+        raise ValueError(
+            "Risk model feature order does not match the runtime feature definitions. "
+            "Retrain the model and regenerate metadata.json."
+        )
+
+    model_feature_counts = {
+        classifier.estimator.n_features_in_
+        for classifier in model.calibrated_classifiers_
+    }
+    if model_feature_counts != {len(FEATURE_COLUMNS)}:
+        raise ValueError(
+            "Risk model feature count does not match the runtime feature definitions. "
+            "Retrain the model and regenerate metadata.json."
+        )
+
+
 def _recommend_action(risk_level: str, feat: dict) -> str:
     if risk_level == "high":
         if feat["inactivity_streak_days"] >= 5 or feat["avg_login_frequency"] < 1:
@@ -74,6 +99,7 @@ class RiskEngine:
         self.model = joblib.load(model_dir / "risk_model.joblib")
         with open(model_dir / "metadata.json") as f:
             self.metadata = json.load(f)
+        _validate_feature_contract(self.model, self.metadata)
         self.thresholds = self.metadata["thresholds"]
         self.class_avg = self.metadata["class_avg_composite_by_course"]
         # self.model is a CalibratedClassifierCV — its predict_proba is what
@@ -129,16 +155,16 @@ class RiskEngine:
             "recommended_action": _recommend_action(risk_level, feat),
         }
 
-    def score_many(self, snapshots_by_student: dict[str, list[dict]]) -> list[dict]:
+    def score_many(self, snapshots_by_student: dict[str, list[dict]]) -> CohortRiskScores:
         """Convenience batch wrapper — e.g. for a nightly job that scores
         an entire cohort at once. Students without enough history are
-        skipped (not silently scored) and returned separately."""
+        skipped; errors while scoring valid histories are allowed to surface."""
         results, skipped = [], []
         for student_id, snaps in snapshots_by_student.items():
-            try:
-                results.append(self.score_student(snaps))
-            except ValueError:
+            if len(snaps) < MIN_HISTORY_WEEKS:
                 skipped.append(student_id)
+                continue
+            results.append(self.score_student(snaps))
         results.sort(key=lambda r: r["risk_probability"], reverse=True)
         return {"scored": results, "skipped_insufficient_history": skipped}
 

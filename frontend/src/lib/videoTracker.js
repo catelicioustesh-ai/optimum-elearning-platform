@@ -11,9 +11,12 @@ const HEARTBEAT_MS = 10_000
  */
 export function createTracker({ lessonId, getState, onResult, onError }) {
   let timer = null
+  let flushTimer = null
   let lastSent = 0
 
   async function send() {
+    clearTimeout(flushTimer)
+    flushTimer = null
     const s = getState()
     if (!s || !Number.isFinite(s.position) || !Number.isFinite(s.duration) || s.duration <= 0) return
     lastSent = Date.now()
@@ -25,7 +28,14 @@ export function createTracker({ lessonId, getState, onResult, onError }) {
     }
   }
 
-  const flushSoon = () => { if (Date.now() - lastSent > 800) send() }
+  const flushSoon = () => {
+    const delay = 800 - (Date.now() - lastSent)
+    if (delay <= 0) send()
+    else {
+      clearTimeout(flushTimer)
+      flushTimer = setTimeout(send, delay)
+    }
+  }
   const onHide = () => { if (document.visibilityState === 'hidden') send() }
 
   return {
@@ -42,6 +52,7 @@ export function createTracker({ lessonId, getState, onResult, onError }) {
     },
     stop() {
       clearInterval(timer); timer = null
+      clearTimeout(flushTimer); flushTimer = null
       document.removeEventListener('visibilitychange', onHide)
       window.removeEventListener('pagehide', send)
       send()

@@ -15,18 +15,68 @@ const navItems = [
 export default function QuizTake() {
   const { quizId } = useParams()
   const { auth } = useAuth()
+  const draftKey = `optimum-lms:quiz-draft:${encodeURIComponent(auth?.email?.toLowerCase() || 'guest')}:${quizId}`
   const [quiz, setQuiz] = useState(null)
   const [answers, setAnswers] = useState({})
+  const [draftLoadedKey, setDraftLoadedKey] = useState('')
+  const [draftStatus, setDraftStatus] = useState('Loading quiz…')
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    api.get(`/quizzes/${quizId}/`).then(setQuiz).catch((err) => setError(err.message))
-  }, [quizId])
+    let cancelled = false
+    api.get(`/quizzes/${quizId}/`)
+      .then((loadedQuiz) => {
+        if (cancelled) return
+        setQuiz(loadedQuiz)
+        try {
+          const saved = sessionStorage.getItem(draftKey)
+          if (saved) {
+            const parsed = JSON.parse(saved)
+            const validAnswers = Object.fromEntries(
+              Object.entries(parsed).filter(([questionId, choiceIndex]) => {
+                const question = loadedQuiz.questions.find((item) => String(item.id) === questionId)
+                return question && Number.isInteger(choiceIndex) && choiceIndex >= 0 && choiceIndex < question.choices.length
+              }),
+            )
+            setAnswers(validAnswers)
+            setDraftStatus(Object.keys(validAnswers).length ? 'Saved answers restored from this tab.' : 'Your answers will autosave in this tab.')
+          } else {
+            setAnswers({})
+            setDraftStatus('Your answers will autosave in this tab.')
+          }
+        } catch {
+          setAnswers({})
+          setDraftStatus('Could not restore saved answers. Your new answers will autosave in this tab.')
+        }
+        setDraftLoadedKey(draftKey)
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err.message)
+          setDraftStatus('Quiz answers could not be loaded.')
+        }
+      })
+    return () => { cancelled = true }
+  }, [quizId, draftKey])
+
+  useEffect(() => {
+    if (draftLoadedKey !== draftKey || result || !Object.keys(answers).length) return undefined
+    const timeoutId = window.setTimeout(() => {
+      try {
+        sessionStorage.setItem(draftKey, JSON.stringify(answers))
+        setDraftStatus('Answers saved on this device.')
+      } catch {
+        setDraftStatus('Could not save answers on this device. Keep this tab open and submit before leaving.')
+      }
+    }, 350)
+    return () => window.clearTimeout(timeoutId)
+  }, [answers, draftKey, draftLoadedKey, result])
 
   function selectAnswer(questionId, choiceIndex) {
-    setAnswers({ ...answers, [questionId]: choiceIndex })
+    setAnswers((current) => ({ ...current, [questionId]: choiceIndex }))
+    setDraftStatus('Saving answers…')
   }
 
   async function handleSubmit(e) {
@@ -36,6 +86,11 @@ export default function QuizTake() {
     try {
       const attempt = await api.post(`/quizzes/${quizId}/submit/`, { answers })
       setResult(attempt)
+      try {
+        sessionStorage.removeItem(draftKey)
+      } catch {
+        setDraftStatus('Quiz submitted, but saved answers could not be cleared from this tab.')
+      }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -44,6 +99,7 @@ export default function QuizTake() {
   }
 
   const allAnswered = quiz && quiz.questions.every((q) => answers[q.id] !== undefined)
+  const answeredCount = Object.keys(answers).length
 
   return (
     <DashboardLayout navItems={navItems} user={{ name: auth?.email || 'Student' }}>
@@ -64,6 +120,9 @@ export default function QuizTake() {
                 </div>
                 <span className="dg-pill">{quiz.time_limit_minutes} min · Pass {quiz.pass_mark_percentage}%</span>
               </div>
+              <p className="mt-4 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-900" role="status" aria-live="polite">
+                {answeredCount} of {quiz.questions.length} answered · {draftStatus}
+              </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
