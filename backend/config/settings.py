@@ -99,6 +99,7 @@ INSTALLED_APPS = [
     "apps.execution",
     "apps.dashboards",
     "apps.engagement",
+    "apps.community",
     "apps.risk",
     "apps.sequencing",
     "apps.allocation",

@@ -121,7 +121,7 @@ function SubmissionRow({ submission, onGraded }) {
           <p className="font-medium text-ink">{submission.activity_title}</p>
           <p className="text-sm text-text-muted">{submission.student_name || `Student #${submission.student}`}</p>
           {(submission.activity_type === 'exercise' || submission.activity_type === 'lab') && (
-            <p className="text-xs text-text-dim">Submitted code · {{ python: 'Python', javascript: 'JavaScript', html: 'HTML' }[submission.activity_language] || submission.activity_language}</p>
+            <p className="text-xs text-text-dim">Submitted code · {{ python: 'Python', javascript: 'JavaScript', html: 'HTML', c: 'C', cpp: 'C++', java: 'Java' }[submission.activity_language] || submission.activity_language}</p>
           )}
           <p className="mt-1 text-xs text-text-dim">
             Attempt {submission.attempt_number} · {new Date(submission.submitted_at).toLocaleString()}

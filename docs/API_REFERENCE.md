@@ -137,13 +137,27 @@ Revokes the submitted refresh token. Send `{ "refresh": "<refresh_token>" }`
 with the access-token bearer header, then clear the local session. A successful
 logout returns an empty response.
 
-### `GET /api/auth/me/` 🔒 — Any
-Returns the logged-in user.
+### `GET /api/auth/me/` and `PATCH /api/auth/me/` 🔒 — Any
+Returns the logged-in user. A partial update may change `bio`,
+`leaderboard_opt_in`, and (using multipart form data) `profile_photo`.
+The registered name, email, username, and role are read-only.
 
 Response:
 ```json
-{ "id": 4, "username": "bkimani", "email": "...", "first_name": "Brian", "last_name": "Kimani", "role": "student" }
+{
+  "id": 4, "username": "bkimani", "email": "...",
+  "first_name": "Brian", "last_name": "Kimani", "role": "student",
+  "bio": "", "profile_photo": "/auth/me/profile-photo/?v=...",
+  "leaderboard_opt_in": false
+}
 ```
+
+Profile photos are limited to 5 MB and private to the authenticated account.
+Fetch the returned `profile_photo` API path with the bearer token; profile image
+files are not served from public media URLs.
+
+### `GET /api/auth/me/profile-photo/` 🔒 — Owner
+Returns the signed-in user's profile image with private, no-store caching.
 
 ---
 
@@ -241,7 +255,7 @@ Lesson resource attachments currently support validated PDF uploads, up to
 50 MB, through `/api/lesson-attachments/`; downloads are authenticated and
 respect the same course/module permissions.
 
-### `GET /api/activities/?lesson={id}` 🔒 — Any (filtered for students, see below)
+### `GET /api/activities/?lesson={id}&activity_type={type}` 🔒 — Any (filtered for students, see below)
 ```json
 [{
   "id": 20, "lesson": 12, "activity_type": "exercise", "title": "Sum two numbers",
@@ -250,15 +264,17 @@ respect the same course/module permissions.
 }]
 ```
 `activity_type` is one of: `exercise`, `lab`, `quiz`, `assignment`.
+The optional `activity_type` query parameter filters the response; an
+unsupported value returns `400`.
 Student lesson and activity responses include `completion_status` with
 `completed`, `not_completed`, or `overdue`. A passing activity completion
 takes precedence over its deadline; overdue activities remain incomplete
 until the progress service records completion. This field is not returned to
 instructors or admins.
 Code activities (`exercise` and `lab`) use the persisted `language` setting:
-`javascript`, `python`, or `html`; run-tests requests must match it.
-JavaScript/Python activities use the Monaco editor and isolated code runner.
-HTML activities use Monaco with a restricted in-page preview and do not support
+`javascript`, `python`, `c`, `cpp`, `java`, or `html`; run-tests requests must match it.
+JavaScript, Python, C, C++, and Java activities use the CodeMirror editor and isolated code runner.
+HTML activities use CodeMirror with a restricted in-page preview and do not support
 automated runner tests. Activities also support score,
 pass threshold, attempt count, required-for-module completion, instructions,
 and optional deadline fields. Submitted code and assignment work use
@@ -352,6 +368,49 @@ student's certificate history. Each achievement includes its database-managed
 from the student's completed activities, completed enrolled courses, or current
 study streak, depending on the achievement metric. The catalog definitions can
 be managed in Django Admin under **Engagement → Achievements**.
+The response also includes `xp`, `next_reward_at`, `xp_to_next_reward`,
+`reward_progress_percent`, and `activity_days` (ISO dates from the last year).
+XP is calculated from persisted progress: 10 points per completed activity and
+100 per course with an issued certificate. Reward milestones currently occur
+every 250 XP.
+
+### `GET /api/engagement/leaderboard/?scope={personal|team|organization}` 🔒 — Student
+Returns the signed-in student's XP and an available leaderboard scope.
+Team and organization assignments are managed by admins under
+**Engagement → Team memberships**. Shared team/organization rows include only
+students who opted in through profile settings; opt-in defaults to false.
+
+## Community and student tools
+
+### `GET /api/community/bookmarks/` 🔒 — Student
+Lists the caller's bookmarks for unlocked lessons in their enrolled courses.
+
+### `POST /api/community/bookmarks/` 🔒 — Student
+```json
+{ "lesson": 12 }
+```
+Creates a bookmark for an accessible lesson. Repeating the request is
+idempotent and returns the existing bookmark.
+
+### `DELETE /api/community/bookmarks/{id}/` 🔒 — Owner
+Removes the caller's bookmark; another student's bookmark IDs return `404`.
+
+### `GET /api/community/discussions/?course={id}` 🔒 — Enrolled Student / Course Instructor / Admin
+Lists course threads and their replies, scoped to the caller's accessible
+courses.
+
+### `POST /api/community/discussions/` 🔒 — Enrolled Student / Course Instructor / Admin
+```json
+{ "course": 1, "title": "Question about module one", "body": "..." }
+```
+A student must be enrolled in the course. Instructors may post only in courses
+they teach.
+
+### `POST /api/community/discussions/{id}/replies/` 🔒 — Thread participant
+```json
+{ "body": "..." }
+```
+Creates a reply on a thread visible to the authenticated user.
 
 ### `GET /api/engagement/notifications/` 🔒 — Any
 Returns the caller's 30 most recent notifications and their total `unread_count`.
@@ -507,7 +566,7 @@ A defensive client for an **isolated runner** (`SANDBOX_URL`, reference implemen
 (`X-Sandbox-Token` ← `SANDBOX_TOKEN`) and the runner's port is never published. If the runner is
 unreachable the endpoints return a generic `503` (internal details are logged, not returned).
 
-Limits enforced here: languages `python` / `javascript` only; code ≤ 20,000 chars; stdin ≤ 10,000;
+Limits enforced here: languages `python`, `javascript`, `c`, `cpp`, and `java`; code ≤ 20,000 chars; stdin ≤ 10,000;
 output truncated to 10,000 chars; **30 runs/minute per user**; only `{language, code, stdin}` are
 forwarded (a client cannot pass timeouts, memory limits or flags). The runner itself enforces CPU,
 wall-clock, memory, process and output limits — see `sandbox/README.md` for what is and isn't verified.

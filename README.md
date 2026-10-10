@@ -142,6 +142,7 @@ The backend uses Microsoft SQL Server in every environment. Install ODBC Driver 
   code, not written from memory)
 - **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** — system diagrams,
   why the backend is split the way it is, data model, deployment topology
-- `backend/README.md` — what's implemented vs. stubbed, the permission
+- `backend/README.md` — implemented backend features and operational
+  follow-up, plus the permission
   pattern used across every app
 - `DATABASE_SETUP.md` — SQL Server configuration and safe data migration

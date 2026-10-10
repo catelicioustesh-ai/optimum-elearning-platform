@@ -1080,6 +1080,9 @@ export default function InstructorContent() {
                     <select value={activityDraft.language} onChange={(event) => setActivityDraft({ ...activityDraft, language: event.target.value })} className="rounded border border-line bg-paper px-2 py-2 text-sm text-ink">
                       <option value="javascript">JavaScript</option>
                       <option value="python">Python</option>
+                      <option value="c">C</option>
+                      <option value="cpp">C++</option>
+                      <option value="java">Java</option>
                       <option value="html">HTML</option>
                     </select>
                   </label>

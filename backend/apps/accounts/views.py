@@ -3,9 +3,12 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import update_last_login
 from django.contrib.auth.forms import SetPasswordForm
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.http import FileResponse
+from mimetypes import guess_type
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from rest_framework import generics, permissions, status, serializers
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,6 +16,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.views import TokenBlacklistView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.settings import api_settings
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 
 from .models import User
@@ -95,10 +99,45 @@ class LogoutView(TokenBlacklistView):
 class MeView(APIView):
     """GET /api/auth/me/ — the currently authenticated user."""
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     @extend_schema(responses=UserSerializer)
     def get(self, request):
-        return Response(UserSerializer(request.user).data)
+        return Response(UserSerializer(request.user, context={"request": request}).data)
+
+    @extend_schema(request=UserSerializer, responses=UserSerializer)
+    def patch(self, request):
+        serializer = UserSerializer(
+            request.user,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+
+class MyProfilePhotoView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(
+        responses={
+            (200, "image/*"): OpenApiTypes.BINARY,
+            404: None,
+        }
+    )
+    def get(self, request):
+        photo = request.user.profile_photo
+        if not photo:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        response = FileResponse(
+            photo.open("rb"),
+            content_type=guess_type(photo.name)[0] or "application/octet-stream",
+        )
+        response["Cache-Control"] = "private, no-store"
+        response["X-Content-Type-Options"] = "nosniff"
+        return response
 
 
 class ResendVerificationView(APIView):

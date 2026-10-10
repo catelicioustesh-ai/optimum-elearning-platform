@@ -35,7 +35,7 @@ from apps.accounts.access import STUDENT, require_student_access, require_teache
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_LANGUAGES = {"python", "javascript"}
+ALLOWED_LANGUAGES = {"python", "javascript", "c", "cpp", "java"}
 ALLOWED_ACTIVITY_LANGUAGES = ALLOWED_LANGUAGES | {"html"}
 MAX_CODE_LENGTH = 20_000
 MAX_STDIN_LENGTH = 10_000
@@ -106,7 +106,7 @@ class RunCodeView(APIView):
         request=inline_serializer(
             name="RunCodeRequest",
             fields={
-                "language": serializers.ChoiceField(choices=["python", "javascript"]),
+                "language": serializers.ChoiceField(choices=sorted(ALLOWED_LANGUAGES)),
                 "code": serializers.CharField(max_length=MAX_CODE_LENGTH),
                 "stdin": serializers.CharField(
                     max_length=MAX_STDIN_LENGTH, required=False, allow_blank=True
@@ -170,7 +170,7 @@ class RunTestsView(APIView):
             name="RunTestsRequest",
             fields={
                 "language": serializers.ChoiceField(
-                    choices=["python", "javascript", "html"]
+                    choices=sorted(ALLOWED_ACTIVITY_LANGUAGES)
                 ),
                 "code": serializers.CharField(max_length=MAX_CODE_LENGTH),
                 "activity_id": serializers.IntegerField(),

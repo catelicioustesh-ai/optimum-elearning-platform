@@ -340,6 +340,12 @@ class ActivityViewSet(viewsets.ModelViewSet):
         lesson_id = self.request.query_params.get("lesson")
         if lesson_id:
             qs = qs.filter(lesson_id=lesson_id)
+        activity_type = self.request.query_params.get("activity_type")
+        if activity_type:
+            valid_types = Activity._meta.get_field("activity_type").choices
+            if activity_type not in dict(valid_types):
+                raise ValidationError({"activity_type": "Choose a valid activity type."})
+            qs = qs.filter(activity_type=activity_type)
         qs = scope_unlocked(qs, self.request.user, "lesson__module", "lesson__module__course")
         if _is_student(self.request):
             qs = qs.prefetch_related(Prefetch(

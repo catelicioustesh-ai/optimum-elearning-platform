@@ -169,6 +169,9 @@ class Activity(models.Model):
         JAVASCRIPT = "javascript", "JavaScript"
         PYTHON = "python", "Python"
         HTML = "html", "HTML"
+        C = "c", "C"
+        CPP = "cpp", "C++"
+        JAVA = "java", "Java"
 
     lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name="activities")
     activity_type = models.CharField(max_length=20, choices=ActivityType.choices)

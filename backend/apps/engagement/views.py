@@ -22,12 +22,22 @@ from apps.progress.models import ActivityCompletion
 from apps.progress.services import is_course_complete
 
 from .certificate_pdf import certificate_completion_date, render_certificate
-from .models import Achievement, Certificate, Notification, StudentAchievement, StudentStreak
+from .models import (
+    Achievement,
+    Certificate,
+    LearningActivityDay,
+    Notification,
+    StudentAchievement,
+    StudentStreak,
+    TeamMembership,
+)
 from .serializers import CertificateSerializer, NotificationSerializer
 from .services import (
     create_due_live_session_reminders,
+    calculate_learning_xp,
     issue_certificate,
     revoke_certificate,
+    xp_reward_progress,
 )
 
 
@@ -40,6 +50,11 @@ class StudentEngagementView(APIView):
             fields={
                 "current_streak": serializers.IntegerField(),
                 "longest_streak": serializers.IntegerField(),
+                "xp": serializers.IntegerField(),
+                "next_reward_at": serializers.IntegerField(),
+                "xp_to_next_reward": serializers.IntegerField(),
+                "reward_progress_percent": serializers.IntegerField(),
+                "activity_days": serializers.ListField(child=serializers.DateField()),
                 "achievements": inline_serializer(
                     name="StudentAchievement",
                     many=True,
@@ -106,12 +121,145 @@ class StudentEngagementView(APIView):
                 "earned_at": earned_at,
             })
         certificates = Certificate.objects.filter(student=request.user).select_related("course")
+        xp = calculate_learning_xp([request.user.id])[request.user.id]
+        activity_days = LearningActivityDay.objects.filter(
+            student=request.user,
+            activity_date__gte=timezone.localdate() - timedelta(days=364),
+        ).values_list("activity_date", flat=True)
         return Response({
             "current_streak": current_streak,
             "longest_streak": streak.longest_days if streak else 0,
+            "xp": xp,
+            **xp_reward_progress(xp),
+            "activity_days": [day.isoformat() for day in activity_days],
             "achievements": achievements,
             "certificates": CertificateSerializer(certificates, many=True).data,
         })
+
+
+class StudentLeaderboardView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                "scope",
+                OpenApiTypes.STR,
+                OpenApiParameter.QUERY,
+                enum=["personal", "team", "organization"],
+            )
+        ],
+        responses=inline_serializer(
+            name="StudentLeaderboard",
+            fields={
+                "scope": serializers.CharField(),
+                "available": serializers.BooleanField(),
+                "message": serializers.CharField(allow_blank=True),
+                "xp": serializers.IntegerField(),
+                "next_reward_at": serializers.IntegerField(),
+                "xp_to_next_reward": serializers.IntegerField(),
+                "reward_progress_percent": serializers.IntegerField(),
+                "viewer_opted_in": serializers.BooleanField(),
+                "team_name": serializers.CharField(allow_null=True),
+                "organization_name": serializers.CharField(allow_null=True),
+                "viewer_rank": serializers.IntegerField(allow_null=True),
+                "participants": inline_serializer(
+                    name="LeaderboardParticipant",
+                    many=True,
+                    fields={
+                        "rank": serializers.IntegerField(),
+                        "display_name": serializers.CharField(),
+                        "xp": serializers.IntegerField(),
+                    },
+                ),
+            },
+        ),
+    )
+    def get(self, request):
+        if role_of(request.user) != STUDENT:
+            raise PermissionDenied("Leaderboards are available to students only.")
+
+        scope = request.query_params.get("scope", "personal")
+        if scope not in {"personal", "team", "organization"}:
+            raise ValidationError({"scope": "Choose personal, team, or organization."})
+
+        membership = (
+            TeamMembership.objects.filter(
+                student=request.user,
+                team__active=True,
+                team__organization__active=True,
+            )
+            .select_related("team__organization")
+            .first()
+        )
+        xp_by_student = calculate_learning_xp([request.user.id])
+        personal_xp = xp_by_student[request.user.id]
+        response = {
+            "scope": scope,
+            "available": True,
+            "message": "",
+            "xp": personal_xp,
+            **xp_reward_progress(personal_xp),
+            "viewer_opted_in": request.user.leaderboard_opt_in,
+            "team_name": membership.team.name if membership else None,
+            "organization_name": (
+                membership.team.organization.name if membership else None
+            ),
+            "viewer_rank": None,
+            "participants": [],
+        }
+        if scope == "personal":
+            return Response(response)
+
+        if not membership:
+            response.update({
+                "available": False,
+                "message": "Your team or organization has not been assigned yet.",
+            })
+            return Response(response)
+
+        members = TeamMembership.objects.filter(
+            team__active=True,
+            team__organization__active=True,
+            student__leaderboard_opt_in=True,
+            student__is_active=True,
+            student__role=STUDENT,
+        ).select_related("student", "team__organization")
+        if scope == "team":
+            members = members.filter(team=membership.team)
+        else:
+            members = members.filter(
+                team__organization=membership.team.organization
+            )
+
+        member_rows = list(members)
+        scores = calculate_learning_xp(row.student_id for row in member_rows)
+        ranked = sorted(
+            member_rows,
+            key=lambda row: (
+                -scores[row.student_id],
+                row.student.get_full_name().casefold() or row.student.username.casefold(),
+                row.student_id,
+            ),
+        )
+        participants = [
+            {
+                "rank": rank,
+                "display_name": row.student.get_full_name() or row.student.username,
+                "xp": scores[row.student_id],
+            }
+            for rank, row in enumerate(ranked, start=1)
+        ]
+        response["participants"] = participants[:50]
+        response["viewer_rank"] = next(
+            (
+                rank
+                for rank, row in enumerate(ranked, start=1)
+                if row.student_id == request.user.id
+            ),
+            None,
+        )
+        return Response(response)
 
 
 class NotificationListView(APIView):

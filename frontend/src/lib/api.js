@@ -252,7 +252,7 @@ export const api = {
     request(`/engagement/certificates/${encodeURIComponent(certificateNumber)}/verify/`, { auth: false }),
   getBlob: (path) => request(path, { blob: true }),
   post: (path, body) => request(path, { method: 'POST', body }),
-  patch: (path, body) => request(path, { method: 'PATCH', body }),
+  patch: (path, body, opts = {}) => request(path, { method: 'PATCH', body, ...opts }),
   put: (path, body, opts = {}) => request(path, { method: 'PUT', body, ...opts }),
   download: downloadFile,
   del: (path) => request(path, { method: 'DELETE' }),

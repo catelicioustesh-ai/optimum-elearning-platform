@@ -1,6 +1,11 @@
 from datetime import timedelta
+from io import BytesIO
+from tempfile import TemporaryDirectory
 
+from PIL import Image
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from django.test.utils import override_settings
 from django.utils import timezone
 
 from apps.accounts.testing import World, client_for
@@ -10,8 +15,11 @@ from apps.engagement.models import (
     Certificate,
     LearningActivityDay,
     Notification,
+    Organization,
     StudentAchievement,
     StudentStreak,
+    Team,
+    TeamMembership,
 )
 from apps.engagement.services import record_activity_completion, revoke_certificate
 from apps.enrollment.models import Enrollment
@@ -97,6 +105,98 @@ class EngagementApiTests(TestCase):
         self.assertEqual(streak_badge["progress_percent"], 33)
         self.assertEqual(response.data["current_streak"], 1)
         self.assertEqual(response.data["certificates"][0]["status"], Certificate.Status.ISSUED)
+        self.assertEqual(response.data["xp"], 120)
+        self.assertEqual(response.data["xp_to_next_reward"], 130)
+        self.assertIn(timezone.localdate().isoformat(), response.data["activity_days"])
+
+    def test_student_can_update_own_profile_and_leaderboard_preference(self):
+        response = self.student.patch(
+            "/api/auth/me/",
+            {
+                "bio": "Building useful software.",
+                "leaderboard_opt_in": True,
+                "role": "admin",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["bio"], "Building useful software.")
+        self.assertTrue(response.data["leaderboard_opt_in"])
+        self.assertEqual(response.data["role"], "student")
+        self.world.student_1.refresh_from_db()
+        self.assertEqual(self.world.student_1.bio, "Building useful software.")
+
+    def test_profile_photo_is_private_and_requires_authentication(self):
+        image_file = BytesIO()
+        Image.new("RGB", (1, 1), color="blue").save(image_file, format="PNG")
+        image_content = image_file.getvalue()
+
+        with TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            response = self.student.patch(
+                "/api/auth/me/",
+                {
+                    "profile_photo": SimpleUploadedFile(
+                        "avatar.png",
+                        image_content,
+                        content_type="image/png",
+                    )
+                },
+                format="multipart",
+            )
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertTrue(response.data["profile_photo"].startswith("/auth/me/profile-photo/"))
+
+            photo_response = self.student.get("/api/auth/me/profile-photo/")
+            self.assertEqual(photo_response.status_code, 200)
+            self.assertEqual(b"".join(photo_response.streaming_content), image_content)
+            self.assertEqual(photo_response["Cache-Control"], "private, no-store")
+            self.assertEqual(photo_response["X-Content-Type-Options"], "nosniff")
+            self.assertEqual(
+                self.anonymous.get("/api/auth/me/profile-photo/").status_code,
+                401,
+            )
+
+    def test_team_and_organization_leaderboards_include_only_opted_in_students(self):
+        org = Organization.objects.create(name="North Campus")
+        team = Team.objects.create(organization=org, name="Blue")
+        TeamMembership.objects.create(team=team, student=self.world.student_1)
+        TeamMembership.objects.create(team=team, student=self.world.student_2)
+        self.world.student_1.leaderboard_opt_in = True
+        self.world.student_1.save(update_fields=["leaderboard_opt_in"])
+        self.world.student_2.leaderboard_opt_in = True
+        self.world.student_2.save(update_fields=["leaderboard_opt_in"])
+        mark_activity_complete(self.world.student_1, self.world.exercise, score=90)
+        mark_activity_complete(self.world.student_1, self.world.locked_activity, score=90)
+        mark_activity_complete(self.world.student_2, self.world.exercise, score=90)
+
+        team_response = self.student.get("/api/engagement/leaderboard/?scope=team")
+        org_response = self.student.get("/api/engagement/leaderboard/?scope=organization")
+
+        self.assertEqual(team_response.status_code, 200)
+        self.assertEqual(org_response.status_code, 200)
+        self.assertEqual(team_response.data["team_name"], "Blue")
+        self.assertEqual(team_response.data["organization_name"], "North Campus")
+        self.assertEqual(len(team_response.data["participants"]), 2)
+        self.assertEqual(team_response.data["viewer_rank"], 1)
+        self.assertEqual(org_response.data["participants"], team_response.data["participants"])
+
+    def test_leaderboard_is_unavailable_without_admin_assignment(self):
+        response = self.student.get("/api/engagement/leaderboard/?scope=team")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["available"])
+        self.assertEqual(response.data["participants"], [])
+
+    def test_leaderboard_rejects_non_students_and_invalid_scopes(self):
+        self.assertEqual(
+            self.instructor.get("/api/engagement/leaderboard/").status_code,
+            403,
+        )
+        self.assertEqual(
+            self.student.get("/api/engagement/leaderboard/?scope=everyone").status_code,
+            400,
+        )
 
     def test_historical_course_award_keeps_progress_complete(self):
         course_achievement = Achievement.objects.get(code="course-graduate")

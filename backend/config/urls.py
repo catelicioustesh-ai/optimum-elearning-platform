@@ -28,6 +28,7 @@ api_urlpatterns = [
     path("execute/", include("apps.execution.urls")),
     path("dashboard/", include("apps.dashboards.urls")),
     path("engagement/", include("apps.engagement.urls")),
+    path("community/", include("apps.community.urls")),
     path("risk/", include("apps.risk.urls")),
     path("sequencing/", include("apps.sequencing.urls")),
     path("allocation/", include("apps.allocation.urls")),
@@ -37,11 +38,11 @@ api_urlpatterns = [
 # Media files (dev only)
 # ----------------------------------------------------------------------
 if settings.DEBUG:
-    # Dev-only. Serve ONLY public assets (course cover images). Submissions and
-    # lesson PDFs are private: they're delivered by authenticated API endpoints
+    # Dev-only. Serve only public course-cover assets.
+    # Submissions and lesson PDFs are private: they're delivered by authenticated API endpoints
     # (/api/submissions/<id>/download/, /api/lesson-attachments/<id>/download/)
     # that re-check enrollment, module locking and ownership. In production make
-    # sure nginx/object storage exposes course_covers/ only.
+    # sure nginx/object storage exposes only explicitly public media paths.
     from django.urls import re_path
     from django.views.static import serve
 

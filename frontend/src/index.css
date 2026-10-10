@@ -1,18 +1,20 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 @import './styles/dashboard-tokens.css';
 
 @theme {
-  --color-primary: #3464f0;
-  --color-primary-light: #dce7ff;
-  --color-primary-hover: #18328c;
+  --color-primary: #2563eb;
+  --color-primary-light: #dbeafe;
+  --color-primary-hover: #1d4ed8;
+  --color-primary-dark: #1d4ed8;
+  --color-primary-deep: #0f256e;
   --color-primary-foreground: #ffffff;
   --color-surface: #ffffff;
   --color-surface-muted: #f8fafc;
   --color-text-primary: #0f172a;
   --color-text-secondary: #64748b;
   --color-border: #e2e8f0;
-  --color-success: #22c55e;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
   --color-danger: #ef4444;
 
   --color-paper: #ffffff;
@@ -23,12 +25,12 @@
   --color-text: #111827;
   --color-text-muted: #475569;
   --color-text-dim: #64748b;
-  --color-coral: #3464f0;
-  --color-coral-dim: #18328c;
-  --color-coral-tint: #dce7ff;
-  --color-mint: #22c55e;
+  --color-coral: #2563eb;
+  --color-coral-dim: #1d4ed8;
+  --color-coral-tint: #dbeafe;
+  --color-mint: #10b981;
   --color-mint-tint: #dcfce7;
-  --color-blue: #18328c;
+  --color-blue: #0f256e;
 
   --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'SFMono-Regular', 'Consolas', monospace;
@@ -60,7 +62,7 @@ html {
 body {
   margin: 0;
   min-width: 320px;
-  background: linear-gradient(180deg, #f8fafc 0%, #eff6ff 100%);
+  background: #f8fafc;
   color: var(--color-text);
   font-family: var(--font-sans);
   font-weight: 500;
@@ -304,10 +306,77 @@ select {
   background: rgb(255 255 255 / 20%);
 }
 
+.auth-learning-journey {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-journey-step {
+  position: relative;
+  display: flex;
+  min-height: 47px;
+  align-items: center;
+  gap: 11px;
+  animation: auth-step-enter .4s ease-out both;
+  animation-delay: calc(var(--step-index) * 75ms);
+}
+
+.auth-journey-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 24%);
+  border-radius: 11px;
+  background: rgb(255 255 255 / 12%);
+  color: #dbeafe;
+}
+
+.auth-journey-step strong,
+.auth-journey-step small {
+  display: block;
+}
+
+.auth-journey-step strong { font-size: 12px; color: #fff; }
+.auth-journey-step small { margin-top: 1px; color: #dbeafe; font-size: 10px; }
+.auth-journey-connector { position: absolute; top: 38px; left: 16px; width: 1px; height: 12px; background: rgb(191 219 254 / 40%); }
+
+.login-role-card {
+  min-width: 0;
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+}
+
+.login-role-card > svg { color: #64748b; }
+.login-role-card:hover { border-color: #93c5fd; background: #eff6ff; color: #1e3a8a; }
+.login-role-card.is-selected {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1e40af;
+  box-shadow: 0 0 0 2px rgb(37 99 235 / 12%);
+}
+.login-role-card.is-selected > svg { color: #1d4ed8; }
+
+@keyframes auth-step-enter {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .auth-danger {
   border: 1px solid color-mix(in srgb, var(--color-danger) 28%, white);
   background: color-mix(in srgb, var(--color-danger) 6%, white);
   color: var(--color-danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-journey-step { animation: none !important; }
+}
+
+@media (max-width: 420px) {
+  .login-role-card { padding: 8px; }
+  .login-role-card > span:last-child { font-size: 9px; }
 }
 
 .lms-focus-ring:focus-visible {
@@ -569,6 +638,6 @@ select {
 .dashboard-shell .dg-card h4 { color: var(--dashboard-ink); }
 
 :root[data-theme='dark'] .dashboard-shell .dg-hero {
-  border-color: #34445b;
-  background: linear-gradient(125deg, #10213c 0%, #142b4d 55%, #173a61 100%);
+  border-color: rgba(37, 99, 235, 0.35);
+  background: linear-gradient(125deg, #0f256e 0%, #1d4ed8 65%, #2563eb 100%);
 }

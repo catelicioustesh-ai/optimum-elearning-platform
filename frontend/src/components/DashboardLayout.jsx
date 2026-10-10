@@ -1,11 +1,35 @@
 import { useState, useRef, useEffect } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { GlobalFx, ScrollProgress } from './fx.jsx'
-import { Bell, Check, ChevronDown, LogOut, Search, SunMedium, Moon } from 'lucide-react'
+import {
+  Award,
+  BadgeCheck,
+  Bell,
+  Bookmark,
+  BookOpen,
+  CalendarClock,
+  Check,
+  ClipboardList,
+  ChevronDown,
+  FileCheck,
+  Flame,
+  GraduationCap,
+  LayoutDashboard,
+  Library,
+  LogOut,
+  MessagesSquare,
+  Moon,
+  Search,
+  Settings,
+  SunMedium,
+  Users,
+} from 'lucide-react'
 import { useAuth } from '../context/useAuth.js'
 import CommandPalette from './CommandPalette.jsx'
 import Logo from './Logo.jsx'
 import { api } from '../lib/api.js'
+import { Link } from 'react-router-dom'
+import ProfilePhoto from './ProfilePhoto.jsx'
 
 const roleLabels = {
   student: 'Student',
@@ -14,9 +38,39 @@ const roleLabels = {
 }
 
 const goalLabels = {
-  student: 'Overall progress',
+  student: 'Course progress',
   instructor: 'Cohort on track',
   admin: 'Enrollment coverage',
+}
+
+const sharedNavItems = {
+  student: [
+    { to: '/dashboard/student', label: 'Dashboard', icon: LayoutDashboard, end: true, group: 'Overview' },
+    { to: '/dashboard/student/courses', label: 'My courses', icon: BookOpen, group: 'Learning' },
+    { to: '/dashboard/student#learning-path', label: 'Learning path', icon: CalendarClock, anchor: 'learning-path', group: 'Learning', mobileVisible: false },
+    { to: '/dashboard/student/assignments', label: 'Assignments', icon: ClipboardList, group: 'Learning', mobileVisible: false },
+    { to: '/dashboard/student/grades', label: 'Grades', icon: GraduationCap, group: 'Learning' },
+    { to: '/dashboard/student/achievements', label: 'Achievements', icon: Award, group: 'Recognition' },
+    { to: '/dashboard/student/certificates', label: 'Certificates', icon: BadgeCheck, group: 'Recognition', mobileVisible: false },
+    { to: '/dashboard/student/community', label: 'Community', icon: Users, group: 'Community', mobileVisible: false },
+    { to: '/dashboard/student/discussions', label: 'Discussions', icon: MessagesSquare, group: 'Community', mobileVisible: false },
+    { to: '/dashboard/student/resources', label: 'Resources', icon: Library, group: 'Community', mobileVisible: false },
+    { to: '/dashboard/student/bookmarks', label: 'Bookmarks', icon: Bookmark, group: 'Personal', mobileVisible: false },
+    { to: '/dashboard/student/notifications', label: 'Notifications', icon: Bell, group: 'Personal', mobileVisible: false },
+    { to: '/dashboard/student/settings', label: 'Settings', icon: Settings, group: 'Personal', mobileVisible: false },
+  ],
+  instructor: [
+    { to: '/dashboard/instructor', label: 'Dashboard', icon: LayoutDashboard, end: true, group: 'Overview' },
+    { to: '/dashboard/instructor/content', label: 'Course content', icon: BookOpen, group: 'Teaching' },
+    { to: '/dashboard/instructor/submissions', label: 'Submissions', icon: FileCheck, group: 'Teaching' },
+    { to: '/dashboard/instructor/students', label: 'Students', icon: Users, group: 'Teaching' },
+  ],
+  admin: [
+    { to: '/dashboard/admin', label: 'Overview', icon: LayoutDashboard, end: true, group: 'Overview' },
+    { to: '/dashboard/instructor/content', label: 'Courses & content', icon: BookOpen, group: 'Management' },
+    { to: '/dashboard/instructor/submissions', label: 'Submissions', icon: FileCheck, group: 'Management' },
+    { to: '/dashboard/instructor/students', label: 'Students', icon: Users, group: 'Management' },
+  ],
 }
 
 export default function DashboardLayout({
@@ -25,13 +79,17 @@ export default function DashboardLayout({
   brandLabel = 'Optimum LMS',
   user = { name: '' },
   weeklyGoal = 0,
+  studentHighlights = null,
+  studentProfile: studentProfileProp = null,
+  fetchStudentProfile = true,
   role: roleProp,
 }) {
   const { logout } = useAuth()
   // Pages don't all pass `role`; default to the signed-in user's real role (was always 'student').
   const { auth } = useAuth()
   const role = roleProp || auth?.role || 'student'
-  const { pathname } = useLocation()
+  const { pathname, hash } = useLocation()
+  const activeAnchor = hash.slice(1)
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
@@ -42,14 +100,14 @@ export default function DashboardLayout({
   const [notificationsError, setNotificationsError] = useState('')
   const [notificationReload, setNotificationReload] = useState(0)
   const [paletteOpen, setPaletteOpen] = useState(false)
-  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'dark')
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light')
   const [studentProfile, setStudentProfile] = useState(null)
   const [profileError, setProfileError] = useState('')
   const menuRef = useRef(null)
   const notifRef = useRef(null)
 
   useEffect(() => {
-    if (role !== 'student') return undefined
+    if (role !== 'student' || !fetchStudentProfile) return undefined
     let cancelled = false
     api.me()
       .then((profile) => {
@@ -59,12 +117,24 @@ export default function DashboardLayout({
         if (!cancelled) setProfileError(error.message || 'Your registered name could not be loaded.')
       })
     return () => { cancelled = true }
-  }, [role])
+  }, [role, fetchStudentProfile])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    const anchor = hash.slice(1)
+    if (!anchor) return undefined
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(anchor)?.scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+        block: 'start',
+      })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [hash, pathname])
 
   useEffect(() => {
     const handler = () => setPaletteOpen(true)
@@ -89,12 +159,13 @@ export default function DashboardLayout({
           if (!cancelled) setNotificationsLoading(false)
         })
     }
-    refreshNotifications()
+    const timeoutId = window.setTimeout(refreshNotifications, notifOpen ? 0 : 1500)
     const intervalId = role === 'student'
       ? window.setInterval(refreshNotifications, 5 * 60 * 1000)
       : null
     return () => {
       cancelled = true
+      window.clearTimeout(timeoutId)
       if (intervalId) window.clearInterval(intervalId)
     }
   }, [notifOpen, notificationReload, role])
@@ -112,9 +183,19 @@ export default function DashboardLayout({
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))
   }
 
-  const registeredName = `${studentProfile?.first_name || ''} ${studentProfile?.last_name || ''}`.trim()
+  function scrollToSection(anchor) {
+    const target = `/dashboard/student#${anchor}`
+    if (pathname !== '/dashboard/student') {
+      navigate(target)
+      return
+    }
+    navigate(target)
+  }
+
+  const profile = studentProfileProp || studentProfile
+  const registeredName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()
   const displayName = role === 'student'
-    ? registeredName || studentProfile?.username || user.name || 'Student'
+    ? registeredName || profile?.username || user.name || 'Student'
     : user.name
   const initials = (displayName || 'User')
     .split(' ')
@@ -125,7 +206,15 @@ export default function DashboardLayout({
     .toUpperCase()
 
   const goalPercent = Math.min(100, Math.max(0, Number(weeklyGoal) || 0))
+  const profileCompletePercent = profile
+    ? Math.round(
+      [profile.first_name, profile.last_name, profile.bio, profile.profile_photo]
+        .filter(Boolean).length / 4 * 100,
+    )
+    : null
   const visibleNotifications = showAllNotifications ? notifications : notifications.slice(0, 5)
+  const currentNavItems = sharedNavItems[role] || navItems
+  const mobileNavItems = currentNavItems.filter((item) => item.mobileVisible !== false)
 
   async function openNotification(notification) {
     if (notification.unread) {
@@ -161,7 +250,7 @@ export default function DashboardLayout({
       <a className="dashboard-skip-link" href="#dashboard-main">Skip to main content</a>
 
       {/* Left Sidebar */}
-      <aside className="dashboard-sidebar relative z-10 hidden w-62.5 shrink-0 border-r border-slate-200 bg-white text-slate-700 md:flex md:flex-col shadow-[10px_0_30px_-18px_rgba(15,23,42,0.14)]">
+      <aside className="dashboard-sidebar sticky top-0 z-10 hidden h-screen w-62.5 shrink-0 self-start border-r border-slate-200 bg-white text-slate-700 md:flex md:flex-col shadow-[10px_0_30px_-18px_rgba(15,23,42,0.14)]">
         <div className="border-b border-slate-200 px-5 py-4">
           <Logo tone="light" height={32} />
           {brandLabel && brandLabel !== 'Optimum LMS' && (
@@ -169,28 +258,76 @@ export default function DashboardLayout({
           )}
         </div>
 
-        <nav aria-label="Primary navigation" className="flex-1 space-y-1.5 px-3 py-5">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                `flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-all ${
-                  isActive
-                    ? 'bg-blue-600 text-white shadow-[0_10px_20px_-8px_rgba(37,99,235,0.7)]'
-                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
-                }`
-              }
-            >
-              <item.icon size={18} strokeWidth={2.2} />
-              {item.label}
-            </NavLink>
+        <nav aria-label="Primary navigation" className="student-sidebar-nav flex-1 space-y-1.5 overflow-y-auto px-3 py-5">
+          {currentNavItems.map((item, index) => (
+            <div key={item.to} className="student-sidebar-nav-item">
+              {item.group && item.group !== currentNavItems[index - 1]?.group && (
+                <p className="px-3.5 pb-1 pt-4 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 first:pt-0">
+                  {item.group}
+                </p>
+              )}
+              {item.anchor ? (
+                <button
+                  type="button"
+                  aria-current={activeAnchor === item.anchor ? 'location' : undefined}
+                  onClick={() => scrollToSection(item.anchor)}
+                  className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm font-medium transition-all ${
+                    activeAnchor === item.anchor
+                      ? 'bg-blue-600 text-white shadow-[0_10px_20px_-8px_rgba(37,99,235,0.45)]'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <item.icon size={18} strokeWidth={2.2} aria-hidden="true" />
+                  {item.label}
+                </button>
+              ) : (
+                <NavLink
+                  to={item.to}
+                  end={item.end}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-all ${
+                      isActive && !(item.end && hash)
+                        ? 'bg-blue-600 text-white shadow-[0_10px_20px_-8px_rgba(37,99,235,0.45)]'
+                        : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`
+                  }
+                >
+                  <item.icon size={18} strokeWidth={2.2} aria-hidden="true" />
+                  {item.label}
+                </NavLink>
+              )}
+            </div>
           ))}
         </nav>
 
         {/* Sidebar Footer Progress & Avatar */}
         <div className="mt-auto border-t border-slate-200 px-3 py-4">
+          {role === 'student' && studentHighlights && (
+            <div className="student-sidebar-highlights">
+              <div className="flex items-center gap-2 text-xs font-bold">
+                <Flame size={15} className="text-amber-500" aria-hidden="true" />
+                <span>{studentHighlights.currentStreak} day streak</span>
+              </div>
+              {studentHighlights.nextAchievement && (
+                <div className="mt-2">
+                  <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                    <Check size={12} className="text-blue-600" aria-hidden="true" />
+                    Next achievement
+                  </div>
+                  <div className="mt-1 truncate text-xs font-semibold">{studentHighlights.nextAchievement.name}</div>
+                  <div className="mt-1 text-[10px] text-slate-500">
+                    {studentHighlights.nextAchievement.progress} / {studentHighlights.nextAchievement.threshold}
+                  </div>
+                  <progress
+                    className="dg-progress-fill"
+                    max={studentHighlights.nextAchievement.threshold}
+                    value={studentHighlights.nextAchievement.progress}
+                    aria-label={`${studentHighlights.nextAchievement.name} progress`}
+                  />
+                </div>
+              )}
+            </div>
+          )}
           <div className="mb-3 px-1">
             <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
               <span>{goalLabels[role] || 'Progress'}</span>
@@ -198,20 +335,36 @@ export default function DashboardLayout({
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
               <div
-                className="h-full rounded-full bg-linear-to-r from-blue-500 to-emerald-400 transition-[width] duration-700"
+                className="dg-progress-fill h-full rounded-full bg-blue-600 transition-[width] duration-800"
                 style={{ width: `${goalPercent}%` }}
               />
             </div>
           </div>
           <div className="flex items-center gap-3 rounded-xl bg-slate-100 p-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-linear-to-tr from-blue-600 to-blue-600 text-xs font-bold text-white shadow-sm">
-              {initials.slice(0, 2)}
-            </div>
+            <ProfilePhoto
+              photoPath={profile?.profile_photo}
+              className="h-9 w-9 rounded-full object-cover"
+              fallback={initials.slice(0, 2)}
+              fallbackClassName="flex h-9 w-9 items-center justify-center rounded-full bg-blue-700 text-xs font-bold text-white shadow-sm"
+            />
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-slate-900">{displayName}</div>
               <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{roleLabels[role] || 'User'}</div>
             </div>
           </div>
+          {role === 'student' && profileCompletePercent !== null && (
+            <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50/70 p-3">
+              <div className="flex items-center justify-between text-[11px] font-semibold text-slate-700">
+                <span>Profile completion</span><span>{profileCompletePercent}%</span>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100">
+                <div className="h-full rounded-full bg-blue-600 transition-[width] duration-700" style={{ width: `${profileCompletePercent}%` }} />
+              </div>
+              <Link to="/dashboard/student/settings" className="mt-2 inline-flex text-xs font-semibold text-blue-800 hover:text-blue-950">
+                {profileCompletePercent === 100 ? 'Edit profile' : 'Complete profile →'}
+              </Link>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -327,9 +480,12 @@ export default function DashboardLayout({
                 className="flex items-center gap-2 rounded-full border border-slate-200 bg-white py-1 pl-1 pr-2.5 transition hover:bg-slate-100"
                 aria-expanded={menuOpen}
               >
-                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-linear-to-tr from-blue-600 to-blue-600 text-[10px] font-bold text-white">
-                  {initials.slice(0, 2)}
-                </span>
+                <ProfilePhoto
+                  photoPath={profile?.profile_photo}
+                  className="h-7 w-7 rounded-full object-cover"
+                  fallback={initials.slice(0, 2)}
+                  fallbackClassName="flex h-7 w-7 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white"
+                />
                 <span className="hidden text-xs font-semibold text-slate-700 sm:inline">{displayName}</span>
                 <ChevronDown size={14} className="text-slate-500" />
               </button>
@@ -344,6 +500,15 @@ export default function DashboardLayout({
                     <p className="px-3 py-2 text-[10px] text-amber-800" role="status">
                       Showing the sign-in name because your registered profile could not be loaded.
                     </p>
+                  )}
+                  {role === 'student' && (
+                    <Link
+                      to="/dashboard/student/settings"
+                      onClick={() => setMenuOpen(false)}
+                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                    >
+                      <Settings size={14} /> Profile settings
+                    </Link>
                   )}
                   <button
                     type="button"
@@ -362,7 +527,7 @@ export default function DashboardLayout({
       </div>
 
       <nav className="dashboard-mobile-nav md:hidden" aria-label="Primary navigation">
-        {navItems.map((item) => (
+        {mobileNavItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}

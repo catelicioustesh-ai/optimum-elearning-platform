@@ -1,7 +1,12 @@
 from datetime import timedelta
 
 from django.db import transaction
+from django.db.models import Count
 from django.utils import timezone
+
+from apps.enrollment.models import Enrollment
+from apps.progress.models import ActivityCompletion
+from apps.progress.services import is_course_complete
 
 from .models import (
     Achievement,
@@ -11,6 +16,51 @@ from .models import (
     StudentAchievement,
     StudentStreak,
 )
+
+XP_PER_ACTIVITY = 10
+XP_PER_COMPLETED_COURSE = 100
+XP_REWARD_INTERVAL = 250
+
+
+def calculate_learning_xp(student_ids):
+    """Compute XP only from persisted completions and completed courses."""
+    student_ids = list(student_ids)
+    if not student_ids:
+        return {}
+
+    activity_counts = dict(
+        ActivityCompletion.objects.filter(student_id__in=student_ids)
+        .values("student_id")
+        .annotate(total=Count("id"))
+        .values_list("student_id", "total")
+    )
+    completed_courses = dict(
+        Certificate.objects.filter(
+            student_id__in=student_ids,
+            status=Certificate.Status.ISSUED,
+        )
+        .values("student_id")
+        .annotate(total=Count("course_id", distinct=True))
+        .values_list("student_id", "total")
+    )
+    return {
+        student_id: activity_counts.get(student_id, 0) * XP_PER_ACTIVITY
+        + completed_courses.get(student_id, 0) * XP_PER_COMPLETED_COURSE
+        for student_id in student_ids
+    }
+
+
+def xp_reward_progress(xp):
+    next_reward_at = (xp // XP_REWARD_INTERVAL + 1) * XP_REWARD_INTERVAL
+    return {
+        "next_reward_at": next_reward_at,
+        "xp_to_next_reward": next_reward_at - xp,
+        "reward_progress_percent": round(
+            (xp - (next_reward_at - XP_REWARD_INTERVAL))
+            / XP_REWARD_INTERVAL
+            * 100
+        ),
+    }
 
 
 def create_notification(recipient, kind, title, message, url=""):

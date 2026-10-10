@@ -167,6 +167,18 @@ class CourseBuilderApiTests(APITestCase):
             self.student.get(f"/api/activities/{activity.id}/").data["language"],
             Activity.CodeLanguage.HTML,
         )
+        for language in (
+            Activity.CodeLanguage.C,
+            Activity.CodeLanguage.CPP,
+            Activity.CodeLanguage.JAVA,
+        ):
+            response = self.instructor.patch(
+                f"/api/activities/{activity.id}/",
+                {"language": language},
+                format="json",
+            )
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertEqual(response.data["language"], language)
 
     def test_student_activity_status_shows_completion_and_overdue_state(self):
         activity = self.world.exercise
