@@ -1,4 +1,4 @@
-import { api } from '../lib/api.js'
+import { api, backendUrl } from '../lib/api.js'
 
 export async function getAdminDashboard() {
   return api.get('/dashboard/admin/')
@@ -13,6 +13,5 @@ export async function getAdminDashboard() {
  * a "create user" API call exists.
  */
 export function djangoAdminUrl() {
-  const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
-  return apiUrl.replace(/\/api\/?$/, '/admin/')
+  return backendUrl('/admin/')
 }

@@ -7,8 +7,34 @@
  *   occurs and refresh cannot recover the session, redirects to /login.
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+const DEFAULT_API_URL = import.meta.env.DEV
+  ? 'http://localhost:8000/api'
+  : `${window.location.origin}/api`
+
+function secureUrl(url) {
+  if (window.location.protocol === 'https:' && url.protocol === 'http:') {
+    url.protocol = 'https:'
+  }
+  return url
+}
+
+const API_URL = secureUrl(new URL(import.meta.env.VITE_API_URL || DEFAULT_API_URL, window.location.origin)).href.replace(/\/$/, '')
 const ACCESS_TOKEN_REFRESH_SKEW_MS = 30_000
+
+export function mediaUrl(path) {
+  if (!path) return null
+  const apiOrigin = new URL(API_URL).origin
+  const resourceUrl = secureUrl(new URL(path, `${apiOrigin}/`))
+  return resourceUrl.href
+}
+
+export function backendUrl(path) {
+  const apiBase = new URL(API_URL)
+  apiBase.pathname = `${apiBase.pathname.replace(/\/api\/?$/, '').replace(/\/$/, '')}/${path.replace(/^\/+/, '')}`
+  apiBase.search = ''
+  apiBase.hash = ''
+  return secureUrl(apiBase).href
+}
 
 function getTokens() {
   const raw = localStorage.getItem('auth')

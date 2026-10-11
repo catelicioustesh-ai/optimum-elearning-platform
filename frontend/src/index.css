@@ -157,7 +157,7 @@ select {
   min-width: 0;
 }
 
-@media (max-width: 767.98px) {
+@media (max-width: 1023.98px) {
   .dashboard-mobile-nav {
     position: fixed;
     z-index: 80;
@@ -165,7 +165,7 @@ select {
     bottom: 0;
     left: 0;
     display: grid;
-    grid-auto-columns: minmax(4.5rem, 1fr);
+    grid-auto-columns: minmax(4rem, 1fr);
     grid-auto-flow: column;
     overflow-x: auto;
     border-top: 1px solid #dbe3ef;
@@ -177,8 +177,8 @@ select {
 
   .dashboard-mobile-nav-link {
     display: flex;
-    min-width: 4.5rem;
-    min-height: 3.5rem;
+    min-width: 4rem;
+    min-height: 3.75rem;
     flex-direction: column;
     align-items: center;
     justify-content: center;
@@ -215,6 +215,31 @@ select {
   .dashboard-shell input:not([type='checkbox']):not([type='radio']) {
     min-height: 2.75rem;
   }
+
+  .dashboard-main {
+    padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+  }
+}
+
+.dashboard-more-backdrop {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgb(15 23 42 / 42%);
+  padding: 1rem 0.75rem calc(5.5rem + env(safe-area-inset-bottom));
+  backdrop-filter: blur(3px);
+}
+
+.dashboard-more-sheet {
+  width: min(100%, 34rem);
+  border: 1px solid #dbe3ef;
+  border-radius: 1.25rem;
+  background: #fff;
+  padding: 1rem;
+  box-shadow: 0 24px 60px rgb(15 23 42 / 24%);
 }
 
 @media (prefers-reduced-motion: reduce) {

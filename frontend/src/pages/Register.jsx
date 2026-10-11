@@ -9,7 +9,7 @@ import { ArrowRight, Check, ChevronDown, Mail, Sparkles, User } from 'lucide-rea
 import { api } from '../lib/api.js'
 import AuthBrand from '../components/AuthBrand.jsx'
 
-const SITE_URL = 'https://www.yourdomain.com'
+const SITE_URL = window.location.origin
 
 export default function Register() {
   const [form, setForm] = useState({

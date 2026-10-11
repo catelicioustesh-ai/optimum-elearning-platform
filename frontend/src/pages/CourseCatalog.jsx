@@ -3,7 +3,7 @@ import { Helmet } from 'react-helmet-async'
 import { Link, useSearchParams } from 'react-router-dom'
 import { LayoutDashboard, BookOpen, ClipboardList, GraduationCap, Search, ArrowUpRight, X } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout.jsx'
-import { api } from '../lib/api.js'
+import { api, mediaUrl } from '../lib/api.js'
 import { useAuth } from '../context/useAuth.js'
 
 const navItems = [
@@ -83,7 +83,7 @@ export default function CourseCatalog() {
   function renderCourseCard(course) {
     const isEnrolled = enrolledCourseIds.has(String(course.id))
     const enrollment = enrollments.find((item) => String(item.course) === String(course.id))
-    const coverImage = course.thumbnail_url || (course.thumbnail ? `http://localhost:8000/${course.thumbnail}` : null)
+    const coverImage = mediaUrl(course.thumbnail_url || course.thumbnail)
     const isUpdating = String(updatingCourseId) === String(course.id)
 
     return (

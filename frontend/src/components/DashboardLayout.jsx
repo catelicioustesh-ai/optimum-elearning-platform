@@ -17,7 +17,6 @@ import {
   LayoutDashboard,
   Library,
   LogOut,
-  MessagesSquare,
   Moon,
   Search,
   Settings,
@@ -52,8 +51,7 @@ const sharedNavItems = {
     { to: '/dashboard/student/grades', label: 'Grades', icon: GraduationCap, group: 'Learning' },
     { to: '/dashboard/student/achievements', label: 'Achievements', icon: Award, group: 'Recognition' },
     { to: '/dashboard/student/certificates', label: 'Certificates', icon: BadgeCheck, group: 'Recognition', mobileVisible: false },
-    { to: '/dashboard/student/community', label: 'Community', icon: Users, group: 'Community', mobileVisible: false },
-    { to: '/dashboard/student/discussions', label: 'Discussions', icon: MessagesSquare, group: 'Community', mobileVisible: false },
+    { to: '/dashboard/student/community', label: 'Community', icon: Users, group: 'Community' },
     { to: '/dashboard/student/resources', label: 'Resources', icon: Library, group: 'Community', mobileVisible: false },
     { to: '/dashboard/student/bookmarks', label: 'Bookmarks', icon: Bookmark, group: 'Personal', mobileVisible: false },
     { to: '/dashboard/student/notifications', label: 'Notifications', icon: Bell, group: 'Personal', mobileVisible: false },
@@ -92,6 +90,7 @@ export default function DashboardLayout({
   const activeAnchor = hash.slice(1)
   const navigate = useNavigate()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [moreNavOpen, setMoreNavOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [showAllNotifications, setShowAllNotifications] = useState(false)
   const [notifications, setNotifications] = useState([])
@@ -107,6 +106,7 @@ export default function DashboardLayout({
   const [profileError, setProfileError] = useState('')
   const menuRef = useRef(null)
   const notifRef = useRef(null)
+  const moreNavRef = useRef(null)
 
   useEffect(() => {
     if (role !== 'student' || !fetchStudentProfile) return undefined
@@ -162,6 +162,31 @@ export default function DashboardLayout({
     })
     return () => window.cancelAnimationFrame(frame)
   }, [hash, pathname])
+
+  useEffect(() => {
+    if (!moreNavOpen) return undefined
+    function onKeyDown(event) {
+      if (event.key === 'Escape') {
+        setMoreNavOpen(false)
+        return
+      }
+      if (event.key !== 'Tab') return
+      const focusable = moreNavRef.current?.querySelectorAll('button:not(:disabled), a[href]')
+      if (!focusable?.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    moreNavRef.current?.querySelector('button, a')?.focus()
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [moreNavOpen])
 
   useEffect(() => {
     const handler = () => setPaletteOpen(true)
@@ -247,7 +272,23 @@ export default function DashboardLayout({
     : null
   const visibleNotifications = showAllNotifications ? notifications : notifications.slice(0, 5)
   const currentNavItems = sharedNavItems[role] || navItems
-  const mobileNavItems = currentNavItems.filter((item) => item.mobileVisible !== false)
+  const mobileNavItems = currentNavItems.filter((item) => item.mobileVisible !== false).slice(0, 5)
+
+  function navigateToNavItem(item) {
+    if (item.anchor) {
+      scrollToSection(item.anchor)
+      setMoreNavOpen(false)
+      return
+    }
+    setMoreNavOpen(false)
+  }
+
+  function navItemIsActive(item, isActive) {
+    return isActive || (
+      item.to === '/dashboard/student/community'
+      && pathname === '/dashboard/student/discussions'
+    )
+  }
 
   async function openNotification(notification) {
     if (notification.unread) {
@@ -283,7 +324,7 @@ export default function DashboardLayout({
       <a className="dashboard-skip-link" href="#dashboard-main">Skip to main content</a>
 
       {/* Left Sidebar */}
-      <aside className="dashboard-sidebar sticky top-0 z-10 hidden h-screen w-62.5 shrink-0 self-start overflow-hidden border-r border-slate-200 bg-white text-slate-700 md:flex md:flex-col shadow-[10px_0_30px_-18px_rgba(15,23,42,0.14)]">
+      <aside className="dashboard-sidebar sticky top-0 z-10 hidden h-screen w-62.5 shrink-0 self-start overflow-hidden border-r border-slate-200 bg-white text-slate-700 lg:flex lg:flex-col shadow-[10px_0_30px_-18px_rgba(15,23,42,0.14)]">
         <div className="border-b border-slate-200 px-5 py-4">
           <Logo tone="light" height={32} />
           {brandLabel && brandLabel !== 'Optimum LMS' && (
@@ -387,14 +428,14 @@ export default function DashboardLayout({
 
       {/* Main Area */}
       <div className="dashboard-content relative z-0 flex min-w-0 flex-1 flex-col bg-slate-100">
-        <header className="dashboard-header relative z-50 flex items-center justify-between border-b border-slate-200 bg-white/90 px-5 py-3 backdrop-blur-md">
+        <header className="dashboard-header relative z-50 flex items-center justify-between gap-2 border-b border-slate-200 bg-white/90 px-3 py-3 backdrop-blur-md sm:px-5">
           {/* Left: Quick Search */}
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setPaletteOpen(true)}
               aria-label="Search courses and labs"
-              className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3.5 py-1.5 text-xs text-slate-600 transition hover:border-slate-300 hover:text-slate-900"
+              className="flex min-w-0 items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-600 transition hover:border-slate-300 hover:text-slate-900 sm:px-3.5"
             >
               <Search size={14} />
               <span className="hidden sm:inline">Search courses, labs...</span>
@@ -438,7 +479,7 @@ export default function DashboardLayout({
               </button>
 
               {notifOpen && (
-                <div className="absolute right-0 z-60 mt-2 max-h-[70vh] w-80 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700 shadow-2xl backdrop-blur-xl">
+                <div className="absolute right-0 z-60 mt-2 max-h-[70vh] w-[min(20rem,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700 shadow-2xl backdrop-blur-xl">
                   <div className="mb-2 flex items-center justify-between border-b border-slate-200 pb-2">
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Notifications</span>
                     {unreadCount > 0 && (
@@ -533,7 +574,7 @@ export default function DashboardLayout({
               </button>
 
               {menuOpen && (
-                <div className="absolute right-0 z-80 mt-2 w-48 rounded-2xl border border-slate-200 bg-white py-1.5 shadow-2xl backdrop-blur-xl">
+                <div className="absolute right-0 z-80 mt-2 w-[min(16rem,calc(100vw-1.5rem))] rounded-2xl border border-slate-200 bg-white py-1.5 shadow-2xl backdrop-blur-xl">
                   <div className="border-b border-slate-200 px-3 py-2 text-xs">
                     <div className="font-bold text-slate-900">{displayName}</div>
                     <div className="text-[10px] capitalize text-slate-500">{role} Account</div>
@@ -565,21 +606,100 @@ export default function DashboardLayout({
           </div>
         </header>
 
-        <main id="dashboard-main" tabIndex="-1" key={pathname} className="dashboard-main dg-page relative z-0 min-w-0 flex-1 bg-slate-50 p-4 pb-24 md:p-6">{children}</main>
+        <main id="dashboard-main" tabIndex="-1" key={pathname} className="dashboard-main dg-page relative z-0 min-w-0 flex-1 bg-slate-50 p-4 pb-24 md:p-6 md:pb-24 lg:pb-6">{children}</main>
       </div>
 
-      <nav className="dashboard-mobile-nav md:hidden" aria-label="Primary navigation">
+      {moreNavOpen && (
+        <div
+          className="dashboard-more-backdrop lg:hidden"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setMoreNavOpen(false)
+          }}
+        >
+          <nav ref={moreNavRef} className="dashboard-more-sheet" aria-label="More navigation" aria-modal="true" role="dialog">
+            <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-3">
+              <div>
+                <p className="text-sm font-bold text-slate-900">More</p>
+                <p className="text-xs text-slate-500">{roleLabels[role] || 'Account'} navigation</p>
+              </div>
+              <button type="button" onClick={() => setMoreNavOpen(false)} className="rounded-lg px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100" aria-label="Close navigation menu">
+                Close
+              </button>
+            </div>
+            <div className="max-h-[min(65vh,32rem)] space-y-1 overflow-y-auto">
+              {currentNavItems.filter((item) => !mobileNavItems.some((mobileItem) => mobileItem.to === item.to)).map((item) => (
+                item.anchor ? (
+                  <button
+                    key={item.to}
+                    type="button"
+                    onClick={() => navigateToNavItem(item)}
+                    className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-blue-50 hover:text-blue-800"
+                  >
+                    <item.icon size={18} aria-hidden="true" />
+                    <span>{item.label}</span>
+                  </button>
+                ) : (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    end={item.end}
+                    onClick={() => navigateToNavItem(item)}
+                    className={({ isActive }) => `flex min-h-11 items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium ${navItemIsActive(item, isActive) ? 'bg-blue-50 text-blue-800' : 'text-slate-700 hover:bg-blue-50 hover:text-blue-800'}`}
+                  >
+                    <item.icon size={18} aria-hidden="true" />
+                    <span className="flex-1">{item.label}</span>
+                    {item.to === '/dashboard/student/notifications' && unreadCount > 0 && (
+                      <span className="grid h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
+                  </NavLink>
+                )
+              ))}
+            </div>
+            <div className="mt-3 border-t border-slate-200 pt-3">
+              <button
+                type="button"
+                onClick={() => { toggleTheme(); setMoreNavOpen(false) }}
+                className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                {theme === 'dark' ? <SunMedium size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+                Switch to {theme === 'dark' ? 'light' : 'dark'} theme
+              </button>
+              <button
+                type="button"
+                onClick={logout}
+                className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-rose-700 hover:bg-rose-50"
+              >
+                <LogOut size={18} aria-hidden="true" /> Log out
+              </button>
+            </div>
+          </nav>
+        </div>
+      )}
+
+      <nav className="dashboard-mobile-nav lg:hidden" aria-label="Primary navigation">
         {mobileNavItems.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
             end={item.end}
-            className={({ isActive }) => `dashboard-mobile-nav-link${isActive ? ' is-active' : ''}`}
+            className={({ isActive }) => `dashboard-mobile-nav-link${navItemIsActive(item, isActive) ? ' is-active' : ''}`}
           >
             <item.icon size={19} aria-hidden="true" />
             <span>{item.label}</span>
           </NavLink>
         ))}
+        <button
+          type="button"
+          onClick={() => setMoreNavOpen(true)}
+          className={`dashboard-mobile-nav-link${moreNavOpen ? ' is-active' : ''}`}
+          aria-expanded={moreNavOpen}
+          aria-haspopup="dialog"
+        >
+          <Settings size={19} aria-hidden="true" />
+          <span>More</span>
+        </button>
       </nav>
     </div>
   )

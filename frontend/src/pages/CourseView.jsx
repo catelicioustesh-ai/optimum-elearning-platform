@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 import { LayoutDashboard, BookOpen, GraduationCap, Lock, CircleCheckBig, Circle, ChevronRight, CalendarDays, ExternalLink } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout.jsx'
 import ExpandableList from '../components/ExpandableList.jsx'
-import { api } from '../lib/api.js'
+import { api, mediaUrl } from '../lib/api.js'
 import { useAuth } from '../context/useAuth.js'
 
 const navItems = [
@@ -31,6 +31,7 @@ export default function CourseView() {
   const [liveSessions, setLiveSessions] = useState([])
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const courseCoverImage = mediaUrl(course?.thumbnail_url || course?.thumbnail)
 
   useEffect(() => {
     let cancelled = false
@@ -80,9 +81,9 @@ export default function CourseView() {
       <div className="space-y-6">
         <div>
           <Link to="/dashboard/student/courses" className="text-sm text-coral hover:text-coral-dim">← Back to courses</Link>
-          {(course?.thumbnail_url || (course?.thumbnail ? `http://localhost:8000/${course.thumbnail}` : null)) && (
+          {courseCoverImage && (
             <div className="mt-4 overflow-hidden rounded-2xl border border-line bg-paper">
-              <img src={course?.thumbnail_url || `http://localhost:8000/${course.thumbnail}`} alt={course.title} className="h-48 w-full object-cover" />
+              <img src={courseCoverImage} alt={course.title} className="h-48 w-full object-cover" />
             </div>
           )}
           <h2 className="mt-2 text-2xl font-bold text-ink">{course?.title || (loading ? 'Loading…' : '')}</h2>

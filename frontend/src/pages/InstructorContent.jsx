@@ -5,7 +5,7 @@ import { LayoutDashboard, BookOpen, FileCheck, Users, Upload, Plus, FileText, Ch
 import LessonVideo from '../components/LessonVideo.jsx'
 import DashboardLayout from '../components/DashboardLayout.jsx'
 import ExpandableList from '../components/ExpandableList.jsx'
-import { api } from '../lib/api.js'
+import { api, mediaUrl } from '../lib/api.js'
 import { useAuth } from '../context/useAuth.js'
 
 const navItems = [
@@ -656,7 +656,7 @@ export default function InstructorContent() {
             </div>
             <ExpandableList items={courses} label="courses" listClassName="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {(course) => {
-                const image = course.thumbnail_url || (course.thumbnail ? `http://localhost:8000/${course.thumbnail}` : null)
+                const image = mediaUrl(course.thumbnail_url || course.thumbnail)
                 return (
                   <article key={course.id} className={`overflow-hidden rounded-xl border bg-slate-50 ${String(courseId) === String(course.id) ? 'border-blue-500 ring-2 ring-blue-100' : 'border-line'}`}>
                     <div className="h-28 w-full overflow-hidden bg-slate-100">
