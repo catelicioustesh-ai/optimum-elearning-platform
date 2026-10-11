@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { LayoutDashboard, BookOpen, ClipboardList, GraduationCap, Search, ArrowUpRight, X } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout.jsx'
 import { api } from '../lib/api.js'
@@ -14,13 +14,14 @@ const navItems = [
 
 export default function CourseCatalog() {
   const { auth } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [courses, setCourses] = useState([])
   const [enrollments, setEnrollments] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [updatingCourseId, setUpdatingCourseId] = useState(null)
   const [learningModes, setLearningModes] = useState({})
-  const [searchTerm, setSearchTerm] = useState('')
+  const searchTerm = searchParams.get('search') || ''
   const [showAllCourses, setShowAllCourses] = useState(false)
 
   useEffect(() => {
@@ -194,7 +195,10 @@ export default function CourseCatalog() {
             type="search"
             value={searchTerm}
             onChange={(event) => {
-              setSearchTerm(event.target.value)
+              const nextParams = new URLSearchParams(searchParams)
+              if (event.target.value) nextParams.set('search', event.target.value)
+              else nextParams.delete('search')
+              setSearchParams(nextParams, { replace: true })
               setShowAllCourses(false)
             }}
             placeholder="Search courses, topics, or instructors"

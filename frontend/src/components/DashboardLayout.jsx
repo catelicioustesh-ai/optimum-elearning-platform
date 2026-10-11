@@ -99,6 +99,8 @@ export default function DashboardLayout({
   const [notificationsLoading, setNotificationsLoading] = useState(false)
   const [notificationsError, setNotificationsError] = useState('')
   const [notificationReload, setNotificationReload] = useState(0)
+  const [studentEngagement, setStudentEngagement] = useState(null)
+  const [studentEngagementError, setStudentEngagementError] = useState('')
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light')
   const [studentProfile, setStudentProfile] = useState(null)
@@ -120,9 +122,34 @@ export default function DashboardLayout({
   }, [role, fetchStudentProfile])
 
   useEffect(() => {
+    if (role !== 'student' || !notifOpen || studentHighlights || studentEngagement) return undefined
+    let cancelled = false
+    api.get('/engagement/me/')
+      .then((data) => {
+        if (!cancelled) {
+          setStudentEngagement(data)
+          setStudentEngagementError('')
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) setStudentEngagementError(error.message || 'Learning streak details are unavailable.')
+      })
+    return () => { cancelled = true }
+  }, [notifOpen, role, studentEngagement, studentHighlights])
+
+  useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
     localStorage.setItem('theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    function onNotificationsCountChanged(event) {
+      const count = event.detail?.unreadCount
+      if (Number.isInteger(count) && count >= 0) setUnreadCount(count)
+    }
+    window.addEventListener('engagement-notifications-count-changed', onNotificationsCountChanged)
+    return () => window.removeEventListener('engagement-notifications-count-changed', onNotificationsCountChanged)
+  }, [])
 
   useEffect(() => {
     const anchor = hash.slice(1)
@@ -193,6 +220,12 @@ export default function DashboardLayout({
   }
 
   const profile = studentProfileProp || studentProfile
+  const engagementHighlights = studentHighlights || (studentEngagement ? {
+    currentStreak: studentEngagement.current_streak,
+    nextAchievement: studentEngagement.achievements
+      .filter((item) => !item.earned_at)
+      .sort((left, right) => right.progress_percent - left.progress_percent)[0] || null,
+  } : null)
   const registeredName = `${profile?.first_name || ''} ${profile?.last_name || ''}`.trim()
   const displayName = role === 'student'
     ? registeredName || profile?.username || user.name || 'Student'
@@ -246,11 +279,11 @@ export default function DashboardLayout({
       <div className="dg-aurora" aria-hidden="true" />
       <ScrollProgress />
       <GlobalFx />
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} role={role} />
       <a className="dashboard-skip-link" href="#dashboard-main">Skip to main content</a>
 
       {/* Left Sidebar */}
-      <aside className="dashboard-sidebar sticky top-0 z-10 hidden h-screen w-62.5 shrink-0 self-start border-r border-slate-200 bg-white text-slate-700 md:flex md:flex-col shadow-[10px_0_30px_-18px_rgba(15,23,42,0.14)]">
+      <aside className="dashboard-sidebar sticky top-0 z-10 hidden h-screen w-62.5 shrink-0 self-start overflow-hidden border-r border-slate-200 bg-white text-slate-700 md:flex md:flex-col shadow-[10px_0_30px_-18px_rgba(15,23,42,0.14)]">
         <div className="border-b border-slate-200 px-5 py-4">
           <Logo tone="light" height={32} />
           {brandLabel && brandLabel !== 'Optimum LMS' && (
@@ -258,7 +291,7 @@ export default function DashboardLayout({
           )}
         </div>
 
-        <nav aria-label="Primary navigation" className="student-sidebar-nav flex-1 space-y-1.5 overflow-y-auto px-3 py-5">
+        <nav aria-label="Primary navigation" className="student-sidebar-nav min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 py-5">
           {currentNavItems.map((item, index) => (
             <div key={item.to} className="student-sidebar-nav-item">
               {item.group && item.group !== currentNavItems[index - 1]?.group && (
@@ -278,7 +311,12 @@ export default function DashboardLayout({
                   }`}
                 >
                   <item.icon size={18} strokeWidth={2.2} aria-hidden="true" />
-                  {item.label}
+                  <span>{item.label}</span>
+                  {item.to === '/dashboard/student/notifications' && unreadCount > 0 && (
+                    <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
                 </button>
               ) : (
                 <NavLink
@@ -293,7 +331,12 @@ export default function DashboardLayout({
                   }
                 >
                   <item.icon size={18} strokeWidth={2.2} aria-hidden="true" />
-                  {item.label}
+                  <span>{item.label}</span>
+                  {item.to === '/dashboard/student/notifications' && unreadCount > 0 && (
+                    <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
                 </NavLink>
               )}
             </div>
@@ -301,33 +344,7 @@ export default function DashboardLayout({
         </nav>
 
         {/* Sidebar Footer Progress & Avatar */}
-        <div className="mt-auto border-t border-slate-200 px-3 py-4">
-          {role === 'student' && studentHighlights && (
-            <div className="student-sidebar-highlights">
-              <div className="flex items-center gap-2 text-xs font-bold">
-                <Flame size={15} className="text-amber-500" aria-hidden="true" />
-                <span>{studentHighlights.currentStreak} day streak</span>
-              </div>
-              {studentHighlights.nextAchievement && (
-                <div className="mt-2">
-                  <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                    <Check size={12} className="text-blue-600" aria-hidden="true" />
-                    Next achievement
-                  </div>
-                  <div className="mt-1 truncate text-xs font-semibold">{studentHighlights.nextAchievement.name}</div>
-                  <div className="mt-1 text-[10px] text-slate-500">
-                    {studentHighlights.nextAchievement.progress} / {studentHighlights.nextAchievement.threshold}
-                  </div>
-                  <progress
-                    className="dg-progress-fill"
-                    max={studentHighlights.nextAchievement.threshold}
-                    value={studentHighlights.nextAchievement.progress}
-                    aria-label={`${studentHighlights.nextAchievement.name} progress`}
-                  />
-                </div>
-              )}
-            </div>
-          )}
+        <div className="mt-auto shrink-0 border-t border-slate-200 px-3 py-4">
           <div className="mb-3 px-1">
             <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
               <span>{goalLabels[role] || 'Progress'}</span>
@@ -421,7 +438,7 @@ export default function DashboardLayout({
               </button>
 
               {notifOpen && (
-                <div className="absolute right-0 z-60 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700 shadow-2xl backdrop-blur-xl">
+                <div className="absolute right-0 z-60 mt-2 max-h-[70vh] w-80 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700 shadow-2xl backdrop-blur-xl">
                   <div className="mb-2 flex items-center justify-between border-b border-slate-200 pb-2">
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Notifications</span>
                     {unreadCount > 0 && (
@@ -430,6 +447,31 @@ export default function DashboardLayout({
                       </button>
                     )}
                   </div>
+                  {role === 'student' && engagementHighlights && (
+                    <Link
+                      to="/dashboard/student/achievements"
+                      onClick={() => setNotifOpen(false)}
+                      className="mb-3 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 transition hover:bg-amber-100"
+                    >
+                      <Flame size={18} className="shrink-0 text-amber-600" aria-hidden="true" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-xs font-bold text-slate-900">
+                          {engagementHighlights.currentStreak} day streak
+                        </span>
+                        {engagementHighlights.nextAchievement && (
+                          <span className="mt-0.5 block truncate text-[11px] text-slate-600">
+                            Next: {engagementHighlights.nextAchievement.name} ({engagementHighlights.nextAchievement.progress}/{engagementHighlights.nextAchievement.threshold})
+                          </span>
+                        )}
+                      </span>
+                      <Award size={15} className="shrink-0 text-amber-600" aria-hidden="true" />
+                    </Link>
+                  )}
+                  {role === 'student' && studentEngagementError && (
+                    <p className="mb-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900" role="status">
+                      {studentEngagementError}
+                    </p>
+                  )}
                   <div className="space-y-2">
                     {notificationsLoading && (
                       <p className="px-4 py-6 text-center text-sm text-slate-500" role="status">Loading notifications...</p>

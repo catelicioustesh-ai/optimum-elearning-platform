@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Helmet } from 'react-helmet-async'
 import { LayoutDashboard, BookOpen, FileCheck, Users, Upload, Plus, FileText, ChevronUp, ChevronDown, Trash2, Eye, CirclePlus, CalendarDays } from 'lucide-react'
 import LessonVideo from '../components/LessonVideo.jsx'
@@ -16,6 +17,8 @@ const navItems = [
 
 export default function InstructorContent() {
   const { auth } = useAuth()
+  const [searchParams] = useSearchParams()
+  const requestedCourseId = searchParams.get('course')
 
   const [courses, setCourses] = useState([])
   const [coursesLoading, setCoursesLoading] = useState(true)
@@ -49,6 +52,7 @@ export default function InstructorContent() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
+  const [videoUrl, setVideoUrl] = useState('')
 
   useEffect(() => {
     let cancelled = false
@@ -56,7 +60,35 @@ export default function InstructorContent() {
       .then(([dashboard, allCourses]) => {
         if (cancelled) return
         const visibleIds = new Set((dashboard.my_courses || []).map((course) => course.id))
-        setCourses(allCourses.filter((course) => visibleIds.has(course.id)))
+        const instructorCourses = allCourses.filter((course) => visibleIds.has(course.id))
+        setCourses(instructorCourses)
+        const requestedCourse = instructorCourses.find((course) => String(course.id) === requestedCourseId)
+        if (requestedCourse) {
+          setCourseId(requestedCourseId)
+          setCourseEdit({ title: requestedCourse.title || '', description: requestedCourse.description || '' })
+          setModuleId('')
+          setModules([])
+          setLessonId('')
+          setLessons([])
+          setVideoUrl('')
+          setAttachments([])
+          setLiveSessions([])
+          Promise.all([
+            api.get(`/courses/${requestedCourseId}/`),
+            api.get(`/modules/?course=${requestedCourseId}`),
+            api.get(`/live-sessions/?course=${requestedCourseId}`),
+          ])
+            .then(([detail, rows, sessions]) => {
+              if (cancelled) return
+              setCourses((items) => items.map((item) => item.id === detail.id ? detail : item))
+              setCourseEdit({ title: detail.title, description: detail.description || '' })
+              setModules(rows)
+              setLiveSessions(sessions)
+            })
+            .catch((err) => {
+              if (!cancelled) setError(err.message)
+            })
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(`Unable to load your courses: ${err.message}`)
@@ -65,7 +97,7 @@ export default function InstructorContent() {
         if (!cancelled) setCoursesLoading(false)
       })
     return () => { cancelled = true }
-  }, [courseListReload])
+  }, [courseListReload, requestedCourseId])
 
   // Selecting a course/module/lesson is always a direct user action (a
   // <select> onChange or a list item onClick below), never a prop changing
@@ -116,7 +148,6 @@ export default function InstructorContent() {
     setNewLesson((current) => ({ ...current, title: lesson.title, video_url: lesson.video_url || '', tutorial_content: lesson.tutorial_content || '' }))
   }
 
-  const [videoUrl, setVideoUrl] = useState('')
   const selectedLesson = lessons.find((l) => String(l.id) === String(lessonId))
 
   useEffect(() => {

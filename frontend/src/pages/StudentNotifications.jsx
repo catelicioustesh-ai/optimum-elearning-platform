@@ -30,7 +30,11 @@ export default function StudentNotifications() {
     try {
       const updated = await api.patch(`/engagement/notifications/${notification.id}/read/`)
       setNotifications((items) => items.map((item) => item.id === updated.id ? { ...item, ...updated, unread: false } : item))
-      setUnreadCount((value) => Math.max(0, value - 1))
+      const nextUnreadCount = Math.max(0, unreadCount - 1)
+      setUnreadCount(nextUnreadCount)
+      window.dispatchEvent(new CustomEvent('engagement-notifications-count-changed', {
+        detail: { unreadCount: nextUnreadCount },
+      }))
     } catch (err) {
       setError(err.message || 'Notification could not be marked as read.')
     }
@@ -42,6 +46,9 @@ export default function StudentNotifications() {
       await api.post('/engagement/notifications/read-all/')
       setNotifications((items) => items.map((item) => ({ ...item, unread: false, read_at: item.read_at || new Date().toISOString() })))
       setUnreadCount(0)
+      window.dispatchEvent(new CustomEvent('engagement-notifications-count-changed', {
+        detail: { unreadCount: 0 },
+      }))
     } catch (err) {
       setError(err.message || 'Notifications could not be marked as read.')
     }
