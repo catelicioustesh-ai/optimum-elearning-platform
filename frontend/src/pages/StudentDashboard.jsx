@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, Award, BookOpen, CalendarClock, CheckCircle2, Clock3, Download, Flame, LockKeyhole, RotateCw } from 'lucide-react'
+import { ArrowRight, Award, BookOpen, CalendarClock, CheckCircle2, Clock3, Download, Flame, LockKeyhole, RotateCw, Sparkles } from 'lucide-react'
 
 import DashboardLayout from '../components/DashboardLayout.jsx'
 import LearningPath from '../components/LearningPath.jsx'
@@ -73,6 +73,14 @@ export default function StudentDashboard() {
   const engagement = data?.engagement
   const achievements = engagement?.achievements || []
   const earnedAchievements = achievements.filter((item) => item.earned_at)
+  const issuedCertificates = engagement?.certificates?.filter((item) => item.status === 'issued') || []
+  const otherCertificates = engagement?.certificates?.filter(
+    (certificate) => !courses.some((item) => String(item.course_id) === String(certificate.course_id)),
+  ) || []
+  const coursesInProgress = courses.filter((item) => !item.completed).length
+  const completionRate = courses.length
+    ? Math.round(courses.reduce((total, item) => total + item.progress_percent, 0) / courses.length)
+    : 0
   const nextAchievement = achievements
     .filter((item) => !item.earned_at)
     .sort((left, right) => right.progress_percent - left.progress_percent)[0] || null
@@ -255,12 +263,104 @@ export default function StudentDashboard() {
               </div>
             </section>
 
+            {engagement && (
+              <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Your learning momentum">
+                <article className="dg-card rounded-2xl border border-blue-100 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Learning XP</p>
+                      <p className="mt-1 text-2xl font-bold text-slate-900">{engagement.xp}</p>
+                    </div>
+                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-700">
+                      <Sparkles size={19} aria-hidden="true" />
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-600">{engagement.xp_to_next_reward} XP to your next reward</p>
+                  <div
+                    className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100"
+                    role="progressbar"
+                    aria-label="Progress toward next XP reward"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={engagement.reward_progress_percent}
+                  >
+                    <div className="h-full rounded-full bg-blue-600" style={{ width: `${engagement.reward_progress_percent}%` }} />
+                  </div>
+                </article>
+
+                <article className="dg-card rounded-2xl border border-orange-100 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Learning streak</p>
+                      <p className="mt-1 text-2xl font-bold text-slate-900">{engagement.current_streak} {engagement.current_streak === 1 ? 'day' : 'days'}</p>
+                    </div>
+                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-orange-50 text-orange-600">
+                      <Flame size={20} aria-hidden="true" />
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-600">Longest: {engagement.longest_streak} {engagement.longest_streak === 1 ? 'day' : 'days'}</p>
+                  <p className="mt-1 text-xs font-medium text-orange-800">
+                    {engagement.current_streak ? 'Keep learning to maintain your momentum.' : 'Start a new streak with a learning activity.'}
+                  </p>
+                </article>
+
+                <article className="dg-card rounded-2xl border border-amber-100 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Achievements</p>
+                      <p className="mt-1 text-2xl font-bold text-slate-900">{earnedAchievements.length} <span className="text-base font-semibold text-slate-500">/ {achievements.length}</span></p>
+                    </div>
+                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-700">
+                      <Award size={19} aria-hidden="true" />
+                    </span>
+                  </div>
+                  <p className="mt-2 truncate text-xs text-slate-600">
+                    {nextAchievement ? `Next: ${nextAchievement.name}` : 'You have earned every achievement!'}
+                  </p>
+                </article>
+
+                <article className="dg-card rounded-2xl border border-emerald-100 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Certificates</p>
+                      <p className="mt-1 text-2xl font-bold text-slate-900">{issuedCertificates.length}</p>
+                    </div>
+                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
+                      <CheckCircle2 size={19} aria-hidden="true" />
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-600">Issued for completed courses</p>
+                </article>
+              </section>
+            )}
+
+            <section id="learning-path" className="dg-card scroll-mt-6 rounded-2xl p-5 sm:p-6">
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+                <div>
+                  <h2 className="text-base font-bold text-white">Learning path</h2>
+                  <p className="dg-sub mt-1">{course.course_title}</p>
+                </div>
+                <span className="text-xs text-slate-400">{modules.length} modules</span>
+              </div>
+              {modules.length ? (
+                <LearningPath
+                  modules={modules}
+                  completedPct={course.progress_percent}
+                  onSelectModule={(module) => {
+                    if (module.status !== 'locked') navigate(`/dashboard/student/courses/${course.course_id}`)
+                  }}
+                />
+              ) : (
+                <p className="text-sm text-slate-300" role="status">Learning path unavailable. This course has no modules yet.</p>
+              )}
+            </section>
+
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <div className="dg-card rounded-2xl border-l-4 border-l-blue-500 p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Enrolled courses</p>
-                    <p className="mt-2 text-2xl font-bold text-white">{courses.length}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Courses in progress</p>
+                    <p className="mt-2 text-2xl font-bold text-slate-900">{coursesInProgress}</p>
                   </div>
                   <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-700">
                     <BookOpen size={19} aria-hidden="true" />
@@ -270,8 +370,9 @@ export default function StudentDashboard() {
               <div className="dg-card rounded-2xl border-l-4 border-l-emerald-500 p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Modules completed</p>
-                    <p className="mt-2 text-2xl font-bold text-white">{completedModules} / {modules.length}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Completion rate</p>
+                    <p className="mt-2 text-2xl font-bold text-slate-900">{completionRate}%</p>
+                    <p className="mt-1 text-xs text-slate-500">Across enrolled courses</p>
                   </div>
                   <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
                     <CheckCircle2 size={19} aria-hidden="true" />
@@ -281,26 +382,257 @@ export default function StudentDashboard() {
               <div className="dg-card rounded-2xl border-l-4 border-l-amber-500 p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Awaiting review</p>
-                    <p className="mt-2 text-2xl font-bold text-white">{data.pending_labs}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Awaiting review</p>
+                    <p className="mt-2 text-2xl font-bold text-slate-900">{data.pending_labs}</p>
                   </div>
                   <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-700">
                     <Clock3 size={19} aria-hidden="true" />
                   </span>
                 </div>
               </div>
-              <div className="dg-card rounded-2xl border-l-4 border-l-amber-500 p-5">
+              <button
+                type="button"
+                onClick={() => document.getElementById('achievements')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className="dg-card rounded-2xl border-l-4 border-l-amber-500 p-5 text-left transition hover:-translate-y-0.5 lms-focus-ring"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Learning streak</p>
-                    <p className="mt-2 text-2xl font-bold text-white">{engagement ? `${engagement.current_streak} days` : '—'}</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Achievements earned</p>
+                    <p className="mt-2 text-2xl font-bold text-slate-900">{earnedAchievements.length} / {achievements.length}</p>
                   </div>
-                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-600">
-                    <Flame size={19} aria-hidden="true" />
+                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-700">
+                    <Award size={19} aria-hidden="true" />
                   </span>
                 </div>
-              </div>
+                <p className="mt-2 text-xs text-slate-600">{nextAchievement ? `Next: ${nextAchievement.name}` : 'View your achievement collection'}</p>
+              </button>
             </div>
+
+            {engagement && (
+              <section className="dg-card rounded-2xl p-5 sm:p-6" aria-labelledby="engagement-heading">
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <h2 id="engagement-heading" className="text-base font-bold text-white">Your progress & rewards</h2>
+                    <p className="dg-sub mt-1">See how close you are to your next milestone</p>
+                  </div>
+                </div>
+                <div className="mt-5 grid gap-6 lg:grid-cols-2">
+                  <div id="achievements" className="scroll-mt-6">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="text-sm font-bold text-slate-900">Achievement system</h3>
+                      <span className="text-xs font-semibold text-slate-600">
+                        {earnedAchievements.length} / {engagement.achievements.length} earned
+                      </span>
+                    </div>
+                    {nextAchievement && (
+                      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-wide text-amber-800">Next milestone</p>
+                            <p className="mt-1 font-bold text-slate-900">{nextAchievement.name}</p>
+                            <p className="mt-1 text-xs text-slate-700">{nextAchievement.description}</p>
+                          </div>
+                          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-amber-900">
+                            {Math.max(0, nextAchievement.threshold - nextAchievement.progress)} {achievementUnits[nextAchievement.metric] || 'steps'} to go
+                          </span>
+                        </div>
+                        <div
+                          className="mt-3 h-2 overflow-hidden rounded-full bg-amber-100"
+                          role="progressbar"
+                          aria-label={`${nextAchievement.name} progress`}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={nextAchievement.progress_percent}
+                        >
+                          <div className="h-full rounded-full bg-amber-500" style={{ width: `${nextAchievement.progress_percent}%` }} />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={resumeLearning}
+                          className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-amber-900 underline underline-offset-2 lms-focus-ring"
+                        >
+                          Continue learning <ArrowRight size={13} aria-hidden="true" />
+                        </button>
+                      </div>
+                    )}
+                    {engagement.achievements.length ? (
+                      <ul className="mt-3 grid gap-3 sm:grid-cols-2">
+                        {sectionItems('achievements', engagement.achievements).map((item) => {
+                          const earned = Boolean(item.earned_at)
+                          const unit = achievementUnits[item.metric] || 'steps'
+                          return (
+                            <li
+                              key={item.code}
+                              className={`achievement-card rounded-xl border p-4 ${
+                                earned
+                                  ? 'achievement-earned border-amber-300 bg-amber-50'
+                                  : 'border-slate-200 bg-slate-50'
+                              }`}
+                            >
+                              <div className="flex items-start gap-3">
+                                <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${
+                                  earned ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-500'
+                                }`}>
+                                  {earned
+                                    ? <Award size={18} aria-hidden="true" />
+                                    : <LockKeyhole size={16} aria-hidden="true" />}
+                                </span>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <p className="text-sm font-semibold text-slate-900">{item.name}</p>
+                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                                      earned ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'
+                                    }`}>
+                                      {earned ? 'Earned' : item.category}
+                                    </span>
+                                  </div>
+                                  <p className="mt-1 text-xs leading-5 text-slate-600">{item.description}</p>
+                                  <div className="mt-3 flex items-center justify-between gap-3 text-xs">
+                                    <span className="text-slate-700">
+                                      {item.progress} / {item.threshold} {unit}
+                                    </span>
+                                    {earned && item.earned_at && (
+                                      <span className="text-amber-800">
+                                        {new Date(item.earned_at).toLocaleDateString()}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div
+                                    className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200"
+                                    role="progressbar"
+                                    aria-label={`${item.name} progress`}
+                                    aria-valuemin={0}
+                                    aria-valuemax={100}
+                                    aria-valuenow={item.progress_percent}
+                                  >
+                                    <div
+                                      className={`dg-progress-fill h-full rounded-full ${
+                                        earned ? 'bg-amber-500' : 'bg-blue-600'
+                                      }`}
+                                      style={{ width: `${item.progress_percent}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    ) : (
+                      <p className="mt-3 text-sm text-slate-600" role="status">
+                        No achievements are available yet.
+                      </p>
+                    )}
+                    {sectionToggle('achievements', engagement.achievements, 'achievements')}
+                  </div>
+                  <div id="certificates" className="scroll-mt-6">
+                    <h3 className="text-sm font-bold text-slate-900">Certificate roadmap</h3>
+                    <p className="mt-1 text-xs text-slate-600">Track your enrolled courses toward completion and certificates.</p>
+                    {courses.length ? (
+                      <ul className="mt-3 grid gap-3">
+                        {sectionItems('certificateRoadmap', courses).map((roadmapCourse) => {
+                          const certificate = engagement.certificates.find(
+                            (item) => String(item.course_id) === String(roadmapCourse.course_id),
+                          )
+                          const progress = certificate?.status === 'issued' ? 100 : roadmapCourse.progress_percent
+                          const status = certificate?.status === 'issued'
+                            ? `Certificate earned · ${new Date(certificate.issued_at).toLocaleDateString()}`
+                            : certificate?.status === 'revoked'
+                              ? 'Certificate revoked'
+                              : roadmapCourse.completed
+                                ? 'Course complete · certificate not issued yet'
+                                : `${progress}% complete · ${Math.max(0, 100 - progress)}% to completion`
+
+                          return (
+                            <li key={roadmapCourse.course_id} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-semibold text-slate-900">{roadmapCourse.course_title}</p>
+                                  <p className={`mt-1 text-xs font-medium ${certificate?.status === 'issued' ? 'text-emerald-700' : 'text-slate-600'}`}>
+                                    {status}
+                                  </p>
+                                </div>
+                                {certificate?.status === 'issued' ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => downloadCertificate(certificate)}
+                                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 lms-focus-ring"
+                                  >
+                                    <Download size={14} aria-hidden="true" /> Download
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => navigate(`/dashboard/student/courses/${roadmapCourse.course_id}`)}
+                                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-800 hover:bg-blue-50 lms-focus-ring"
+                                  >
+                                    {roadmapCourse.completed ? 'View course' : 'Continue'} <ArrowRight size={14} aria-hidden="true" />
+                                  </button>
+                                )}
+                              </div>
+                              <div
+                                className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200"
+                                role="progressbar"
+                                aria-label={`${roadmapCourse.course_title} certificate roadmap progress`}
+                                aria-valuemin={0}
+                                aria-valuemax={100}
+                                aria-valuenow={progress}
+                              >
+                                <div className="h-full rounded-full bg-emerald-500" style={{ width: `${progress}%` }} />
+                              </div>
+                              {certificate?.status === 'revoked' && certificate.revocation_reason && (
+                                <p className="mt-2 text-xs text-rose-700">{certificate.revocation_reason}</p>
+                              )}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    ) : (
+                      <div className="mt-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5">
+                        <p className="text-sm font-semibold text-slate-900">Your roadmap starts with a course</p>
+                        <p className="mt-1 text-xs text-slate-600">Enroll in a course to track your progress toward its certificate.</p>
+                        <button
+                          type="button"
+                          onClick={() => navigate('/dashboard/student/courses')}
+                          className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-blue-800 underline underline-offset-2 lms-focus-ring"
+                        >
+                          Explore courses <ArrowRight size={13} aria-hidden="true" />
+                        </button>
+                      </div>
+                    )}
+                    {sectionToggle('certificateRoadmap', courses, 'courses')}
+                    {otherCertificates.length > 0 && (
+                      <div className="mt-4 border-t border-slate-200 pt-4">
+                        <h4 className="text-xs font-bold uppercase tracking-wide text-slate-600">Other certificates</h4>
+                        <ul className="mt-2 space-y-2">
+                          {otherCertificates.map((certificate) => (
+                            <li key={certificate.certificate_number} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 p-3">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900">{certificate.course_title}</p>
+                                <p className="mt-0.5 text-xs text-slate-600">
+                                  {certificate.status === 'issued' ? 'Issued' : 'Revoked'} · {new Date(certificate.issued_at).toLocaleDateString()}
+                                  {certificate.status === 'revoked' && certificate.revocation_reason ? ` · ${certificate.revocation_reason}` : ''}
+                                </p>
+                              </div>
+                              {certificate.status === 'issued' && (
+                                <button
+                                  type="button"
+                                  onClick={() => downloadCertificate(certificate)}
+                                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 lms-focus-ring"
+                                >
+                                  <Download size={14} aria-hidden="true" /> Download
+                                </button>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {certificateError && <p className="mt-3 text-sm text-rose-300" role="alert">{certificateError}</p>}
+                  </div>
+                </div>
+              </section>
+            )}
 
             <div className="grid gap-4 xl:grid-cols-2">
               <section id="deadlines" className="dg-card scroll-mt-6 rounded-2xl border-t-4 border-t-amber-400 p-5 sm:p-6">
@@ -373,154 +705,6 @@ export default function StudentDashboard() {
                 {sectionToggle('recentGrades', data.recent_grades, 'results')}
               </section>
             </div>
-
-            {engagement && (
-              <section className="dg-card rounded-2xl p-5 sm:p-6" aria-labelledby="engagement-heading">
-                <div className="flex flex-wrap items-end justify-between gap-3">
-                  <div>
-                    <h2 id="engagement-heading" className="text-base font-bold text-white">Achievements</h2>
-                    <p className="dg-sub mt-1">Awards earned through completed course work</p>
-                  </div>
-                  <div className="flex gap-4 text-sm">
-                    <span className="inline-flex items-center gap-1.5 font-semibold text-orange-300">
-                      <Flame size={16} aria-hidden="true" /> {engagement.current_streak} day streak
-                    </span>
-                    <span className="text-slate-400">Longest: {engagement.longest_streak} days</span>
-                  </div>
-                </div>
-                <div className="mt-5 grid gap-6 lg:grid-cols-2">
-                  <div id="achievements" className="scroll-mt-6">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="text-xs font-bold uppercase tracking-wide text-slate-400">Achievement progress</h3>
-                      <span className="text-xs font-semibold text-slate-300">
-                        {earnedAchievements.length} / {engagement.achievements.length} earned
-                      </span>
-                    </div>
-                    {engagement.achievements.length ? (
-                      <ul className="mt-3 grid gap-3 sm:grid-cols-2">
-                        {sectionItems('achievements', engagement.achievements).map((item) => {
-                          const earned = Boolean(item.earned_at)
-                          const unit = achievementUnits[item.metric] || 'steps'
-                          return (
-                            <li
-                              key={item.code}
-                              className={`achievement-card rounded-xl border p-4 ${
-                                earned
-                                  ? 'achievement-earned border-amber-300 bg-amber-50'
-                                  : 'border-slate-200 bg-slate-50'
-                              }`}
-                            >
-                              <div className="flex items-start gap-3">
-                                <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${
-                                  earned ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-500'
-                                }`}>
-                                  {earned
-                                    ? <Award size={18} aria-hidden="true" />
-                                    : <LockKeyhole size={16} aria-hidden="true" />}
-                                </span>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <p className="text-sm font-semibold text-white">{item.name}</p>
-                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                                      earned ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'
-                                    }`}>
-                                      {earned ? 'Earned' : item.category}
-                                    </span>
-                                  </div>
-                                  <p className="mt-1 text-xs leading-5 text-slate-400">{item.description}</p>
-                                  <div className="mt-3 flex items-center justify-between gap-3 text-xs">
-                                    <span className="text-slate-300">
-                                      {item.progress} / {item.threshold} {unit}
-                                    </span>
-                                    {earned && item.earned_at && (
-                                      <span className="text-amber-800">
-                                        {new Date(item.earned_at).toLocaleDateString()}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div
-                                    className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-200"
-                                    role="progressbar"
-                                    aria-label={`${item.name} progress`}
-                                    aria-valuemin={0}
-                                    aria-valuemax={100}
-                                    aria-valuenow={item.progress_percent}
-                                  >
-                                    <div
-                                      className={`dg-progress-fill h-full rounded-full ${
-                                        earned ? 'bg-amber-500' : 'bg-blue-600'
-                                      }`}
-                                      style={{ width: `${item.progress_percent}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    ) : (
-                      <p className="mt-3 text-sm text-slate-400" role="status">
-                        No achievements are available yet.
-                      </p>
-                    )}
-                    {sectionToggle('achievements', engagement.achievements, 'achievements')}
-                  </div>
-                  <div id="certificates" className="scroll-mt-6">
-                    <h3 className="text-xs font-bold uppercase tracking-wide text-slate-400">Certificates</h3>
-                    {engagement.certificates.length ? (
-                      <ul className="mt-3 divide-y divide-slate-700">
-                        {sectionItems('certificates', engagement.certificates).map((certificate) => (
-                          <li key={certificate.certificate_number} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
-                            <div>
-                              <p className="text-sm font-semibold text-white">{certificate.course_title}</p>
-                              <p className="mt-0.5 text-xs text-slate-400">
-                                {certificate.status === 'issued' ? 'Issued' : 'Revoked'} · {new Date(certificate.issued_at).toLocaleDateString()}
-                                {certificate.status === 'revoked' && certificate.revocation_reason ? ` · ${certificate.revocation_reason}` : ''}
-                              </p>
-                            </div>
-                            {certificate.status === 'issued' && (
-                              <button
-                                type="button"
-                                onClick={() => downloadCertificate(certificate)}
-                                className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-blue-50 lms-focus-ring"
-                              >
-                                <Download size={14} aria-hidden="true" /> Download
-                              </button>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="mt-3 text-sm text-slate-400" role="status">Certificates appear here after course completion.</p>
-                    )}
-                    {sectionToggle('certificates', engagement.certificates, 'certificates')}
-                    {certificateError && <p className="mt-3 text-sm text-rose-300" role="alert">{certificateError}</p>}
-                  </div>
-                </div>
-              </section>
-            )}
-
-            <section id="learning-path" className="dg-card scroll-mt-6 rounded-2xl p-5 sm:p-6">
-              <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-                <div>
-                  <h2 className="text-base font-bold text-white">Learning path</h2>
-                  <p className="dg-sub mt-1">{course.course_title}</p>
-                </div>
-                <span className="text-xs text-slate-400">{modules.length} modules</span>
-              </div>
-              {modules.length ? (
-                <LearningPath
-                  modules={modules}
-                  completedPct={course.progress_percent}
-                  onSelectModule={(module) => {
-                    if (module.status !== 'locked') navigate(`/dashboard/student/courses/${course.course_id}`)
-                  }}
-                />
-              ) : (
-                <p className="text-sm text-slate-300" role="status">Learning path unavailable. This course has no modules yet.</p>
-              )}
-            </section>
           </>
         )}
       </div>
