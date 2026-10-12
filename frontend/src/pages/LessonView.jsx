@@ -3,9 +3,11 @@ import { Helmet } from 'react-helmet-async'
 import { Link, useParams } from 'react-router-dom'
 import {
   LayoutDashboard, BookOpen, GraduationCap, FileText, Upload, ChevronLeft, ChevronRight, BookmarkCheck, BookmarkPlus,
+  ExternalLink,
 } from 'lucide-react'
 import LessonVideo from '../components/LessonVideo.jsx'
 import { ACCEPT, MAX_UPLOAD_MB, checkUpload } from '../lib/uploadRules.js'
+import { wikipediaSearchUrl } from '../lib/wikipedia.js'
 import DashboardLayout from '../components/DashboardLayout.jsx'
 import { api } from '../lib/api.js'
 import { useAuth } from '../context/useAuth.js'
@@ -154,6 +156,14 @@ export default function LessonView() {
                 </button>
               </div>
               {bookmarkError && <p className="mt-2 text-sm text-rose-700" role="alert">{bookmarkError}</p>}
+              <a
+                href={wikipediaSearchUrl(lesson.title, module?.title, course?.title)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 inline-flex items-center gap-2 rounded-md border border-line bg-paper px-3 py-2 text-sm font-semibold text-blue-700 hover:border-blue-300 hover:bg-blue-50"
+              >
+                Read this unit on Wikipedia <ExternalLink size={15} aria-hidden="true" />
+              </a>
             </div>
 
             {lesson.video_url && (

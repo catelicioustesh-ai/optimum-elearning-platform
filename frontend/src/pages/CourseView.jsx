@@ -5,6 +5,7 @@ import { LayoutDashboard, BookOpen, GraduationCap, Lock, CircleCheckBig, Circle,
 import DashboardLayout from '../components/DashboardLayout.jsx'
 import ExpandableList from '../components/ExpandableList.jsx'
 import { api, mediaUrl } from '../lib/api.js'
+import { wikipediaSearchUrl } from '../lib/wikipedia.js'
 import { useAuth } from '../context/useAuth.js'
 
 const navItems = [
@@ -176,14 +177,24 @@ export default function CourseView() {
                 {isExpanded && (
                   <div id={`module-lessons-${m.module_id}`} className="space-y-1 border-t border-line bg-panel/50 px-5 py-3">
                     {(lessonsByModule[m.module_id] || []).map((lesson) => (
-                      <Link
-                        key={lesson.id}
-                        to={`/dashboard/student/lessons/${lesson.id}`}
-                        className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-ink hover:bg-paper"
-                      >
-                        <span>{lesson.order}. {lesson.title}</span>
-                        <ChevronRight size={14} className="text-text-dim" />
-                      </Link>
+                      <div key={lesson.id} className="flex items-center justify-between gap-3 rounded-md px-3 py-2 text-sm text-ink hover:bg-paper">
+                        <Link
+                          to={`/dashboard/student/lessons/${lesson.id}`}
+                          className="flex min-w-0 flex-1 items-center justify-between gap-3"
+                        >
+                          <span className="truncate">{lesson.order}. {lesson.title}</span>
+                          <ChevronRight size={14} className="shrink-0 text-text-dim" />
+                        </Link>
+                        <a
+                          href={wikipediaSearchUrl(lesson.title, m.title, course?.title)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`Search Wikipedia for ${lesson.title}`}
+                          className="inline-flex shrink-0 items-center gap-1 rounded px-2 py-1 text-xs font-medium text-blue-700 hover:bg-blue-50 hover:text-blue-900"
+                        >
+                          Wikipedia <ExternalLink size={13} aria-hidden="true" />
+                        </a>
+                      </div>
                     ))}
                     {lessonsByModule[m.module_id]?.length === 0 && (
                       <p className="px-3 py-2 text-sm text-text-muted">No lessons in this module yet.</p>
