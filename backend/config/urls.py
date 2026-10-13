@@ -1,6 +1,6 @@
-from django.conf import settings
-from django.contrib import admin
-from django.urls import include, path
+from django.conf import settings  # pyright: ignore[reportMissingModuleSource]
+from django.contrib import admin  # pyright: ignore[reportMissingModuleSource]
+from django.urls import include, path  # pyright: ignore[reportMissingModuleSource]
 
 admin.site.site_header = "Optimum ERP LMS Administration"
 admin.site.site_title = "Optimum ERP LMS Admin"

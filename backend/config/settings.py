@@ -7,8 +7,13 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 
-from dotenv import load_dotenv
-from django.core.exceptions import ImproperlyConfigured
+try:
+    from dotenv import load_dotenv  # type: ignore[import-not-found]
+except ModuleNotFoundError:  # pragma: no cover - optional dependency in dev environments
+    def load_dotenv(*args, **kwargs):
+        return False
+
+from django.core.exceptions import ImproperlyConfigured  # type: ignore[import-not-found]
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
