@@ -28,9 +28,12 @@ shapes; update it whenever a serializer or endpoint changes.
 - Collection endpoints currently return JSON arrays, not paginated DRF
   envelopes.
 
-There is no OpenAPI/Swagger schema route registered at present. The route
-inventory below and [API_REFERENCE.md](./API_REFERENCE.md) are the available
-API contract.
+For interactive API documentation during local development, open `/api/docs/`
+for Swagger UI or `/api/redoc/` for ReDoc; `/api/schema/` serves the OpenAPI
+schema. These routes are available only when Django runs with `DEBUG=True`.
+The route inventory below and [API_REFERENCE.md](./API_REFERENCE.md) remain
+the source for usage guidance and behavior details that are not expressed by
+the generated schema.
 
 ## Run the backend and frontend locally (Windows)
 
@@ -156,7 +159,10 @@ to courses that instructor owns.
 | GET, PUT, PATCH, DELETE | `/lesson-attachments/{id}/` | 🔒; writes owning instructor/admin |
 | GET | `/lesson-attachments/{id}/download/` | 🔒; authenticated file download |
 | GET, POST | `/enrollments/` | 🔒; POST student self-enrollment |
-| GET | `/enrollments/{id}/` | 🔒; scoped to caller's permitted records |
+| GET, DELETE | `/enrollments/{id}/` | 🔒; DELETE only the student's own enrollment |
+
+Unenrolling revokes course access but preserves the student's submissions,
+grades, quiz attempts, and progress records.
 
 Student lesson/activity reads are filtered by enrollment and module unlocking.
 Locked content is deliberately not made available by calling a detail URL

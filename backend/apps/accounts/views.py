@@ -1,11 +1,15 @@
-from django.contrib.auth import get_user_model
+from typing import TypedDict, cast
+
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import update_last_login
 from django.contrib.auth.forms import SetPasswordForm
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.http import FileResponse
+from mimetypes import guess_type
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from rest_framework import generics, permissions, status, serializers
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -13,9 +17,13 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.views import TokenBlacklistView
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.settings import api_settings
+from rest_framework_simplejwt.tokens import RefreshToken
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema
 
 from .models import User
 from .serializers import (
+    DetailResponseSerializer,
     EmailActionSerializer,
     EmailTokenSerializer,
     PasswordResetSerializer,
@@ -30,7 +38,19 @@ from .services import (
     send_verification_email,
 )
 
-User = get_user_model()
+
+class EmailActionData(TypedDict):
+    email: str
+
+
+class EmailTokenData(TypedDict):
+    uid: str
+    token: str
+
+
+class PasswordResetData(EmailTokenData):
+    new_password: str
+    confirm_password: str
 
 
 class RegisterView(generics.CreateAPIView):
@@ -64,10 +84,10 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
         if not user:
             raise AuthenticationFailed("Incorrect email or password.")
 
-        refresh = self.get_token(user)
+        refresh = cast(RefreshToken, self.get_token(user))
         data = {"refresh": str(refresh), "access": str(refresh.access_token)}
         if api_settings.UPDATE_LAST_LOGIN:
-            update_last_login(None, user)
+            update_last_login(User, user)
         return data
 
     @classmethod
@@ -93,20 +113,62 @@ class LogoutView(TokenBlacklistView):
 class MeView(APIView):
     """GET /api/auth/me/ — the currently authenticated user."""
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
+    @extend_schema(responses=UserSerializer)
     def get(self, request):
-        return Response(UserSerializer(request.user).data)
+        return Response(UserSerializer(request.user, context={"request": request}).data)
+
+    @extend_schema(request=UserSerializer, responses=UserSerializer)
+    def patch(self, request):
+        serializer = UserSerializer(
+            request.user,
+            data=request.data,
+            partial=True,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+
+class MyProfilePhotoView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @extend_schema(
+        responses={
+            (200, "image/*"): OpenApiTypes.BINARY,
+            404: None,
+        }
+    )
+    def get(self, request):
+        user = cast(User, request.user)
+        photo = user.profile_photo
+        if not photo:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        response = FileResponse(
+            photo.open("rb"),
+            content_type=guess_type(photo.name)[0] or "application/octet-stream",
+        )
+        response["Cache-Control"] = "private, no-store"
+        response["X-Content-Type-Options"] = "nosniff"
+        return response
 
 
 class ResendVerificationView(APIView):
     permission_classes = [permissions.AllowAny]
     throttle_scope = "password_reset"
 
+    @extend_schema(
+        request=EmailActionSerializer,
+        responses={200: DetailResponseSerializer},
+    )
     def post(self, request):
         serializer = EmailActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        validated_data = cast(EmailActionData, serializer.validated_data)
         user = User.objects.filter(
-            email__iexact=serializer.validated_data["email"],
+            email__iexact=validated_data["email"],
             email_verified=False,
             is_active=True,
         ).first()
@@ -121,12 +183,17 @@ class VerifyEmailView(APIView):
     permission_classes = [permissions.AllowAny]
     throttle_scope = "auth"
 
+    @extend_schema(
+        request=EmailTokenSerializer,
+        responses={200: DetailResponseSerializer, 400: DetailResponseSerializer},
+    )
     def post(self, request):
         serializer = EmailTokenSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = _get_token_user(serializer.validated_data["uid"])
+        validated_data = cast(EmailTokenData, serializer.validated_data)
+        user = _get_token_user(validated_data["uid"])
         if not user or user.email_verified or not email_verification_token.check_token(
-            user, serializer.validated_data["token"]
+            user, validated_data["token"]
         ):
             return Response({"detail": "This verification link is invalid or has expired."}, status=status.HTTP_400_BAD_REQUEST)
         user.email_verified = True
@@ -138,11 +205,16 @@ class PasswordResetRequestView(APIView):
     permission_classes = [permissions.AllowAny]
     throttle_scope = "password_reset"
 
+    @extend_schema(
+        request=EmailActionSerializer,
+        responses={200: DetailResponseSerializer},
+    )
     def post(self, request):
         serializer = EmailActionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        validated_data = cast(EmailActionData, serializer.validated_data)
         users = User.objects.filter(
-            email__iexact=serializer.validated_data["email"],
+            email__iexact=validated_data["email"],
             is_active=True,
         )
         for user in users:
@@ -157,20 +229,39 @@ class PasswordResetConfirmView(APIView):
     permission_classes = [permissions.AllowAny]
     throttle_scope = "password_reset"
 
+    @extend_schema(
+        request=PasswordResetSerializer,
+        responses={200: DetailResponseSerializer, 400: DetailResponseSerializer},
+    )
     def post(self, request):
         serializer = PasswordResetSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = _get_token_user(serializer.validated_data["uid"])
-        if not user or not password_reset_token.check_token(user, serializer.validated_data["token"]):
+        validated_data = cast(PasswordResetData, serializer.validated_data)
+        user = _get_token_user(validated_data["uid"])
+        if not user or not password_reset_token.check_token(user, validated_data["token"]):
             return Response({"detail": "This password reset link is invalid or has expired."}, status=status.HTTP_400_BAD_REQUEST)
 
         form = SetPasswordForm(user, {
-            "new_password1": serializer.validated_data["new_password"],
-            "new_password2": serializer.validated_data["confirm_password"],
+            "new_password1": validated_data["new_password"],
+            "new_password2": validated_data["confirm_password"],
         })
         if not form.is_valid():
-            errors = form.errors.get_json_data()
-            message = next(iter(errors.values()))[0]["message"]
+            errors = form.errors.get_json_data() or {}
+            message = None
+            for field_errors in errors.values():
+                if not isinstance(field_errors, list):
+                    continue
+                for error in field_errors:
+                    if isinstance(error, dict):
+                        message = error.get("message")
+                    elif isinstance(error, str):
+                        message = error
+                    if message:
+                        break
+                if message:
+                    break
+            if not message:
+                message = "Please correct the highlighted password errors."
             raise serializers.ValidationError({"new_password": message})
 
         user = form.save()

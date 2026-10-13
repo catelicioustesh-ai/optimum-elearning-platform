@@ -1,7 +1,12 @@
 from datetime import timedelta
 
 from django.db import transaction
+from django.db.models import Count
 from django.utils import timezone
+
+from apps.enrollment.models import Enrollment
+from apps.progress.models import ActivityCompletion
+from apps.progress.services import is_course_complete
 
 from .models import (
     Achievement,
@@ -12,6 +17,51 @@ from .models import (
     StudentStreak,
 )
 
+XP_PER_ACTIVITY = 10
+XP_PER_COMPLETED_COURSE = 100
+XP_REWARD_INTERVAL = 250
+
+
+def calculate_learning_xp(student_ids):
+    """Compute XP only from persisted completions and completed courses."""
+    student_ids = list(student_ids)
+    if not student_ids:
+        return {}
+
+    activity_counts = dict(
+        ActivityCompletion.objects.filter(student_id__in=student_ids)
+        .values("student_id")
+        .annotate(total=Count("id"))
+        .values_list("student_id", "total")
+    )
+    completed_courses = dict(
+        Certificate.objects.filter(
+            student_id__in=student_ids,
+            status=Certificate.Status.ISSUED,
+        )
+        .values("student_id")
+        .annotate(total=Count("course_id", distinct=True))
+        .values_list("student_id", "total")
+    )
+    return {
+        student_id: activity_counts.get(student_id, 0) * XP_PER_ACTIVITY
+        + completed_courses.get(student_id, 0) * XP_PER_COMPLETED_COURSE
+        for student_id in student_ids
+    }
+
+
+def xp_reward_progress(xp):
+    next_reward_at = (xp // XP_REWARD_INTERVAL + 1) * XP_REWARD_INTERVAL
+    return {
+        "next_reward_at": next_reward_at,
+        "xp_to_next_reward": next_reward_at - xp,
+        "reward_progress_percent": round(
+            (xp - (next_reward_at - XP_REWARD_INTERVAL))
+            / XP_REWARD_INTERVAL
+            * 100
+        ),
+    }
+
 
 def create_notification(recipient, kind, title, message, url=""):
     return Notification.objects.create(
@@ -21,6 +71,39 @@ def create_notification(recipient, kind, title, message, url=""):
         message=message,
         url=url,
     )
+
+
+def create_due_live_session_reminders(student):
+    from apps.courses.models import LiveSession
+    from apps.enrollment.models import Enrollment
+
+    now = timezone.now()
+    course_ids = Enrollment.objects.filter(
+        student=student,
+        learning_mode=Enrollment.LearningMode.INSTRUCTOR_LED,
+    ).values_list("course_id", flat=True)
+    sessions = LiveSession.objects.filter(
+        course_id__in=course_ids,
+        starts_at__gt=now,
+        starts_at__lte=now + timedelta(hours=24),
+    ).select_related("course")
+
+    for session in sessions:
+        remaining = session.starts_at - now
+        reminder = "1-hour" if remaining <= timedelta(hours=1) else "24-hour"
+        Notification.objects.get_or_create(
+            dedupe_key=f"live-session:{session.pk}:{student.pk}:{reminder}",
+            defaults={
+                "recipient": student,
+                "kind": "live_session_reminder",
+                "title": f"Upcoming live session: {session.title}",
+                "message": (
+                    f"{session.course.title} starts "
+                    f"{timezone.localtime(session.starts_at):%b %d at %I:%M %p}."
+                ),
+                "url": f"/dashboard/student/courses/{session.course_id}",
+            },
+        )
 
 
 def _award_achievements(student, metrics):

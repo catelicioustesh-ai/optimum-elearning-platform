@@ -1,9 +1,10 @@
 from django.db import transaction
 from django.db.models import Max
-from rest_framework import permissions, status, viewsets
+from rest_framework import permissions, serializers, status, viewsets
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema, inline_serializer
 
 from apps.accounts.access import (
     ADMIN, INSTRUCTOR, STUDENT, require_student_access, require_teaches, role_of, scope_unlocked,
@@ -102,6 +103,10 @@ class SubmitQuizView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        request=SubmitQuizSerializer,
+        responses={200: QuizAttemptSerializer},
+    )
     def post(self, request, quiz_id):
         try:
             quiz = Quiz.objects.select_related("activity__lesson__module__course").get(pk=quiz_id)
@@ -161,6 +166,68 @@ class BuildQuizView(APIView):
     """Atomically create one quiz activity, quiz settings, and its questions."""
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        request=inline_serializer(
+            name="BuildQuizRequest",
+            fields={
+                "lesson": serializers.IntegerField(),
+                "activity": inline_serializer(
+                    name="BuildQuizActivityOptions",
+                    fields={
+                        "title": serializers.CharField(max_length=200),
+                        "instructions": serializers.CharField(
+                            required=False, allow_blank=True
+                        ),
+                        "max_score": serializers.IntegerField(required=False),
+                        "max_attempts": serializers.IntegerField(required=False),
+                        "pass_percentage": serializers.IntegerField(required=False),
+                        "deadline": serializers.DateTimeField(
+                            required=False, allow_null=True
+                        ),
+                        "is_required": serializers.BooleanField(required=False),
+                    },
+                ),
+                "quiz": inline_serializer(
+                    name="BuildQuizOptions",
+                    fields={
+                        "time_limit_minutes": serializers.IntegerField(required=False),
+                        "pass_mark_percentage": serializers.IntegerField(
+                            required=False
+                        ),
+                    },
+                    required=False,
+                ),
+                "questions": serializers.ListField(
+                    child=inline_serializer(
+                        name="BuildQuizQuestion",
+                        fields={
+                            "text": serializers.CharField(),
+                            "marks": serializers.IntegerField(required=False),
+                            "choices": serializers.ListField(
+                                child=inline_serializer(
+                                    name="BuildQuizAnswerChoice",
+                                    fields={"text": serializers.CharField()},
+                                ),
+                                allow_empty=False,
+                            ),
+                            "correct_choice_index": serializers.IntegerField(),
+                        },
+                    ),
+                    allow_empty=False,
+                ),
+            },
+        ),
+        responses={
+            201: inline_serializer(
+                name="BuildQuizResponse",
+                fields={
+                    "activity": ActivitySerializer(),
+                    "quiz": QuizSerializer(),
+                    "questions": QuestionForInstructorSerializer(many=True),
+                },
+            ),
+        },
+    )
     @transaction.atomic
     def post(self, request):
         try:

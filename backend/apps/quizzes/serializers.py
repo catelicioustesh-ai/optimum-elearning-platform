@@ -48,10 +48,16 @@ class SubmitQuizSerializer(serializers.Serializer):
 
 
 class QuizAttemptSerializer(serializers.ModelSerializer):
+    quiz_title = serializers.CharField(source="quiz.activity.title", read_only=True)
+    course_title = serializers.CharField(
+        source="quiz.activity.lesson.module.course.title",
+        read_only=True,
+    )
+
     class Meta:
         model = QuizAttempt
         fields = [
-            "id", "student", "quiz", "attempt_number", "answers",
+            "id", "student", "quiz", "quiz_title", "course_title", "attempt_number", "answers",
             "score", "total_marks", "percentage", "passed", "submitted_at",
         ]
         read_only_fields = fields

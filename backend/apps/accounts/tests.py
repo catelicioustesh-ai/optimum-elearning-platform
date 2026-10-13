@@ -19,6 +19,7 @@ from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from rest_framework import status
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 
@@ -162,7 +163,11 @@ class RegistrationAndLoginTests(AuthBase):
 
     def test_login_is_rate_limited(self):
         self.make_user()
-        codes = [self.login("verified@example.com", "Wrong-password-1").status_code for _ in range(12)]
+        with patch.object(ScopedRateThrottle, "timer", return_value=1_000):
+            codes = [
+                self.login("verified@example.com", "Wrong-password-1").status_code
+                for _ in range(12)
+            ]
         self.assertIn(status.HTTP_429_TOO_MANY_REQUESTS, codes)
 
 

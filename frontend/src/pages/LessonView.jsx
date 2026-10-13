@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { Link, useParams } from 'react-router-dom'
 import {
-  LayoutDashboard, BookOpen, GraduationCap, FileText, Upload, ChevronLeft, ChevronRight,
+  LayoutDashboard, BookOpen, GraduationCap, FileText, Upload, ChevronLeft, ChevronRight, BookmarkCheck, BookmarkPlus,
 } from 'lucide-react'
 import LessonVideo from '../components/LessonVideo.jsx'
 import { ACCEPT, MAX_UPLOAD_MB, checkUpload } from '../lib/uploadRules.js'
@@ -26,6 +26,11 @@ export default function LessonView() {
   const [module, setModule] = useState(null)
   const [moduleLessons, setModuleLessons] = useState([])
   const [error, setError] = useState('')
+  const [bookmarkState, setBookmarkState] = useState({ lessonId: null, saved: false, loading: false, error: '' })
+  const bookmarkMatchesLesson = String(bookmarkState.lessonId) === String(lessonId)
+  const bookmarkSaved = bookmarkMatchesLesson && bookmarkState.saved
+  const bookmarkLoading = bookmarkMatchesLesson && bookmarkState.loading
+  const bookmarkError = bookmarkMatchesLesson ? bookmarkState.error : ''
 
   async function fetchLessonContext(id) {
     const currentLesson = await api.get(`/lessons/${id}/`)
@@ -50,6 +55,23 @@ export default function LessonView() {
       applyLessonContext(await fetchLessonContext(lessonId))
     } catch (err) {
       setError(err.message || 'Unable to load this lesson.')
+    }
+  }
+
+  async function saveBookmark() {
+    if (!lesson) return
+    const targetLessonId = String(lesson.id)
+    setBookmarkState({ lessonId: targetLessonId, saved: false, loading: true, error: '' })
+    try {
+      await api.post('/community/bookmarks/', { lesson: lesson.id })
+      setBookmarkState({ lessonId: targetLessonId, saved: true, loading: false, error: '' })
+    } catch (err) {
+      setBookmarkState({
+        lessonId: targetLessonId,
+        saved: false,
+        loading: false,
+        error: err.message || 'This lesson could not be bookmarked.',
+      })
     }
   }
 
@@ -113,11 +135,25 @@ export default function LessonView() {
             )}
 
             <div>
-              <p className="text-sm text-text-muted">Lesson {lesson.order}{moduleLessons.length ? ` of ${moduleLessons.length}` : ''}</p>
-              <h2 className="mt-1 text-2xl font-bold text-ink">{lesson.title}</h2>
-              {lesson.learning_objectives && (
-                <p className="mt-2 text-sm text-text-muted">{lesson.learning_objectives}</p>
-              )}
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm text-text-muted">Lesson {lesson.order}{moduleLessons.length ? ` of ${moduleLessons.length}` : ''}</p>
+                  <h2 className="mt-1 text-2xl font-bold text-ink">{lesson.title}</h2>
+                  {lesson.learning_objectives && (
+                    <p className="mt-2 text-sm text-text-muted">{lesson.learning_objectives}</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={saveBookmark}
+                  disabled={bookmarkSaved || bookmarkLoading}
+                  className={`inline-flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition disabled:cursor-default disabled:opacity-70 ${bookmarkSaved ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-blue-200 bg-white text-blue-800 hover:bg-blue-50'}`}
+                >
+                  {bookmarkSaved ? <BookmarkCheck size={16} aria-hidden="true" /> : <BookmarkPlus size={16} aria-hidden="true" />}
+                  {bookmarkLoading ? 'Saving…' : bookmarkSaved ? 'Saved' : 'Save lesson'}
+                </button>
+              </div>
+              {bookmarkError && <p className="mt-2 text-sm text-rose-700" role="alert">{bookmarkError}</p>}
             </div>
 
             {lesson.video_url && (

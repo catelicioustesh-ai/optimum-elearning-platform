@@ -1,15 +1,28 @@
+from datetime import timedelta
+from io import BytesIO
+from tempfile import TemporaryDirectory
+
+from PIL import Image
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from django.test.utils import override_settings
 from django.utils import timezone
 
 from apps.accounts.testing import World, client_for
+from apps.courses.models import LiveSession
 from apps.engagement.models import (
+    Achievement,
     Certificate,
     LearningActivityDay,
     Notification,
+    Organization,
     StudentAchievement,
     StudentStreak,
+    Team,
+    TeamMembership,
 )
 from apps.engagement.services import record_activity_completion, revoke_certificate
+from apps.enrollment.models import Enrollment
 from apps.progress.services import mark_activity_complete
 
 
@@ -27,14 +40,20 @@ class EngagementEventTests(TestCase):
         streak = StudentStreak.objects.get(student=w.student_1)
         self.assertEqual((streak.current_days, streak.longest_days), (1, 1))
         self.assertEqual(LearningActivityDay.objects.filter(student=w.student_1).count(), 1)
-        self.assertEqual(StudentAchievement.objects.filter(student=w.student_1).count(), 1)
+        self.assertSetEqual(
+            set(
+                StudentAchievement.objects.filter(student=w.student_1)
+                .values_list("achievement__code", flat=True)
+            ),
+            {"first-steps", "course-graduate"},
+        )
         certificate = Certificate.objects.get(student=w.student_1, course=w.course_a)
         self.assertEqual(certificate.status, Certificate.Status.ISSUED)
         self.assertIsNotNone(certificate.completed_at)
         self.assertLessEqual(certificate.completed_at, certificate.issued_at)
         self.assertEqual(
             Notification.objects.filter(recipient=w.student_1, kind="achievement_earned").count(),
-            1,
+            2,
         )
 
     def test_activity_completion_only_awards_the_affected_student(self):
@@ -63,8 +82,139 @@ class EngagementApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         first_steps = next(item for item in response.data["achievements"] if item["code"] == "first-steps")
         self.assertIsNotNone(first_steps["earned_at"])
+        self.assertEqual(first_steps["progress"], 1)
+        self.assertEqual(first_steps["progress_percent"], 100)
+        getting_started = next(
+            item for item in response.data["achievements"]
+            if item["code"] == "getting-started"
+        )
+        self.assertIsNone(getting_started["earned_at"])
+        self.assertEqual(getting_started["progress"], 2)
+        self.assertEqual(getting_started["progress_percent"], 40)
+        course_graduate = next(
+            item for item in response.data["achievements"]
+            if item["code"] == "course-graduate"
+        )
+        self.assertEqual(course_graduate["progress"], 1)
+        self.assertEqual(course_graduate["progress_percent"], 100)
+        streak_badge = next(
+            item for item in response.data["achievements"]
+            if item["code"] == "streak-3"
+        )
+        self.assertEqual(streak_badge["progress"], 1)
+        self.assertEqual(streak_badge["progress_percent"], 33)
         self.assertEqual(response.data["current_streak"], 1)
         self.assertEqual(response.data["certificates"][0]["status"], Certificate.Status.ISSUED)
+        self.assertEqual(response.data["xp"], 120)
+        self.assertEqual(response.data["xp_to_next_reward"], 130)
+        self.assertIn(timezone.localdate().isoformat(), response.data["activity_days"])
+
+    def test_student_can_update_own_profile_and_leaderboard_preference(self):
+        response = self.student.patch(
+            "/api/auth/me/",
+            {
+                "bio": "Building useful software.",
+                "leaderboard_opt_in": True,
+                "role": "admin",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["bio"], "Building useful software.")
+        self.assertTrue(response.data["leaderboard_opt_in"])
+        self.assertEqual(response.data["role"], "student")
+        self.world.student_1.refresh_from_db()
+        self.assertEqual(self.world.student_1.bio, "Building useful software.")
+
+    def test_profile_photo_is_private_and_requires_authentication(self):
+        image_file = BytesIO()
+        Image.new("RGB", (1, 1), color="blue").save(image_file, format="PNG")
+        image_content = image_file.getvalue()
+
+        with TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            response = self.student.patch(
+                "/api/auth/me/",
+                {
+                    "profile_photo": SimpleUploadedFile(
+                        "avatar.png",
+                        image_content,
+                        content_type="image/png",
+                    )
+                },
+                format="multipart",
+            )
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertTrue(response.data["profile_photo"].startswith("/auth/me/profile-photo/"))
+
+            photo_response = self.student.get("/api/auth/me/profile-photo/")
+            self.assertEqual(photo_response.status_code, 200)
+            self.assertEqual(b"".join(photo_response.streaming_content), image_content)
+            self.assertEqual(photo_response["Cache-Control"], "private, no-store")
+            self.assertEqual(photo_response["X-Content-Type-Options"], "nosniff")
+            self.assertEqual(
+                self.anonymous.get("/api/auth/me/profile-photo/").status_code,
+                401,
+            )
+
+    def test_team_and_organization_leaderboards_include_only_opted_in_students(self):
+        org = Organization.objects.create(name="North Campus")
+        team = Team.objects.create(organization=org, name="Blue")
+        TeamMembership.objects.create(team=team, student=self.world.student_1)
+        TeamMembership.objects.create(team=team, student=self.world.student_2)
+        self.world.student_1.leaderboard_opt_in = True
+        self.world.student_1.save(update_fields=["leaderboard_opt_in"])
+        self.world.student_2.leaderboard_opt_in = True
+        self.world.student_2.save(update_fields=["leaderboard_opt_in"])
+        mark_activity_complete(self.world.student_1, self.world.exercise, score=90)
+        mark_activity_complete(self.world.student_1, self.world.locked_activity, score=90)
+        mark_activity_complete(self.world.student_2, self.world.exercise, score=90)
+
+        team_response = self.student.get("/api/engagement/leaderboard/?scope=team")
+        org_response = self.student.get("/api/engagement/leaderboard/?scope=organization")
+
+        self.assertEqual(team_response.status_code, 200)
+        self.assertEqual(org_response.status_code, 200)
+        self.assertEqual(team_response.data["team_name"], "Blue")
+        self.assertEqual(team_response.data["organization_name"], "North Campus")
+        self.assertEqual(len(team_response.data["participants"]), 2)
+        self.assertEqual(team_response.data["viewer_rank"], 1)
+        self.assertEqual(org_response.data["participants"], team_response.data["participants"])
+
+    def test_leaderboard_is_unavailable_without_admin_assignment(self):
+        response = self.student.get("/api/engagement/leaderboard/?scope=team")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["available"])
+        self.assertEqual(response.data["participants"], [])
+
+    def test_leaderboard_rejects_non_students_and_invalid_scopes(self):
+        self.assertEqual(
+            self.instructor.get("/api/engagement/leaderboard/").status_code,
+            403,
+        )
+        self.assertEqual(
+            self.student.get("/api/engagement/leaderboard/?scope=everyone").status_code,
+            400,
+        )
+
+    def test_historical_course_award_keeps_progress_complete(self):
+        course_achievement = Achievement.objects.get(code="course-graduate")
+        StudentAchievement.objects.create(
+            student=self.world.student_1,
+            achievement=course_achievement,
+        )
+
+        response = self.student.get("/api/engagement/me/")
+        course_graduate = next(
+            item for item in response.data["achievements"]
+            if item["code"] == "course-graduate"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(course_graduate["earned_at"])
+        self.assertEqual(course_graduate["progress"], course_graduate["threshold"])
+        self.assertEqual(course_graduate["progress_percent"], 100)
 
     def test_notifications_are_private_and_read_state_is_idempotent(self):
         notification = Notification.objects.create(
@@ -83,6 +233,50 @@ class EngagementApiTests(TestCase):
         self.assertEqual(marked.status_code, 200)
         self.assertIsNotNone(marked.data["read_at"])
         self.assertEqual(self.student.patch(f"/api/engagement/notifications/{notification.id}/read/").status_code, 200)
+
+    def test_live_session_reminders_are_sent_once_at_24_hours_and_one_hour(self):
+        w = self.world
+        Enrollment.objects.filter(student=w.student_1, course=w.course_a).update(
+            learning_mode=Enrollment.LearningMode.INSTRUCTOR_LED
+        )
+        session = LiveSession.objects.create(
+            course=w.course_a,
+            title="Live workshop",
+            starts_at=timezone.now() + timedelta(hours=12),
+            meeting_url="https://meet.example.com/workshop",
+        )
+
+        first = self.student.get("/api/engagement/notifications/")
+        repeated = self.student.get("/api/engagement/notifications/")
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(repeated.status_code, 200)
+        self.assertEqual(
+            Notification.objects.filter(
+                recipient=w.student_1,
+                kind="live_session_reminder",
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            Notification.objects.filter(
+                recipient=w.student_2,
+                kind="live_session_reminder",
+            ).count(),
+            0,
+        )
+
+        session.starts_at = timezone.now() + timedelta(minutes=30)
+        session.save(update_fields=["starts_at"])
+        near_session = self.student.get("/api/engagement/notifications/")
+
+        self.assertEqual(near_session.status_code, 200)
+        self.assertEqual(
+            Notification.objects.filter(
+                recipient=w.student_1,
+                kind="live_session_reminder",
+            ).count(),
+            2,
+        )
 
     def test_student_can_download_issued_certificate_but_not_revoke_it(self):
         mark_activity_complete(self.world.student_1, self.world.exercise, score=90)

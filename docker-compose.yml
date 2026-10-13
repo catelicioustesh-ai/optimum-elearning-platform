@@ -33,7 +33,9 @@ services:
       SANDBOX_TOKEN: ${SANDBOX_TOKEN:?set SANDBOX_TOKEN in your shell or a compose .env file}
     networks: [runner_net]                  # internal-only network: no route to the internet or the DB
     read_only: true
-    tmpfs: ["/tmp:size=64m,noexec,nosuid"]  # scratch space for run directories; nothing in it can be executed
+    tmpfs:
+      - "/tmp:size=64m,noexec,nosuid"
+      - "/run-code:size=64m,nosuid,nodev,exec,mode=1777"  # compiled code runs only in per-request scratch directories
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     mem_limit: 512m

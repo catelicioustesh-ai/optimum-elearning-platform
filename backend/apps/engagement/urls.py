@@ -11,10 +11,12 @@ from .views import (
     NotificationReadView,
     RevokeCertificateView,
     StudentEngagementView,
+    StudentLeaderboardView,
 )
 
 urlpatterns = [
     path("me/", StudentEngagementView.as_view(), name="student-engagement"),
+    path("leaderboard/", StudentLeaderboardView.as_view(), name="student-leaderboard"),
     path("notifications/", NotificationListView.as_view(), name="notification-list"),
     path("notifications/read-all/", NotificationReadAllView.as_view(), name="notification-read-all"),
     path("notifications/<int:notification_id>/read/", NotificationReadView.as_view(), name="notification-read"),

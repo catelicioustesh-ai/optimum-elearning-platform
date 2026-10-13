@@ -13,7 +13,7 @@ import {
 import Logo from './components/Logo.jsx'
 import { Link } from 'react-router-dom'
 
-const SITE_URL = 'https://www.yourdomain.com'
+const SITE_URL = window.location.origin
 
 const stats = [
   { value: 'Courses', label: 'database-backed learning' },

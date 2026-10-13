@@ -1,16 +1,15 @@
-# Development-only runner for a native Django backend.
-# The loopback binding lets the host backend reach the runner without exposing it to the LAN.
+# Development-only loopback relay for a native Django backend.
+# The sandbox itself remains isolated on runner_net with no published port.
 services:
   sandbox:
     build: ./sandbox
     environment:
       SANDBOX_TOKEN: ${SANDBOX_TOKEN:?set SANDBOX_TOKEN in backend/.env}
-    ports:
-      - "127.0.0.1:9000:9000"
     networks: [runner_net]
     read_only: true
     tmpfs:
       - "/tmp:size=64m,noexec,nosuid"
+      - "/run-code:size=64m,nosuid,nodev,exec,mode=1777"
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     mem_limit: 512m
@@ -22,6 +21,25 @@ services:
       interval: 15s
       timeout: 3s
       retries: 3
+    restart: unless-stopped
+
+  sandbox-host-proxy:
+    build:
+      context: ./sandbox
+      dockerfile: Dockerfile.proxy
+    ports:
+      - "127.0.0.1:9000:9001"
+    networks: [default, runner_net]
+    depends_on:
+      sandbox:
+        condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 64m
+    memswap_limit: 64m
+    pids_limit: 32
+    cpus: 0.25
     restart: unless-stopped
 
 networks:

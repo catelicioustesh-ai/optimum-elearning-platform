@@ -8,13 +8,13 @@ from .serializers import EnrollmentSerializer
 
 
 class EnrollmentViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
-                        mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+                        mixins.RetrieveModelMixin, mixins.DestroyModelMixin, viewsets.GenericViewSet):
     """
     Students enroll themselves (POST {"course": id}) and see only their own
     enrollments. Instructors see enrollments for courses THEY teach; admins
     see all. There is deliberately no update/delete: a student must not be
-    able to re-point an enrollment at another course, and removing students
-    is an admin task done in /admin/.
+    able to re-point an enrollment at another course. Students may remove only
+    their own enrollment; their course work remains attached to their account.
     """
     serializer_class = EnrollmentSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -45,3 +45,8 @@ class EnrollmentViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
             serializer.save(student=user)
         except IntegrityError:  # double-click / concurrent request
             raise ValidationError("You are already enrolled in this course.")
+
+    def perform_destroy(self, instance):
+        if role_of(self.request.user) != STUDENT:
+            raise PermissionDenied("Only students can remove their own enrollment.")
+        instance.delete()

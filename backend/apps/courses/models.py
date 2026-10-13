@@ -72,6 +72,20 @@ class Course(models.Model):
         return self.title
 
 
+class LiveSession(models.Model):
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="live_sessions")
+    title = models.CharField(max_length=200)
+    starts_at = models.DateTimeField()
+    meeting_url = models.URLField(max_length=500)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["starts_at", "id"]
+
+    def __str__(self):
+        return f"{self.course.title} — {self.title}"
+
+
 class Module(models.Model):
     """A module belongs to a course and has an order — this order is what
     module-locking (in the progress app) checks against."""
@@ -155,6 +169,9 @@ class Activity(models.Model):
         JAVASCRIPT = "javascript", "JavaScript"
         PYTHON = "python", "Python"
         HTML = "html", "HTML"
+        C = "c", "C"
+        CPP = "cpp", "C++"
+        JAVA = "java", "Java"
 
     lesson = models.ForeignKey(Lesson, on_delete=models.CASCADE, related_name="activities")
     activity_type = models.CharField(max_length=20, choices=ActivityType.choices)

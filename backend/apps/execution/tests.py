@@ -65,6 +65,31 @@ class ExecutionTests(APITestCase):
         self.assertEqual(self.run_code(u, stdin="x" * 10_001).status_code, 400)
 
     @patch("apps.execution.views.requests.post")
+    def test_run_accepts_compiled_languages(self, post):
+        post.return_value = runner("42\n")
+
+        for language in ("c", "cpp", "java"):
+            response = self.run_code(self.w.student_1, language=language)
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertEqual(post.call_args.kwargs["json"]["language"], language)
+
+    @patch("apps.execution.views.requests.post")
+    def test_activity_tests_accept_compiled_languages(self, post):
+        post.return_value = runner("hi\n")
+        activity = self.w.exercise
+
+        for language in ("c", "cpp", "java"):
+            activity.language = language
+            activity.save(update_fields=["language"])
+            response = self.run_tests(
+                self.w.student_1,
+                activity=activity,
+                language=language,
+            )
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertEqual(post.call_args.kwargs["json"]["language"], language)
+
+    @patch("apps.execution.views.requests.post")
     def test_runner_down_gives_generic_503_without_internal_details(self, post):
         post.side_effect = requests.ConnectionError("HTTPConnectionPool(host='sandbox', port=9000): refused")
         r = self.run_code(self.w.student_1)

@@ -11,9 +11,10 @@ context an instructor has is more likely to demoralize than help).
 """
 import logging
 
-from rest_framework import permissions
+from rest_framework import permissions, serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema, inline_serializer
 
 from rest_framework.exceptions import NotFound
 
@@ -35,6 +36,41 @@ class CohortRiskView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated, IsInstructorOrAdmin]
 
+    @extend_schema(
+        responses=inline_serializer(
+            name="CohortRiskReport",
+            fields={
+                "scored": inline_serializer(
+                    name="CohortStudentRisk",
+                    many=True,
+                    fields={
+                        "student_id": serializers.IntegerField(),
+                        "course_id": serializers.IntegerField(),
+                        "student_name": serializers.CharField(required=False),
+                        "course_title": serializers.CharField(required=False),
+                        "student_health_score": serializers.IntegerField(),
+                        "risk_level": serializers.ChoiceField(
+                            choices=["low", "medium", "high"]
+                        ),
+                        "risk_probability": serializers.FloatField(),
+                        "top_factors": serializers.ListField(
+                            child=serializers.CharField()
+                        ),
+                        "recommended_action": serializers.CharField(),
+                    },
+                ),
+                "skipped_insufficient_history": inline_serializer(
+                    name="SkippedStudentRisk",
+                    many=True,
+                    fields={
+                        "student_id": serializers.IntegerField(),
+                        "course_id": serializers.IntegerField(),
+                        "course_title": serializers.CharField(),
+                    },
+                ),
+            },
+        )
+    )
     def get(self, request):
         if request.user.role == "admin":
             from apps.courses.models import Course
@@ -70,6 +106,27 @@ class StudentCourseRiskView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated, IsInstructorOrAdmin]
 
+    @extend_schema(
+        responses={
+            200: inline_serializer(
+                name="StudentCourseRisk",
+                fields={
+                    "student_id": serializers.IntegerField(),
+                    "course_id": serializers.IntegerField(),
+                    "student_health_score": serializers.IntegerField(),
+                    "risk_level": serializers.ChoiceField(
+                        choices=["low", "medium", "high"]
+                    ),
+                    "risk_probability": serializers.FloatField(),
+                    "top_factors": serializers.ListField(
+                        child=serializers.CharField()
+                    ),
+                    "recommended_action": serializers.CharField(),
+                },
+            ),
+            204: None,
+        }
+    )
     def get(self, request, student_id, course_id):
         # An instructor may only look at students enrolled in a course THEY teach.
         # (Previously any instructor could score any student in any course.)

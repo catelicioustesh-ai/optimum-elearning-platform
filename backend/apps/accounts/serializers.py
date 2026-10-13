@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from hashlib import sha256
 from rest_framework import serializers
 
 User = get_user_model()
@@ -62,6 +63,10 @@ class EmailActionSerializer(serializers.Serializer):
         return value.strip().lower()
 
 
+class DetailResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField()
+
+
 class EmailTokenSerializer(serializers.Serializer):
     uid = serializers.CharField()
     token = serializers.CharField()
@@ -73,6 +78,40 @@ class PasswordResetSerializer(EmailTokenSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
+    profile_photo = serializers.ImageField(required=False, allow_null=True)
+
     class Meta:
         model = User
-        fields = ["id", "username", "email", "first_name", "last_name", "role"]
+        fields = [
+            "id",
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "role",
+            "bio",
+            "profile_photo",
+            "leaderboard_opt_in",
+        ]
+        read_only_fields = ["id", "username", "email", "role"]
+
+    def validate_profile_photo(self, value):
+        if value and value.size > 5 * 1024 * 1024:
+            raise serializers.ValidationError("Profile photos must be 5 MB or smaller.")
+        return value
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Profile photos are private account data; fetch them through the
+        # authenticated endpoint rather than exposing a public media URL.
+        photo_version = (
+            sha256(instance.profile_photo.name.encode()).hexdigest()[:12]
+            if instance.profile_photo
+            else ""
+        )
+        data["profile_photo"] = (
+            f"/auth/me/profile-photo/?v={photo_version}"
+            if photo_version
+            else None
+        )
+        return data

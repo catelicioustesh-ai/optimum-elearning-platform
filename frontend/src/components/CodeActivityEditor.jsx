@@ -1,46 +1,28 @@
 import { useEffect, useState } from 'react'
-import Editor, { loader } from '@monaco-editor/react'
-import * as monaco from 'monaco-editor/editor/editor.api.js'
-import EditorWorker from 'monaco-editor/editor/editor.worker?worker'
-import JsonWorker from 'monaco-editor/language/json/json.worker?worker'
-import CssWorker from 'monaco-editor/language/css/css.worker?worker'
-import HtmlWorker from 'monaco-editor/language/html/html.worker?worker'
-import TsWorker from 'monaco-editor/language/typescript/ts.worker?worker'
-import 'monaco-editor/languages/definitions/javascript/register.js'
-import 'monaco-editor/languages/definitions/python/register.js'
-import 'monaco-editor/languages/definitions/html/register.js'
+import CodeMirror from '@uiw/react-codemirror'
+import { EditorState } from '@codemirror/state'
+import { EditorView } from '@codemirror/view'
+import { oneDark } from '@codemirror/theme-one-dark'
 import { CircleCheckBig, Eye, Play, RotateCcw, Send } from 'lucide-react'
 import { api } from '../lib/api.js'
 import { useAuth } from '../context/useAuth.js'
-
-globalThis.MonacoEnvironment = {
-  getWorker(_workerId, label) {
-    switch (label) {
-      case 'json':
-        return new JsonWorker()
-      case 'css':
-      case 'scss':
-      case 'less':
-        return new CssWorker()
-      case 'html':
-      case 'handlebars':
-      case 'razor':
-        return new HtmlWorker()
-      case 'typescript':
-      case 'javascript':
-        return new TsWorker()
-      default:
-        return new EditorWorker()
-    }
-  },
-}
-
-loader.config({ monaco })
 
 const LANGUAGE_LABELS = {
   javascript: 'JavaScript',
   python: 'Python',
   html: 'HTML',
+  c: 'C',
+  cpp: 'C++',
+  java: 'Java',
+}
+
+const LANGUAGE_EXTENSION_LOADERS = {
+  javascript: () => import('@codemirror/lang-javascript').then(({ javascript }) => javascript()),
+  python: () => import('@codemirror/lang-python').then(({ python }) => python()),
+  html: () => import('@codemirror/lang-html').then(({ html }) => html()),
+  c: () => import('@codemirror/lang-cpp').then(({ cpp }) => cpp()),
+  cpp: () => import('@codemirror/lang-cpp').then(({ cpp }) => cpp()),
+  java: () => import('@codemirror/lang-java').then(({ java }) => java()),
 }
 
 const MAX_RUN_CODE_LENGTH = 20_000
@@ -73,12 +55,30 @@ export default function CodeActivityEditor({ activity, onSubmitted }) {
   const [output, setOutput] = useState(null)
   const [previewHtml, setPreviewHtml] = useState(null)
   const [testResults, setTestResults] = useState(null)
+  const [languageEditor, setLanguageEditor] = useState(null)
   const [status, setStatus] = useState('')
   const [isError, setIsError] = useState(false)
   const [busy, setBusy] = useState(false)
   const codeIsBlank = !code.trim()
   const runCodeIsTooLong = code.length > MAX_RUN_CODE_LENGTH
   const submissionIsTooLong = code.length > MAX_SUBMISSION_CODE_LENGTH
+
+  useEffect(() => {
+    let cancelled = false
+    LANGUAGE_EXTENSION_LOADERS[language]()
+      .then((extension) => {
+        if (!cancelled) setLanguageEditor({ language, extension })
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setLanguageEditor({
+            language,
+            error: error?.message || 'Could not load this language editor.',
+          })
+        }
+      })
+    return () => { cancelled = true }
+  }, [language])
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -190,33 +190,43 @@ export default function CodeActivityEditor({ activity, onSubmitted }) {
         <span className="text-[11px] text-[#858585]">Language · configured by instructor</span>
       </div>
 
-      <Editor
-        height="380px"
-        onMount={(editor) => editor.layout()}
-        path={`activities/${activity.id}.${language === 'python' ? 'py' : language === 'html' ? 'html' : 'js'}`}
-        language={language}
-        value={code}
-        onChange={handleCodeChange}
-        theme="vs-dark"
-        loading={<div className="px-4 py-6 text-sm text-[#858585]">Loading code editor…</div>}
-        options={{
-          automaticLayout: true,
-          readOnly: busy,
-          minimap: { enabled: false },
-          scrollBeyondLastLine: false,
-          alwaysConsumeMouseWheel: false,
-          fontSize: 14,
-          lineNumbers: 'on',
-          renderLineHighlight: 'line',
-          wordWrap: 'on',
-          tabSize: language === 'python' ? 4 : 2,
-          insertSpaces: true,
-          autoIndent: 'full',
-          formatOnPaste: true,
-          bracketPairColorization: { enabled: true },
-          padding: { top: 12, bottom: 12 },
-        }}
-      />
+      {languageEditor?.language === language && languageEditor.extension ? (
+        <CodeMirror
+          height="380px"
+          value={code}
+          onChange={handleCodeChange}
+          theme={oneDark}
+          extensions={[
+            languageEditor.extension,
+            EditorView.lineWrapping,
+            EditorState.tabSize.of(language === 'python' ? 4 : 2),
+          ]}
+          readOnly={busy}
+          editable={!busy}
+          basicSetup={{
+            lineNumbers: true,
+            foldGutter: true,
+            highlightActiveLine: true,
+            highlightActiveLineGutter: true,
+            bracketMatching: true,
+            closeBrackets: true,
+            autocompletion: true,
+            indentOnInput: true,
+          }}
+          className="code-mirror-editor"
+          style={{ fontSize: 14 }}
+          editorProps={{ 'aria-label': `${LANGUAGE_LABELS[language]} code editor` }}
+        />
+      ) : (
+        <div
+          className={`min-h-[380px] px-4 py-6 text-sm ${languageEditor?.language === language && languageEditor.error ? 'text-rose-300' : 'text-[#858585]'}`}
+          role={languageEditor?.language === language && languageEditor.error ? 'alert' : 'status'}
+        >
+          {languageEditor?.language === language && languageEditor.error
+            ? languageEditor.error
+            : 'Loading code editor…'}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2 border-t border-[#30363d] bg-[#252526] px-3 py-2">
         {language === 'html' ? (

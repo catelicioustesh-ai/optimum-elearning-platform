@@ -1,13 +1,23 @@
+from io import BytesIO
+
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APITestCase
+from PIL import Image
 from datetime import timedelta
 
 from apps.accounts.models import User
 from apps.accounts.testing import World, client_for
-from apps.courses.models import Activity, Course, Lesson, Module
+from apps.courses.models import Activity, Course, Lesson, LiveSession, Module
+from apps.enrollment.models import Enrollment
 from apps.progress.models import ActivityCompletion
+
+
+def _image_upload(name):
+    image = BytesIO()
+    Image.new("RGB", (2, 2), color="navy").save(image, format="PNG")
+    return SimpleUploadedFile(name, image.getvalue(), content_type="image/png")
 
 
 class CourseThumbnailTests(TestCase):
@@ -20,11 +30,7 @@ class CourseThumbnailTests(TestCase):
         )
 
     def test_course_accepts_thumbnail_file(self):
-        cover = SimpleUploadedFile(
-            "cover.png",
-            b"fake-image-bytes",
-            content_type="image/png",
-        )
+        cover = _image_upload("cover.png")
 
         course = Course.objects.create(
             title="AI Foundations",
@@ -49,14 +55,10 @@ class CourseBuilderApiTests(APITestCase):
 
     def test_instructor_can_replace_course_cover_with_multipart_put_for_student_catalog(self):
         course = self.world.course_a
-        course.thumbnail = SimpleUploadedFile(
-            "old-cover.png", b"old-cover", content_type="image/png",
-        )
+        course.thumbnail = _image_upload("old-cover.png")
         course.save()
 
-        replacement = SimpleUploadedFile(
-            "new-cover.png", b"new-cover", content_type="image/png",
-        )
+        replacement = _image_upload("new-cover.png")
         updated = self.instructor.put(
             f"/api/courses/{course.id}/",
             {"title": course.title, "description": course.description, "thumbnail": replacement},
@@ -64,14 +66,16 @@ class CourseBuilderApiTests(APITestCase):
         )
 
         self.assertEqual(updated.status_code, 200, updated.data)
-        self.assertTrue(updated.data["thumbnail"].endswith("new-cover.png"))
-        self.assertIn("new-cover.png", updated.data["thumbnail_url"])
+        self.assertIn("new-cover", updated.data["thumbnail"])
+        self.assertTrue(updated.data["thumbnail"].endswith(".png"))
+        self.assertIn("new-cover", updated.data["thumbnail_url"])
+        self.assertTrue(updated.data["thumbnail_url"].endswith(".png"))
 
         catalog = self.student.get("/api/courses/")
         self.assertEqual(catalog.status_code, 200, catalog.data)
         catalog_course = next(item for item in catalog.data if item["id"] == course.id)
         self.assertEqual(catalog_course["thumbnail_url"], updated.data["thumbnail_url"])
-        self.assertIn("new-cover.png", catalog_course["thumbnail_url"])
+        self.assertIn("new-cover", catalog_course["thumbnail_url"])
 
     def test_draft_stays_hidden_until_valid_course_is_published(self):
         draft = self.instructor.post("/api/courses/", {
@@ -163,6 +167,18 @@ class CourseBuilderApiTests(APITestCase):
             self.student.get(f"/api/activities/{activity.id}/").data["language"],
             Activity.CodeLanguage.HTML,
         )
+        for language in (
+            Activity.CodeLanguage.C,
+            Activity.CodeLanguage.CPP,
+            Activity.CodeLanguage.JAVA,
+        ):
+            response = self.instructor.patch(
+                f"/api/activities/{activity.id}/",
+                {"language": language},
+                format="json",
+            )
+            self.assertEqual(response.status_code, 200, response.data)
+            self.assertEqual(response.data["language"], language)
 
     def test_student_activity_status_shows_completion_and_overdue_state(self):
         activity = self.world.exercise
@@ -204,3 +220,46 @@ class CourseBuilderApiTests(APITestCase):
         }, format="multipart")
         self.assertEqual(rejected.status_code, 400)
         self.assertFalse(Lesson.objects.filter(pk=lesson_id + 1).exists())
+
+    def test_instructor_manages_sessions_and_only_instructor_led_students_can_list(self):
+        w = self.world
+        starts_at = (timezone.now() + timedelta(days=2)).isoformat()
+        response = self.instructor.post(
+            "/api/live-sessions/",
+            {
+                "course": w.course_a.id,
+                "title": "Weekly workshop",
+                "starts_at": starts_at,
+                "meeting_url": "https://meet.example.com/workshop",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        session_id = response.data["id"]
+        self.assertEqual(self.student.get("/api/live-sessions/").data, [])
+        Enrollment.objects.filter(student=w.student_1, course=w.course_a).update(
+            learning_mode=Enrollment.LearningMode.INSTRUCTOR_LED
+        )
+        available = self.student.get(f"/api/live-sessions/?course={w.course_a.id}")
+        self.assertEqual(available.status_code, 200, available.data)
+        self.assertEqual([item["id"] for item in available.data], [session_id])
+        self.assertEqual(
+            client_for(w.instructor_b).delete(f"/api/live-sessions/{session_id}/").status_code,
+            404,
+        )
+
+    def test_live_session_requires_secure_meeting_link_and_instructor_ownership(self):
+        w = self.world
+        payload = {
+            "course": w.course_a.id,
+            "title": "Weekly workshop",
+            "starts_at": (timezone.now() + timedelta(days=2)).isoformat(),
+            "meeting_url": "http://meet.example.com/workshop",
+        }
+        self.assertEqual(self.instructor.post("/api/live-sessions/", payload, format="json").status_code, 400)
+        payload["meeting_url"] = "https://meet.example.com/workshop"
+        self.assertEqual(
+            client_for(w.instructor_b).post("/api/live-sessions/", payload, format="json").status_code,
+            403,
+        )

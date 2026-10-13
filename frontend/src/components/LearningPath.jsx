@@ -34,7 +34,7 @@ export default function LearningPath({ modules = [], onSelectModule }) {
             return (
               <li
                 key={moduleKey}
-                className={`learning-path-step learning-path-step-${status} min-w-0 rounded-xl border border-slate-700 bg-slate-900/60 p-3 text-center transition-colors ${selectedHere ? 'border-blue-400 bg-blue-950/50' : ''}`}
+                className={`learning-path-step learning-path-step-${status} min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3 text-center transition-colors ${selectedHere ? 'border-blue-400 bg-blue-50' : ''}`}
                 style={{ '--path-delay': `${Math.min(index * 65, 780)}ms` }}
               >
                 <span className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
@@ -55,7 +55,7 @@ export default function LearningPath({ modules = [], onSelectModule }) {
                   <ContentIcon type="module" size={18} />
                   {createElement(StatusIcon, { className: 'learning-path-status-icon', size: 15, 'aria-hidden': true })}
                 </button>
-                <span className="mt-3 block min-h-10 text-center text-xs font-semibold leading-5 text-slate-200" title={module.title}>
+                <span className="mt-3 block min-h-10 text-center text-xs font-semibold leading-5 text-slate-700" title={module.title}>
                   {module.title}
                 </span>
                 <span className={`learning-path-status mt-0.5 inline-flex min-h-5 items-center justify-center rounded-full border px-2 text-center text-[11px] font-semibold ${status === 'failed' ? 'learning-path-label-failed' : status === 'mastered' ? 'learning-path-label-mastered' : status === 'done' ? 'learning-path-label-done' : status === 'locked' ? 'learning-path-label-locked' : 'learning-path-label-current'}`}>
@@ -78,7 +78,7 @@ export default function LearningPath({ modules = [], onSelectModule }) {
       </div>
 
       {selected && (
-        <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-slate-700 bg-slate-900 px-4 py-3 text-sm" role="status">
+        <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm" role="status">
           <ContentIcon type="module" size={16} className="shrink-0 text-blue-300" />
           <span className="font-semibold text-white">{selected.title}</span>
           <span className="text-slate-300">{statusMeta[selected.status]?.label || 'Module'}</span>

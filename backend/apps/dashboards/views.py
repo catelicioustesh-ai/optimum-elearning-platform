@@ -6,9 +6,10 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
-from rest_framework import permissions
+from rest_framework import permissions, serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema, inline_serializer
 
 from apps.accounts.access import ADMIN, role_of
 from apps.accounts.permissions import IsInstructorOrAdmin, IsAdmin
@@ -27,6 +28,89 @@ class StudentDashboardView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        responses=inline_serializer(
+            name="StudentDashboard",
+            fields={
+                "enrolled_courses": inline_serializer(
+                    name="StudentDashboardCourse",
+                    many=True,
+                    fields={
+                        "course_id": serializers.IntegerField(),
+                        "course_title": serializers.CharField(),
+                        "progress_percent": serializers.IntegerField(),
+                        "current_module": serializers.CharField(allow_null=True),
+                        "current_module_id": serializers.IntegerField(allow_null=True),
+                        "current_lesson_id": serializers.IntegerField(allow_null=True),
+                        "current_lesson_title": serializers.CharField(allow_null=True),
+                        "modules": inline_serializer(
+                            name="StudentDashboardModule",
+                            many=True,
+                            fields={
+                                "module_id": serializers.IntegerField(),
+                                "title": serializers.CharField(),
+                                "order": serializers.IntegerField(),
+                                "status": serializers.ChoiceField(
+                                    choices=["done", "active", "locked"]
+                                ),
+                            },
+                        ),
+                        "completed": serializers.BooleanField(),
+                    },
+                ),
+                "current_course": inline_serializer(
+                    name="StudentCurrentCourse",
+                    fields={
+                        "course_id": serializers.IntegerField(),
+                        "course_title": serializers.CharField(),
+                        "progress_percent": serializers.IntegerField(),
+                        "current_module": serializers.CharField(allow_null=True),
+                        "current_module_id": serializers.IntegerField(allow_null=True),
+                        "current_lesson_id": serializers.IntegerField(allow_null=True),
+                        "current_lesson_title": serializers.CharField(allow_null=True),
+                        "modules": inline_serializer(
+                            name="StudentCurrentCourseModule",
+                            many=True,
+                            fields={
+                                "module_id": serializers.IntegerField(),
+                                "title": serializers.CharField(),
+                                "order": serializers.IntegerField(),
+                                "status": serializers.ChoiceField(
+                                    choices=["done", "active", "locked"]
+                                ),
+                            },
+                        ),
+                        "completed": serializers.BooleanField(),
+                    },
+                    allow_null=True,
+                ),
+                "pending_labs": serializers.IntegerField(),
+                "recent_grades": inline_serializer(
+                    name="StudentRecentGrade",
+                    many=True,
+                    fields={
+                        "activity": serializers.CharField(),
+                        "grade": serializers.FloatField(allow_null=True),
+                        "max_score": serializers.FloatField(),
+                        "graded_at": serializers.DateTimeField(allow_null=True),
+                        "feedback": serializers.CharField(allow_null=True),
+                    },
+                ),
+                "upcoming_deadlines": inline_serializer(
+                    name="StudentUpcomingDeadline",
+                    many=True,
+                    fields={
+                        "activity_id": serializers.IntegerField(),
+                        "title": serializers.CharField(),
+                        "activity_type": serializers.CharField(),
+                        "course_id": serializers.IntegerField(),
+                        "course_title": serializers.CharField(),
+                        "deadline": serializers.DateTimeField(),
+                    },
+                ),
+            },
+        )
+    )
     def get(self, request):
         student = request.user
         enrollments = Enrollment.objects.filter(
@@ -87,6 +171,8 @@ class StudentDashboardView(APIView):
             {
                 "activity": s.activity.title,
                 "grade": s.grade,
+                "max_score": s.activity.max_score,
+                "graded_at": s.graded_at.isoformat() if s.graded_at else None,
                 "feedback": s.feedback,
             }
             for s in recent_grades
@@ -133,6 +219,41 @@ class InstructorDashboardView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated, IsInstructorOrAdmin]
 
+    @extend_schema(
+        responses=inline_serializer(
+            name="InstructorDashboard",
+            fields={
+                "pending_submissions": inline_serializer(
+                    name="InstructorPendingSubmission",
+                    many=True,
+                    fields={
+                        "submission_id": serializers.IntegerField(),
+                        "student": serializers.CharField(),
+                        "activity": serializers.CharField(),
+                        "course": serializers.CharField(),
+                        "submitted_at": serializers.DateTimeField(),
+                    },
+                ),
+                "pending_submission_count": serializers.IntegerField(),
+                "students_falling_behind": inline_serializer(
+                    name="InstructorStudentFallingBehind",
+                    many=True,
+                    fields={
+                        "student": serializers.CharField(),
+                        "course": serializers.CharField(),
+                    },
+                ),
+                "my_courses": inline_serializer(
+                    name="InstructorDashboardCourse",
+                    many=True,
+                    fields={
+                        "id": serializers.IntegerField(),
+                        "title": serializers.CharField(),
+                    },
+                ),
+            },
+        )
+    )
     def get(self, request):
         instructor = request.user
         my_courses = Course.objects.all() if role_of(instructor) == ADMIN else Course.objects.filter(instructor=instructor)
@@ -192,6 +313,36 @@ class AdminDashboardView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
 
+    @extend_schema(
+        responses=inline_serializer(
+            name="AdminDashboard",
+            fields={
+                "total_students": serializers.IntegerField(),
+                "total_instructors": serializers.IntegerField(),
+                "total_courses": serializers.IntegerField(),
+                "active_enrollments": serializers.IntegerField(),
+                "pending_submissions": serializers.IntegerField(),
+                "registered_students": inline_serializer(
+                    name="AdminRegisteredStudent",
+                    many=True,
+                    fields={
+                        "id": serializers.IntegerField(),
+                        "username": serializers.CharField(),
+                        "full_name": serializers.CharField(),
+                        "email": serializers.EmailField(),
+                        "enrolled_courses": inline_serializer(
+                            name="AdminStudentCourse",
+                            many=True,
+                            fields={
+                                "id": serializers.IntegerField(),
+                                "title": serializers.CharField(),
+                            },
+                        ),
+                    },
+                ),
+            },
+        )
+    )
     def get(self, request):
         students = User.objects.filter(role="student").order_by("username")
         registered_students = []

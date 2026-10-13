@@ -99,6 +99,7 @@ INSTALLED_APPS = [
     "apps.execution",
     "apps.dashboards",
     "apps.engagement",
+    "apps.community",
     "apps.risk",
     "apps.sequencing",
     "apps.allocation",
@@ -288,7 +289,7 @@ REST_FRAMEWORK = {
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Optimum ERP LMS API",
-    "DESCRIPTION": "E-Learning Management System API",
+    "DESCRIPTION": "API reference for the Optimum ERP LMS backend.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
@@ -298,13 +299,15 @@ SPECTACULAR_SETTINGS = {
         "displayOperationId": True,
         "filter": True,
     },
-}
-
-SPECTACULAR_SETTINGS = {
-    "TITLE": "Optimum ERP LMS API",
-    "DESCRIPTION": "API reference for the Optimum ERP LMS backend.",
-    "VERSION": "1.0.0",
-    "SERVE_INCLUDE_SCHEMA": False,
+    "ENUM_NAME_OVERRIDES": {
+        "CourseStatusEnum": [("draft", "Draft"), ("published", "Published")],
+        "CertificateStatusEnum": [("issued", "Issued"), ("revoked", "Revoked")],
+        "SubmissionStatusEnum": [
+            ("submitted", "Submitted"),
+            ("graded", "Graded"),
+            ("not_completed", "Not Completed"),
+        ],
+    },
 }
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173").rstrip("/")

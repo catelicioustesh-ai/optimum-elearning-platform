@@ -13,8 +13,8 @@ flowchart LR
         DB[(Microsoft SQL Server)]
     end
 
-    subgraph External
-        SANDBOX[Code execution sandbox\n— not yet built]
+    subgraph Isolated execution
+        SANDBOX[Docker code runner\ninternal network, no internet or database access]
     end
 
     FE -->|HTTPS + JWT| API
@@ -23,9 +23,10 @@ flowchart LR
 ```
 
 This matches the brief's required architecture (section 16):
-Frontend → REST API → Backend → Database, with a separate sandbox for
-running student code. The sandbox is deliberately **not** part of this
-codebase — see "Why the sandbox is external" below.
+Frontend → REST API → Backend → Database, with an isolated service for
+running student code. The Docker-based runner is included in this repository
+under `sandbox/`; it runs as a separate, restricted container and is not part
+of the Django process.
 
 ## Request flow, end to end
 
@@ -73,7 +74,7 @@ backend/apps/
 ├── engagement/    Study-day streaks, achievement awards, notifications, certificates
 ├── submissions/   Lab/assignment submissions, attempt limits, grading
 ├── quizzes/       Quiz, Question, auto-grading
-├── execution/     Thin client to the external sandbox — no models
+├── execution/     Authenticated proxy to the isolated sandbox service — no models
 ├── dashboards/    Read-only aggregation and weekly performance snapshots
 ├── risk/          Early warning scoring over performance snapshots
 ├── sequencing/    Database-derived next-step recommendations
@@ -197,16 +198,22 @@ permission classes + the module-locking checks). `ProtectedRoute` only
 exists so a logged-in student doesn't see a confusing instructor UI
 shell; it has zero bearing on what data they can actually get.
 
-## Why the sandbox is external, not part of this codebase
+## Isolated code execution
 
 Brief section 6 requires code execution to be **isolated from the main
-application** so unsafe student code can't affect the platform. Running
-arbitrary student code inside the same Django process that also holds
-grades, auth, and everything else would defeat that requirement entirely.
-`apps/execution/views.py` is a thin proxy — it forwards to `SANDBOX_URL`
-and returns whatever that service reports, nothing more. Standing up the
-actual sandbox (Judge0, Piston, or a custom Docker-based runner) is
-separate infrastructure work, not a Django app.
+application** so unsafe student code cannot affect the platform.
+`apps/execution/views.py` is a thin authenticated proxy to the separate
+`sandbox/` container. The runner applies per-request resource and process
+limits; Compose additionally gives it a read-only root filesystem, drops
+capabilities, sets memory and process ceilings, and connects it only to an
+internal network with no internet or database route.
+
+For a native Django development server on Windows, the optional
+`docker-compose.runner.yml` starts a loopback-only host relay. The relay
+forwards to the runner without publishing the runner container itself.
+Production Compose does not include the relay: its backend reaches the
+runner directly over the isolated network. See [CONTAINERS.md](../CONTAINERS.md)
+and [sandbox/README.md](../sandbox/README.md) for setup and verification.
 
 ## Deployment topology (target — not yet deployed)
 

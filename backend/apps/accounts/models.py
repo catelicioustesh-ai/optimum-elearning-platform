@@ -23,6 +23,9 @@ class User(AbstractUser):
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.STUDENT)
     email = models.EmailField(unique=True)
     email_verified = models.BooleanField(default=False)
+    bio = models.CharField(max_length=500, blank=True)
+    profile_photo = models.ImageField(upload_to="profile_photos/", blank=True, null=True)
+    leaderboard_opt_in = models.BooleanField(default=False)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]

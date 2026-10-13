@@ -1,8 +1,8 @@
 # Coding E-Learning Platform — Django Backend
 
-Django + Django REST Framework, one app per domain (matches the project brief
-1:1): `accounts`, `courses`, `enrollment`, `progress`, `submissions`,
-`quizzes`, `execution`, `dashboards`.
+Django + Django REST Framework, organized into domain apps: `accounts`,
+`courses`, `enrollment`, `progress`, `submissions`, `quizzes`, `execution`,
+`dashboards`, `engagement`, `risk`, `sequencing`, and `allocation`.
 
 ## Setup
 
@@ -57,7 +57,8 @@ Every endpoint below was tested against a running server, not just written:
   embedded in token), token refresh, `/me/`
 - **Courses**: full CRUD for Course → Module → Lesson → Activity,
   instructor-only writes, verified a student gets 403 trying to write
-- **Enrollment**: student self-enrolls
+- **Enrollment**: students self-enroll and may unenroll from their own courses;
+  unenrolling preserves submissions, grades, quiz attempts, and progress
 - **Progress / module locking**: verified live — Module 2 was `locked`
   before Module 1's activity was graded, `active` after, and `done` once
   its own required activity (a quiz) was passed. This is the brief's
@@ -65,19 +66,18 @@ Every endpoint below was tested against a running server, not just written:
 - **Submissions**: attempt limiting verified (2nd submission on a
   `max_attempts=1` activity correctly rejected with 400); grading
   triggers module-completion
-- **Quizzes**: auto-grading verified — wrong answer scored 0% and did not
-  unlock the next module; correct answer on a later attempt scored 100%
-  and did unlock it
+- **Quizzes**: instructor/admin question authoring and auto-grading are
+  implemented — wrong answers do not unlock the next module; passing answers
+  do
 - **Dashboards**: all three (student/instructor/admin) return real
   aggregated data from a real multi-step scenario, and cross-role access
   is blocked (student → admin dashboard = 403)
 
-## What's stubbed / needs more work
+## Operational follow-up
 
 - **`execution` app**: forwards to the separate `sandbox/` service in this
   repository. Keep the runner isolated from Django and verify its container
   restrictions and network boundaries in the deployment environment.
-- **Question creation**: quiz questions are managed through the `QuestionViewSet` under `/api/quiz-questions/`; instructor/admin write permissions are enforced.
 - **"Falling behind" definition** in the instructor dashboard (no
   completed activity in 7 days) is a real, working first pass — loops over
   every enrolled student per course. Fine at small scale; revisit with a

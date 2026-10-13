@@ -1,7 +1,8 @@
-from rest_framework import permissions
+from rest_framework import permissions, serializers
 from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from drf_spectacular.utils import extend_schema, inline_serializer
 
 from apps.accounts.access import can_view_course
 from apps.courses.models import Course, Module
@@ -17,6 +18,20 @@ class CourseProgressView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        responses=inline_serializer(
+            name="CourseModuleProgress",
+            many=True,
+            fields={
+                "module_id": serializers.IntegerField(),
+                "title": serializers.CharField(),
+                "order": serializers.IntegerField(),
+                "status": serializers.ChoiceField(
+                    choices=["done", "active", "locked"]
+                ),
+            },
+        )
+    )
     def get(self, request, course_id):
         try:
             course = Course.objects.get(pk=course_id)
@@ -58,6 +73,15 @@ class ModuleAccessCheckView(APIView):
     """
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        responses=inline_serializer(
+            name="ModuleAccessCheck",
+            fields={
+                "module_id": serializers.IntegerField(),
+                "unlocked": serializers.BooleanField(),
+            },
+        )
+    )
     def get(self, request, module_id):
         try:
             module = Module.objects.select_related("course").get(pk=module_id)
@@ -124,12 +148,47 @@ class LessonVideoProgressView(APIView):
             raise ValidationError("This lesson has no trackable video.")
         return lesson
 
+    @extend_schema(
+        responses=inline_serializer(
+            name="LessonVideoProgress",
+            fields={
+                "lesson": serializers.IntegerField(),
+                "position": serializers.FloatField(),
+                "duration": serializers.FloatField(),
+                "watched_seconds": serializers.FloatField(),
+                "percent": serializers.FloatField(),
+                "completed": serializers.BooleanField(),
+            },
+        )
+    )
     def get(self, request, lesson_id):
         lesson = self._lesson(request, lesson_id)
         vp = VideoProgress.objects.filter(student=request.user, lesson=lesson).first()
         return Response(_video_payload(vp) if vp else {
             "lesson": lesson.id, "position": 0, "duration": 0, "watched_seconds": 0, "percent": 0, "completed": False})
 
+    @extend_schema(
+        request=inline_serializer(
+            name="LessonVideoProgressUpdate",
+            fields={
+                "position": serializers.FloatField(),
+                "duration": serializers.FloatField(),
+                "playing": serializers.BooleanField(required=False),
+                "rate": serializers.FloatField(required=False),
+            },
+        ),
+        responses=inline_serializer(
+            name="LessonVideoProgressUpdateResponse",
+            fields={
+                "lesson": serializers.IntegerField(),
+                "position": serializers.FloatField(),
+                "duration": serializers.FloatField(),
+                "watched_seconds": serializers.FloatField(),
+                "percent": serializers.FloatField(),
+                "completed": serializers.BooleanField(),
+            },
+        ),
+    )
     def put(self, request, lesson_id):
         lesson = self._lesson(request, lesson_id)
         try:
@@ -164,6 +223,25 @@ class LessonVideoSummaryView(APIView):
     enrolled student has genuinely watched. Only for lessons in courses they teach."""
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        responses=inline_serializer(
+            name="LessonVideoProgressSummary",
+            fields={
+                "lesson": serializers.IntegerField(),
+                "has_video": serializers.BooleanField(),
+                "students": inline_serializer(
+                    name="LessonVideoStudentProgress",
+                    many=True,
+                    fields={
+                        "student_id": serializers.IntegerField(),
+                        "student": serializers.CharField(),
+                        "percent": serializers.FloatField(),
+                        "completed": serializers.BooleanField(),
+                    },
+                ),
+            },
+        )
+    )
     def get(self, request, lesson_id):
         if role_of(request.user) not in (INSTRUCTOR, ADMIN):
             raise PermissionDenied()
