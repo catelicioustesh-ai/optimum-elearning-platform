@@ -465,6 +465,12 @@ body {
 /* ---------- toasts ---------- */
 .dg-toasts { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 60; display: flex; flex-direction: column; gap: 10px; align-items: center; }
 .dg-toast { position: relative; overflow: hidden; display: flex; gap: 10px; align-items: center; background: #0f172a; color: #fff; padding: 12px 18px; border-radius: 16px; font-weight: 500; box-shadow: 0 20px 40px -18px #000a; animation: dg-ti .4s cubic-bezier(.3,1.5,.5,1); }
+.dg-toasts { width: min(92vw, 34rem); }
+.dg-toast[data-type="success"] { background: #14532d; }
+.dg-toast[data-type="error"] { background: #7f1d1d; }
+.dg-toast[data-type="info"] { background: #1e3a8a; }
+.dg-toast[data-type="error"] i { color: #fecaca; }
+.dg-toast[data-type="success"] i { color: #bbf7d0; }
 .dg-toast b { position: absolute; left: 0; bottom: 0; height: 3px; background: linear-gradient(90deg, var(--h2), var(--a2)); animation: dg-tb 3.2s linear forwards; }
 .dg-toast.dg-bye { animation: dg-to .35s ease forwards; }
 @keyframes dg-ti { from { opacity: 0; transform: translateY(24px) scale(.92); } }

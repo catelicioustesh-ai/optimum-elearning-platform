@@ -8,7 +8,9 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-    ports: ["8080:80"]
+    # Keep the plain-HTTP development endpoint off the LAN; production must
+    # put a TLS-terminating reverse proxy in front of this port.
+    ports: ["127.0.0.1:8080:80"]
     volumes:
       - media:/media:ro
     depends_on: [backend]

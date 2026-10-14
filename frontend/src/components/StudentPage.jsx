@@ -8,22 +8,24 @@ export default function StudentPage({
   children,
   profile,
   fetchStudentProfile = true,
+  role: roleProp,
 }) {
   const { auth } = useAuth()
+  const role = roleProp || auth?.role || 'student'
   return (
     <DashboardLayout
       user={{ name: auth?.email || 'Student' }}
       studentProfile={profile}
       fetchStudentProfile={fetchStudentProfile}
-      role="student"
+      role={role}
     >
       <Helmet>
         <title>{title} — Optimum LMS</title>
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>
-      <div className="space-y-6" data-role="student">
+      <div className="space-y-6" data-role={role}>
         <header>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">Student workspace</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">{role} workspace</p>
           <h1 className="mt-1 text-2xl font-bold text-slate-900">{title}</h1>
           {description && <p className="mt-1 max-w-2xl text-sm text-slate-600">{description}</p>}
         </header>

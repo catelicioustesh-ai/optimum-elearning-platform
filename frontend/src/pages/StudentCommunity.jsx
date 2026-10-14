@@ -1,14 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import { BookOpen, ChevronDown, LoaderCircle, MessageCircle, MessageSquareText, RotateCw, Send } from 'lucide-react'
+import { BookOpen, ChevronDown, LoaderCircle, MessageCircle, MessageSquareText, RotateCw, Send, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import StudentPage, { StudentPageMessage } from '../components/StudentPage.jsx'
+import { useAuth } from '../context/useAuth.js'
 import { api } from '../lib/api.js'
+import { useToast } from '../hooks/useToast.js'
 
 function listFromResponse(data) {
   return Array.isArray(data) ? data : data.results || []
 }
 
 export default function StudentCommunity() {
+  const { auth } = useAuth()
+  const toast = useToast()
   const [enrollments, setEnrollments] = useState([])
   const [threads, setThreads] = useState([])
   const [courseId, setCourseId] = useState('')
@@ -20,6 +24,7 @@ export default function StudentCommunity() {
   const [loading, setLoading] = useState(true)
   const [posting, setPosting] = useState(false)
   const [replyingTo, setReplyingTo] = useState(null)
+  const [deletingItem, setDeletingItem] = useState('')
   const [error, setError] = useState('')
   const [reload, setReload] = useState(0)
   const postingFormRef = useRef(null)
@@ -27,18 +32,20 @@ export default function StudentCommunity() {
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([api.get('/enrollments/'), api.get('/community/discussions/')])
-      .then(([enrollmentData, threadData]) => {
+    const isStudent = auth?.role === 'student'
+    const courseRequest = isStudent ? api.get('/enrollments/') : api.get('/courses/')
+    Promise.all([courseRequest, api.get('/community/discussions/')])
+      .then(([courseData, threadData]) => {
         if (cancelled) return
-        const availableEnrollments = listFromResponse(enrollmentData)
-        setEnrollments(availableEnrollments)
-        setCourseId((current) => current || String(availableEnrollments[0]?.course || ''))
+        const availableCourses = listFromResponse(courseData)
+        setEnrollments(availableCourses)
+        setCourseId((current) => current || String(availableCourses[0]?.course ?? availableCourses[0]?.id ?? ''))
         setThreads(listFromResponse(threadData))
       })
       .catch((err) => { if (!cancelled) setError(err.message || 'Community discussions could not be loaded.') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [reload])
+  }, [auth?.role, reload])
 
   useEffect(() => {
     if (!postingFormOpen) return
@@ -55,9 +62,13 @@ export default function StudentCommunity() {
       await api.post('/community/discussions/', { course: Number(courseId), title: title.trim(), body: body.trim() })
       setTitle('')
       setBody('')
+      setPostingFormOpen(false)
       setReload((value) => value + 1)
+      toast('Discussion posted successfully.', 'success')
     } catch (err) {
-      setError(err.message || 'Your discussion could not be posted.')
+      const message = err.message || 'Your discussion could not be posted.'
+      setError(message)
+      toast(message, 'error')
     } finally {
       setPosting(false)
     }
@@ -72,15 +83,40 @@ export default function StudentCommunity() {
       await api.post(`/community/discussions/${thread.id}/replies/`, { body: replyBody })
       setReplies((current) => ({ ...current, [thread.id]: '' }))
       setReload((value) => value + 1)
+      toast('Reply posted successfully.', 'success')
     } catch (err) {
-      setError(err.message || 'Your reply could not be posted.')
+      const message = err.message || 'Your reply could not be posted.'
+      setError(message)
+      toast(message, 'error')
     } finally {
       setReplyingTo(null)
     }
   }
 
-  const selectedEnrollment = enrollments.find((item) => String(item.course) === String(courseId))
-  const selectedCourseTitle = selectedEnrollment?.course_detail?.title || 'Course discussions'
+  async function deleteItem(kind, id, thread) {
+    const itemName = kind === 'thread' ? 'discussion' : 'reply'
+    if (!window.confirm(`Delete this ${itemName}? This cannot be undone.`)) return
+    const key = `${kind}:${id}`
+    setDeletingItem(key)
+    setError('')
+    try {
+      const path = kind === 'thread'
+        ? `/community/discussions/${id}/`
+        : `/community/discussions/${thread.id}/replies/${id}/`
+      await api.delete(path)
+      setReload((value) => value + 1)
+      toast(`${kind === 'thread' ? 'Discussion' : 'Reply'} deleted successfully.`, 'success')
+    } catch (err) {
+      const message = err.message || `The ${kind} could not be deleted.`
+      setError(message)
+      toast(message, 'error')
+    } finally {
+      setDeletingItem('')
+    }
+  }
+
+  const selectedEnrollment = enrollments.find((item) => String(item.course ?? item.id) === String(courseId))
+  const selectedCourseTitle = selectedEnrollment?.course_detail?.title || selectedEnrollment?.title || 'Course discussions'
   const [courseShortTitle, ...courseSubtitleParts] = selectedCourseTitle.split(':')
   const courseSubtitle = courseSubtitleParts.join(':').trim()
   const visibleThreads = threads
@@ -94,6 +130,7 @@ export default function StudentCommunity() {
       return new Date(right.updated_at) - new Date(left.updated_at)
     })
   const replyCount = visibleThreads.reduce((total, thread) => total + (thread.replies?.length || 0), 0)
+  const canModerate = auth?.role === 'admin' || auth?.role === 'instructor'
 
   return (
     <StudentPage title="Community" description="Ask questions and share course-specific learning tips with other enrolled students.">
@@ -133,7 +170,7 @@ export default function StudentCommunity() {
                 <label className="grid gap-1 text-xs font-semibold text-slate-600">
                   Choose course
                   <select value={courseId} onChange={(event) => setCourseId(event.target.value)} className="min-w-52 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800">
-                    {enrollments.map((enrollment) => <option key={enrollment.id} value={enrollment.course}>{enrollment.course_detail?.title || `Course ${enrollment.course}`}</option>)}
+                    {enrollments.map((enrollment) => <option key={enrollment.id} value={enrollment.course ?? enrollment.id}>{enrollment.course_detail?.title || enrollment.title || `Course ${enrollment.course ?? enrollment.id}`}</option>)}
                   </select>
                 </label>
               )}
@@ -205,7 +242,21 @@ export default function StudentCommunity() {
                     <span className="rounded-xl bg-blue-50 p-2 text-blue-700"><MessageSquareText size={18} aria-hidden="true" /></span>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-start justify-between gap-2">
-                        <h3 className="font-semibold text-slate-900">{thread.title}</h3>
+                        <div className="flex min-w-0 items-start gap-2">
+                          <h3 className="font-semibold text-slate-900">{thread.title}</h3>
+                          {(canModerate || String(thread.author_id) === String(auth?.id)) && (
+                            <button
+                              type="button"
+                              onClick={() => deleteItem('thread', thread.id, thread)}
+                              disabled={deletingItem === `thread:${thread.id}`}
+                              aria-label={`Delete discussion: ${thread.title}`}
+                              className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                            >
+                              {deletingItem === `thread:${thread.id}` ? <LoaderCircle size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                              Delete
+                            </button>
+                          )}
+                        </div>
                         <span className="inline-flex items-center gap-1.5 text-xs text-slate-500">
                           <MessageCircle size={13} aria-hidden="true" />
                           {(thread.replies || []).length} {(thread.replies || []).length === 1 ? 'reply' : 'replies'}
@@ -220,7 +271,21 @@ export default function StudentCommunity() {
                   <div className="mt-4 space-y-2 border-l-2 border-blue-100 pl-4">
                     {(thread.replies || []).map((reply) => (
                       <div key={reply.id} className="rounded-xl bg-slate-50 px-3 py-2.5">
-                        <p className="text-xs font-semibold text-slate-800">{reply.author_name} <time className="ml-1 font-normal text-slate-500" dateTime={reply.created_at}>{new Date(reply.created_at).toLocaleDateString()}</time></p>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold text-slate-800">{reply.author_name} <time className="ml-1 font-normal text-slate-500" dateTime={reply.created_at}>{new Date(reply.created_at).toLocaleDateString()}</time></p>
+                          {(canModerate || String(reply.author_id) === String(auth?.id)) && (
+                            <button
+                              type="button"
+                              onClick={() => deleteItem('reply', reply.id, thread)}
+                              disabled={deletingItem === `reply:${reply.id}`}
+                              aria-label={`Delete reply by ${reply.author_name}`}
+                              className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                            >
+                              {deletingItem === `reply:${reply.id}` ? <LoaderCircle size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                              Delete
+                            </button>
+                          )}
+                        </div>
                         <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{reply.body}</p>
                       </div>
                     ))}
@@ -246,7 +311,7 @@ export default function StudentCommunity() {
                 Course
                 <select value={courseId} onChange={(event) => setCourseId(event.target.value)} className="rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900">
                   {enrollments.map((enrollment) => (
-                    <option key={enrollment.id} value={enrollment.course}>{enrollment.course_detail?.title || `Course ${enrollment.course}`}</option>
+                  <option key={enrollment.id} value={enrollment.course ?? enrollment.id}>{enrollment.course_detail?.title || enrollment.title || `Course ${enrollment.course ?? enrollment.id}`}</option>
                   ))}
                 </select>
               </label>

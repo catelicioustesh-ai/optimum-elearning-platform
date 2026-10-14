@@ -27,11 +27,12 @@ class StudentBookmarkSerializer(serializers.ModelSerializer):
 
 class DiscussionReplySerializer(serializers.ModelSerializer):
     author_name = serializers.SerializerMethodField()
+    author_id = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = DiscussionReply
-        fields = ("id", "author_name", "body", "created_at")
-        read_only_fields = ("id", "author_name", "created_at")
+        fields = ("id", "author_id", "author_name", "body", "created_at")
+        read_only_fields = ("id", "author_id", "author_name", "created_at")
 
     def get_author_name(self, obj: DiscussionReply) -> str:
         return obj.author.get_full_name() or obj.author.username
@@ -39,6 +40,7 @@ class DiscussionReplySerializer(serializers.ModelSerializer):
 
 class DiscussionThreadSerializer(serializers.ModelSerializer):
     author_name = serializers.SerializerMethodField()
+    author_id = serializers.IntegerField(read_only=True)
     course_title = serializers.CharField(source="course.title", read_only=True)
     replies = DiscussionReplySerializer(many=True, read_only=True)
 
@@ -48,6 +50,7 @@ class DiscussionThreadSerializer(serializers.ModelSerializer):
             "id",
             "course",
             "course_title",
+            "author_id",
             "author_name",
             "title",
             "body",
@@ -55,7 +58,7 @@ class DiscussionThreadSerializer(serializers.ModelSerializer):
             "updated_at",
             "replies",
         )
-        read_only_fields = ("id", "author_name", "course_title", "created_at", "updated_at", "replies")
+        read_only_fields = ("id", "author_id", "author_name", "course_title", "created_at", "updated_at", "replies")
 
     def get_author_name(self, obj: DiscussionThread) -> str:
         return obj.author.get_full_name() or obj.author.username

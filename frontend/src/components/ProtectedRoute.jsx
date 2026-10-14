@@ -11,8 +11,11 @@ import { useAuth } from '../context/useAuth.js'
  * component alone to protect anything.
  */
 export default function ProtectedRoute({ children, allowedRoles }) {
-  const { auth } = useAuth()
+  const { auth, loading } = useAuth()
 
+  if (loading) {
+    return <div className="grid min-h-screen place-items-center text-sm text-text-muted" role="status">Loading your session...</div>
+  }
   if (!auth) {
     return <Navigate to="/login" replace />
   }

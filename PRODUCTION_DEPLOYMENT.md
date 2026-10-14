@@ -63,24 +63,29 @@ Run the web process with Gunicorn, for example:
 gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --threads 4 --timeout 120
 ```
 
-The TLS proxy must forward `X-Forwarded-Proto: https`. Django enables HTTPS
-redirects, HSTS, secure cookies, and clickjacking protection when
-`DJANGO_DEBUG=False`.
+The public endpoint must use HTTPS for both the frontend and API. Configure the
+TLS proxy to redirect HTTP to HTTPS and overwrite `X-Forwarded-Proto` with the
+client scheme; the internal nginx forwards that value to Django and redirects
+requests the trusted proxy identifies as HTTP. Django enables HTTPS redirects,
+HSTS, secure cookies, and clickjacking protection when `DJANGO_DEBUG=False`.
 
 ## Authentication and roles
 
 Public registration creates students only. Instructors and administrators
 must be provisioned by an administrator through Django admin (`/admin/`),
-where the platform role is selectable. Login uses email plus password and
-embeds the server-controlled role in the access token; API permissions still
-enforce the role server-side. Access tokens expire after 15 minutes, refresh
-tokens rotate, and logout blacklists the submitted refresh token.
+where the platform role is selectable. Login uses email plus password and sets access/refresh JWTs in HttpOnly,
+SameSite cookies; token values are not returned in JSON or stored in
+JavaScript-readable browser storage. State-changing requests require a CSRF
+token. Access tokens expire after 15 minutes, refresh tokens rotate, and
+logout blacklists the refresh token. Keep the frontend and API same-site
+(preferably same-origin through the reverse proxy) so browsers send the
+cookies reliably.
 
-The frontend refreshes an expired access token once and then logs out on a
-second 401. For the strongest browser threat model, move refresh tokens from
-browser storage to Secure, HttpOnly, SameSite cookies behind a same-origin
-backend or BFF before public launch; browser JavaScript storage is vulnerable
-to token theft if an XSS vulnerability is ever introduced.
+The browser's own developer tools can still display the username/email and
+password in the login request because the browser must submit them to
+authenticate. HTTPS prevents other network users from reading that request;
+it cannot hide it from the person controlling the browser. The server never
+returns the password or JWT values in the login response.
 
 ## Capacity and operational requirements
 

@@ -7,6 +7,7 @@ import AuthBrand from '../components/AuthBrand.jsx'
 import Logo from '../components/Logo.jsx'
 import EmailInput from '../components/EmailInput.jsx'
 import PasswordInput from '../components/PasswordInput.jsx'
+import { useToast } from '../hooks/useToast.js'
 
 const roleOptions = [
   { id: 'student', label: 'Student', description: 'Continue learning', icon: GraduationCap },
@@ -54,6 +55,7 @@ export default function Login() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
+  const toast = useToast()
   const navigate = useNavigate()
   const location = useLocation()
 
@@ -65,6 +67,7 @@ export default function Login() {
     try {
       // Email is case-insensitive and may carry stray spaces; the password is sent exactly as typed.
       const session = await login(email.trim().toLowerCase(), password, accountType)
+      toast('Logged in successfully.', 'success')
       navigate(`/dashboard/${session.role}`)
     } catch (err) {
       setError(err.status === 429
