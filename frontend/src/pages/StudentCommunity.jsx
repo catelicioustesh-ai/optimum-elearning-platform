@@ -103,7 +103,7 @@ export default function StudentCommunity() {
       const path = kind === 'thread'
         ? `/community/discussions/${id}/`
         : `/community/discussions/${thread.id}/replies/${id}/`
-      await api.delete(path)
+      await api.del(path)
       setReload((value) => value + 1)
       toast(`${kind === 'thread' ? 'Discussion' : 'Reply'} deleted successfully.`, 'success')
     } catch (err) {

@@ -5,8 +5,9 @@ Matches brief sections 13, 14, 15 field-for-field.
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework import permissions, serializers
+from rest_framework import permissions, serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema, inline_serializer
@@ -322,6 +323,7 @@ class AdminDashboardView(APIView):
                 "total_courses": serializers.IntegerField(),
                 "active_enrollments": serializers.IntegerField(),
                 "pending_submissions": serializers.IntegerField(),
+                "pending_learner_approval_count": serializers.IntegerField(),
                 "registered_students": inline_serializer(
                     name="AdminRegisteredStudent",
                     many=True,
@@ -338,13 +340,27 @@ class AdminDashboardView(APIView):
                                 "title": serializers.CharField(),
                             },
                         ),
+                        "pending_learner_approvals": inline_serializer(
+                            name="AdminPendingLearnerApproval",
+                            many=True,
+                            fields={
+                                "id": serializers.IntegerField(),
+                                "username": serializers.CharField(),
+                                "full_name": serializers.CharField(),
+                                "email": serializers.EmailField(),
+                                "email_verified": serializers.BooleanField(),
+                                "date_joined": serializers.DateTimeField(),
+                            },
+                        ),
                     },
                 ),
             },
         )
     )
     def get(self, request):
-        students = User.objects.filter(role="student").order_by("username")
+        students = User.objects.filter(
+            role="student", is_approved=True, is_active=True
+        ).order_by("username")
         registered_students = []
         for student in students:
             enrolled_courses = list(
@@ -363,6 +379,10 @@ class AdminDashboardView(APIView):
                 ],
             })
 
+        pending_students = User.objects.filter(
+            role="student", is_approved=False
+        ).order_by("date_joined")
+
         return Response({
             "total_students": students.count(),
             "total_instructors": User.objects.filter(role="instructor").count(),
@@ -370,4 +390,96 @@ class AdminDashboardView(APIView):
             "active_enrollments": Enrollment.objects.count(),
             "pending_submissions": Submission.objects.filter(status=SubmissionStatus.SUBMITTED).count(),
             "registered_students": registered_students,
+            "pending_learner_approvals": [
+                {
+                    "id": student.id,
+                    "username": student.username,
+                    "full_name": student.get_full_name(),
+                    "email": student.email,
+                    "email_verified": student.email_verified,
+                    "date_joined": student.date_joined,
+                }
+                for student in pending_students
+            ],
+            "pending_learner_approval_count": pending_students.count(),
+        })
+
+
+class PendingLearnerApprovalsView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    @extend_schema(
+        responses=inline_serializer(
+            name="PendingLearnerApproval",
+            many=True,
+            fields={
+                "id": serializers.IntegerField(),
+                "username": serializers.CharField(),
+                "full_name": serializers.CharField(),
+                "email": serializers.EmailField(),
+                "email_verified": serializers.BooleanField(),
+                "date_joined": serializers.DateTimeField(),
+            },
+        )
+    )
+    def get(self, request):
+        pending_students = User.objects.filter(
+            role="student", is_approved=False
+        ).order_by("date_joined")
+        return Response([
+            {
+                "id": student.id,
+                "username": student.username,
+                "full_name": student.get_full_name(),
+                "email": student.email,
+                "email_verified": student.email_verified,
+                "date_joined": student.date_joined,
+            }
+            for student in pending_students
+        ])
+
+
+class ApproveLearnerView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    @extend_schema(
+        responses=inline_serializer(
+            name="ApprovedLearner",
+            fields={
+                "id": serializers.IntegerField(),
+                "username": serializers.CharField(),
+                "full_name": serializers.CharField(),
+                "email": serializers.EmailField(),
+                "enrolled_courses": inline_serializer(
+                    name="ApprovedLearnerCourse",
+                    many=True,
+                    fields={
+                        "id": serializers.IntegerField(),
+                        "title": serializers.CharField(),
+                    },
+                ),
+            },
+        )
+    )
+    def post(self, request, learner_id):
+        learner = get_object_or_404(
+            User,
+            pk=learner_id,
+            role="student",
+            is_approved=False,
+        )
+        if not learner.email_verified:
+            return Response(
+                {"detail": "This learner must verify their email before approval."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        learner.is_approved = True
+        learner.is_active = True
+        learner.save(update_fields=["is_approved", "is_active"])
+        return Response({
+            "id": learner.id,
+            "username": learner.username,
+            "full_name": learner.get_full_name(),
+            "email": learner.email,
+            "enrolled_courses": [],
         })

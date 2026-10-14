@@ -21,6 +21,7 @@ class User(AbstractUser):
     email is used as the login identifier instead of username.
     """
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.STUDENT)
+    is_approved = models.BooleanField(default=True)
     email = models.EmailField(unique=True)
     email_verified = models.BooleanField(default=False)
     bio = models.CharField(max_length=500, blank=True)

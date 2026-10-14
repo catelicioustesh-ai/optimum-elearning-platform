@@ -21,15 +21,10 @@ export function AuthProvider({ children }) {
     return () => { active = false }
   }, [])
 
-  const login = useCallback(async (email, password, expectedRole) => {
+  const login = useCallback(async (email, password) => {
     const result = await api.login(email, password)
     const user = result?.user
     if (!user?.role) throw new Error('The server returned an invalid sign-in session. Please try again.')
-    if (expectedRole && user.role !== expectedRole) {
-      await api.logout()
-      const roleName = { student: 'student', instructor: 'instructor', admin: 'administrator' }[user.role] || 'assigned'
-      throw new Error(`This account is registered as ${roleName}. Choose that account type and try again.`)
-    }
     const session = { id: user.id, role: user.role, email: user.email }
     setAuth(session)
     return session

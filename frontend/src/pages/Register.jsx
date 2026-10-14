@@ -5,7 +5,7 @@ import PasswordChecklist from '../components/PasswordChecklist.jsx'
 import { checkPassword } from '../lib/passwordRules.js'
 import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, Check, ChevronDown, Mail, Sparkles, User } from 'lucide-react'
+import { ArrowRight, Check, ChevronDown, Mail, ShieldCheck, Sparkles, User } from 'lucide-react'
 import { api } from '../lib/api.js'
 import AuthBrand from '../components/AuthBrand.jsx'
 
@@ -111,6 +111,10 @@ export default function Register() {
               </div>
 
               <form className="space-y-4" onSubmit={handleSubmit}>
+                <div className="flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm text-blue-950">
+                  <ShieldCheck size={18} className="mt-0.5 shrink-0 text-blue-700" aria-hidden="true" />
+                  <p>New learner accounts are reviewed by an administrator. Verify your email while you wait for approval.</p>
+                </div>
                 {error && (
                   <div className="auth-danger rounded-xl px-4 py-3 text-sm">
                     {error}

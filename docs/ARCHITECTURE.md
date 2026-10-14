@@ -17,7 +17,7 @@ flowchart LR
         SANDBOX[Docker code runner\ninternal network, no internet or database access]
     end
 
-    FE -->|HTTPS + JWT| API
+    FE -->|HTTPS + HttpOnly JWT cookies| API
     API --> DB
     API -->|HTTP| SANDBOX
 ```
@@ -40,8 +40,8 @@ sequenceDiagram
     S->>FE: Log in
     FE->>API: POST /api/auth/login/
     API->>DB: verify credentials
-    API-->>FE: JWT (access + refresh, role embedded)
-    FE->>FE: store token, decode role, route to /dashboard/{role}
+    API-->>FE: user profile + CSRF token; sets HttpOnly auth cookies
+    FE->>FE: route by returned role to /dashboard/{role}
 
     S->>FE: Open a lesson
     FE->>API: GET /api/lessons/?module=5  (Bearer token)
@@ -135,11 +135,11 @@ engagement does not introduce a competing completion rule.
 
 ## Authentication & authorization
 
-- **JWT**, via `djangorestframework-simplejwt`. Access token: 15 minutes.
-  Refresh token: 7 days.
-- **Role lives on the User model** (`student` / `instructor` / `admin`),
-  embedded in the JWT payload so the frontend can route without an extra
-  round-trip.
+- **JWT**, via `djangorestframework-simplejwt`, stored in HttpOnly cookies.
+  Access token: 15 minutes. Refresh token: 7 days.
+- **Role lives on the User model** (`student` / `instructor` / `admin`).
+  Login returns the user profile for frontend routing; the backend remains
+  authoritative for permissions.
 - **Permission classes** (`apps/accounts/permissions.py`) are shared
   across every app — `ReadOnlyOrInstructorAdmin` is the most common
   pattern: anyone authenticated can read, only instructor/admin can write.
@@ -147,13 +147,15 @@ engagement does not introduce a competing completion rule.
   only possible through Django admin, by someone who already has admin
   access. This was a real bug caught during testing (see
   `backend/README.md`), not a hypothetical.
+- **New students remain inactive until email verification and administrator
+  approval.** Existing accounts remain approved by default.
 
 ## Frontend structure
 
 ```
 frontend/src/
 ├── lib/api.js              Single point of contact with the backend —
-│                            attaches JWT, handles 401s, one place to
+│                            sends cookies, handles 401s, one place to
 │                            change the API base URL
 ├── context/                Auth state (who's logged in, what role)
 │   ├── auth-context.js      the React context object

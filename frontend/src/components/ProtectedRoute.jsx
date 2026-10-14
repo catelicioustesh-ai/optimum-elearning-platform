@@ -1,4 +1,4 @@
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/useAuth.js'
 
 /**
@@ -12,12 +12,13 @@ import { useAuth } from '../context/useAuth.js'
  */
 export default function ProtectedRoute({ children, allowedRoles }) {
   const { auth, loading } = useAuth()
+  const location = useLocation()
 
   if (loading) {
     return <div className="grid min-h-screen place-items-center text-sm text-text-muted" role="status">Loading your session...</div>
   }
   if (!auth) {
-    return <Navigate to="/login" replace />
+    return <Navigate to="/login" replace state={{ from: location }} />
   }
 
   if (allowedRoles && !allowedRoles.includes(auth.role)) {

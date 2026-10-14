@@ -5,6 +5,7 @@ from django.contrib.auth.models import update_last_login
 from django.contrib.auth.forms import SetPasswordForm
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Q
 from django.http import FileResponse
 from mimetypes import guess_type
 from django.utils.encoding import force_str
@@ -275,7 +276,8 @@ class ResendVerificationView(APIView):
         user = User.objects.filter(
             email__iexact=validated_data["email"],
             email_verified=False,
-            is_active=True,
+        ).filter(
+            Q(is_active=True) | Q(is_approved=False),
         ).first()
         if user and user.has_usable_password():
             send_verification_email(user)
@@ -296,7 +298,7 @@ class VerifyEmailView(APIView):
         serializer = EmailTokenSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         validated_data = cast(EmailTokenData, serializer.validated_data)
-        user = _get_token_user(validated_data["uid"])
+        user = _get_token_user(validated_data["uid"], include_inactive=True)
         if not user or user.email_verified or not email_verification_token.check_token(
             user, validated_data["token"]
         ):
@@ -375,10 +377,13 @@ class PasswordResetConfirmView(APIView):
         return Response({"detail": "Password updated. Sign in with your new password."})
 
 
-def _get_token_user(uid):
+def _get_token_user(uid, *, include_inactive=False):
     try:
         user_id = force_str(urlsafe_base64_decode(uid))
-        return User.objects.get(pk=user_id, is_active=True)
+        users = User.objects
+        if not include_inactive:
+            users = users.filter(is_active=True)
+        return users.get(pk=user_id)
     except (TypeError, ValueError, OverflowError, DjangoValidationError, User.DoesNotExist):
         return None
 

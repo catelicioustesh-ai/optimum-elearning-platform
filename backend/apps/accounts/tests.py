@@ -68,31 +68,42 @@ class RegistrationAndLoginTests(AuthBase):
         self.assertTrue(hasattr(settings, "EMAIL_BACKEND"))
         self.assertFalse(hasattr(settings, "MAILERS"))
 
-    def test_registration_sends_verification_but_allows_login_before_verification(self):
+    def test_registration_requires_admin_approval_and_email_verification(self):
         response = self.register(" Learner@Example.com ")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         user = User.objects.get(username="learner")
         self.assertEqual(user.email, "learner@example.com")  # trimmed + lower-cased
         self.assertFalse(user.email_verified)
+        self.assertFalse(user.is_approved)
+        self.assertFalse(user.is_active)
         self.assertEqual(len(mail.outbox), 1)
 
-        login_before_verification = self.login(user.email)
-        self.assertEqual(login_before_verification.status_code, status.HTTP_200_OK)
-        self.assertEqual(login_before_verification.data["user"]["email"], user.email)
-        self.assertNotIn("password", login_before_verification.data)
-        self.assertNotIn("access", login_before_verification.data)
-        self.assertNotIn("refresh", login_before_verification.data)
-        self.assertTrue(login_before_verification.cookies["access_token"]["httponly"])
-        self.assertTrue(login_before_verification.cookies["refresh_token"]["httponly"])
+        blocked_login = self.login(user.email)
+        self.assertEqual(blocked_login.status_code, status.HTTP_401_UNAUTHORIZED)
 
         uid, token, path = link_from_email(mail.outbox[0])
         self.assertEqual(path, "/verify-email")
         verified = self.client.post(reverse("email-verify"), {"uid": uid, "token": token}, format="json")
         self.assertEqual(verified.status_code, status.HTTP_200_OK, verified.data)
+        user.refresh_from_db()
+        self.assertTrue(user.email_verified)
+        self.assertFalse(user.is_active)
 
+        admin = self.make_user("admin@example.com", "admin", role="admin")
+        self.client.force_authenticate(user=admin)
+        approved = self.client.post(
+            reverse("dashboard-learner-approve", kwargs={"learner_id": user.id}),
+            {},
+            format="json",
+        )
+        self.assertEqual(approved.status_code, status.HTTP_200_OK, approved.data)
+        self.client.force_authenticate(user=None)
         login = self.login(user.email)
         self.assertEqual(login.status_code, status.HTTP_200_OK)
         self.assertIn("user", login.data)
+        user.refresh_from_db()
+        self.assertTrue(user.is_approved)
+        self.assertTrue(user.is_active)
 
     def test_cookie_authentication_requires_csrf_for_state_changes(self):
         client = APIClient(enforce_csrf_checks=True)

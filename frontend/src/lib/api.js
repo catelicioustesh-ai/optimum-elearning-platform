@@ -8,7 +8,7 @@
  */
 
 const DEFAULT_API_URL = import.meta.env.DEV
-  ? 'http://localhost:8000/api'
+  ? '/api'
   : `${window.location.origin}/api`
 
 function secureUrl(url) {
@@ -45,7 +45,20 @@ let csrfToken = null
 
 async function getCSRFToken() {
   if (csrfToken) return csrfToken
-  const res = await fetch(`${API_URL}/auth/csrf/`, { credentials: 'include' })
+  let res
+  try {
+    res = await fetch(`${API_URL}/auth/csrf/`, { credentials: 'include' })
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new ApiError('The secure session request was cancelled. Please try again.', {
+        code: 'REQUEST_ABORTED',
+      })
+    }
+    throw new ApiError('Unable to reach the server. Check your connection and try again.', {
+      code: 'NETWORK_ERROR',
+      data: { cause: error?.message },
+    })
+  }
   const data = await res.json().catch(() => null)
   if (!res.ok || !data?.csrfToken) {
     throw new ApiError('Unable to establish a secure session. Please try again.', {
