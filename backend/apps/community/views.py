@@ -85,7 +85,7 @@ class StudentBookmarkDeleteView(APIView):
 class DiscussionThreadViewSet(viewsets.ModelViewSet):
     serializer_class = DiscussionThreadSerializer
     permission_classes = [permissions.IsAuthenticated]
-    http_method_names = ["get", "post", "head", "options"]
+    http_method_names = ["get", "post", "delete", "head", "options"]
 
     def get_queryset(self):
         user = self.request.user
@@ -124,6 +124,23 @@ class DiscussionThreadViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("You cannot post in course discussions.")
         serializer.save(author=user)
 
+    def can_moderate_discussion(self, user, thread):
+        role = role_of(user)
+        return role == ADMIN or (
+            role == INSTRUCTOR and thread.course.instructor_id == user.id
+        )
+
+    def can_delete_discussion(self, user, thread):
+        return (
+            thread.author_id == user.id
+            or self.can_moderate_discussion(user, thread)
+        )
+
+    def perform_destroy(self, instance):
+        if not self.can_delete_discussion(self.request.user, instance):
+            raise PermissionDenied("You can delete only your own discussions.")
+        instance.delete()
+
     @action(detail=True, methods=["post"], serializer_class=DiscussionReplySerializer)
     def replies(self, request, pk=None):
         thread = self.get_object()
@@ -132,3 +149,20 @@ class DiscussionThreadViewSet(viewsets.ModelViewSet):
         serializer.save(thread=thread, author=request.user)
         thread.save(update_fields=["updated_at"])
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(
+        detail=True,
+        methods=["delete"],
+        url_path=r"replies/(?P<reply_id>[^/.]+)",
+        url_name="reply-delete",
+    )
+    def delete_reply(self, request, pk=None, reply_id=None):
+        thread = self.get_object()
+        reply = get_object_or_404(DiscussionReply, pk=reply_id, thread=thread)
+        if (
+            reply.author_id != request.user.id
+            and not self.can_moderate_discussion(request.user, thread)
+        ):
+            raise PermissionDenied("You can delete only your own replies.")
+        reply.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

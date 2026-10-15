@@ -3,21 +3,28 @@ from typing import TypedDict, cast
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import update_last_login
 from django.contrib.auth.forms import SetPasswordForm
+from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Q
 from django.http import FileResponse
 from mimetypes import guess_type
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
+from django.middleware.csrf import get_token, rotate_token
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_protect
 from rest_framework import generics, permissions, status, serializers
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework_simplejwt.views import TokenBlacklistView
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.serializers import (
+    TokenObtainPairSerializer,
+    TokenRefreshSerializer,
+)
 from rest_framework_simplejwt.settings import api_settings
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 
@@ -37,6 +44,41 @@ from .services import (
     send_password_reset_email,
     send_verification_email,
 )
+
+ACCESS_COOKIE = "access_token"
+REFRESH_COOKIE = "refresh_token"
+
+
+def set_auth_cookies(response, token_data):
+    access_lifetime = api_settings.ACCESS_TOKEN_LIFETIME
+    response.set_cookie(
+        ACCESS_COOKIE,
+        token_data["access"],
+        max_age=int(access_lifetime.total_seconds()),
+        httponly=True,
+        secure=not settings.DEBUG,
+        samesite="Lax",
+        path="/api/",
+    )
+    refresh = token_data.get("refresh")
+    if refresh:
+        refresh_lifetime = api_settings.REFRESH_TOKEN_LIFETIME
+        response.set_cookie(
+            REFRESH_COOKIE,
+            refresh,
+            max_age=int(refresh_lifetime.total_seconds()),
+            httponly=True,
+            secure=not settings.DEBUG,
+            samesite="Lax",
+            path="/api/auth/",
+        )
+    response["Cache-Control"] = "no-store"
+
+
+def clear_auth_cookies(response):
+    response.delete_cookie(ACCESS_COOKIE, path="/api/", samesite="Lax")
+    response.delete_cookie(REFRESH_COOKIE, path="/api/auth/", samesite="Lax")
+    response["Cache-Control"] = "no-store"
 
 
 class EmailActionData(TypedDict):
@@ -86,6 +128,7 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         refresh = cast(RefreshToken, self.get_token(user))
         data = {"refresh": str(refresh), "access": str(refresh.access_token)}
+        self.user = user
         if api_settings.UPDATE_LAST_LOGIN:
             update_last_login(User, user)
         return data
@@ -104,10 +147,73 @@ class LoginView(TokenObtainPairView):
     permission_classes = [permissions.AllowAny]
     throttle_scope = "auth"
 
+    @method_decorator(csrf_protect)
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
 
-class LogoutView(TokenBlacklistView):
-    """POST /api/auth/logout/ — revoke the submitted refresh token."""
-    permission_classes = [permissions.IsAuthenticated]
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        rotate_token(request)
+        response = Response({
+            "user": UserSerializer(serializer.user, context={"request": request}).data,
+            "csrfToken": get_token(request),
+        })
+        set_auth_cookies(response, serializer.validated_data)
+        return response
+
+
+class CsrfTokenView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        response = Response({"csrfToken": get_token(request)})
+        response["Cache-Control"] = "no-store"
+        return response
+
+
+class RefreshCookieView(APIView):
+    permission_classes = [permissions.AllowAny]
+    throttle_scope = "auth"
+
+    @method_decorator(csrf_protect)
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
+
+    def post(self, request):
+        refresh = request.COOKIES.get(REFRESH_COOKIE)
+        if not refresh:
+            raise AuthenticationFailed("No refresh session is available.")
+        serializer = TokenRefreshSerializer(data={"refresh": refresh})
+        try:
+            serializer.is_valid(raise_exception=True)
+        except TokenError as exc:
+            raise AuthenticationFailed("No valid refresh session is available.") from exc
+        response = Response({"detail": "Session refreshed."})
+        set_auth_cookies(response, serializer.validated_data)
+        return response
+
+
+class LogoutView(APIView):
+    """POST /api/auth/logout/ — revoke the refresh cookie and clear the session."""
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+    throttle_scope = "auth"
+
+    @method_decorator(csrf_protect)
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
+
+    def post(self, request):
+        refresh = request.COOKIES.get(REFRESH_COOKIE)
+        response = Response(status=status.HTTP_204_NO_CONTENT)
+        clear_auth_cookies(response)
+        if refresh:
+            try:
+                RefreshToken(refresh).blacklist()
+            except TokenError:
+                pass
+        return response
 
 
 class MeView(APIView):
@@ -170,7 +276,8 @@ class ResendVerificationView(APIView):
         user = User.objects.filter(
             email__iexact=validated_data["email"],
             email_verified=False,
-            is_active=True,
+        ).filter(
+            Q(is_active=True) | Q(is_approved=False),
         ).first()
         if user and user.has_usable_password():
             send_verification_email(user)
@@ -191,7 +298,7 @@ class VerifyEmailView(APIView):
         serializer = EmailTokenSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         validated_data = cast(EmailTokenData, serializer.validated_data)
-        user = _get_token_user(validated_data["uid"])
+        user = _get_token_user(validated_data["uid"], include_inactive=True)
         if not user or user.email_verified or not email_verification_token.check_token(
             user, validated_data["token"]
         ):
@@ -270,10 +377,13 @@ class PasswordResetConfirmView(APIView):
         return Response({"detail": "Password updated. Sign in with your new password."})
 
 
-def _get_token_user(uid):
+def _get_token_user(uid, *, include_inactive=False):
     try:
         user_id = force_str(urlsafe_base64_decode(uid))
-        return User.objects.get(pk=user_id, is_active=True)
+        users = User.objects
+        if not include_inactive:
+            users = users.filter(is_active=True)
+        return users.get(pk=user_id)
     except (TypeError, ValueError, OverflowError, DjangoValidationError, User.DoesNotExist):
         return None
 

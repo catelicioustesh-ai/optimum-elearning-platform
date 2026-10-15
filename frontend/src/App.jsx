@@ -1,5 +1,5 @@
-import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
+import { lazy, Suspense, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
 import { HelmetProvider } from 'react-helmet-async'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { ToastProvider } from './hooks/useToast.js'
@@ -44,6 +44,18 @@ function NotFound() {
   )
 }
 
+function ScrollToTop() {
+  const { pathname, hash } = useLocation()
+
+  useEffect(() => {
+    if (hash) return
+    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'
+    window.scrollTo({ top: 0, behavior })
+  }, [pathname, hash])
+
+  return null
+}
+
 function App() {
   return (
     <HelmetProvider>
@@ -51,6 +63,7 @@ function App() {
         <ToastProvider>
           <AppErrorBoundary>
             <BrowserRouter>
+              <ScrollToTop />
               <Suspense
                 fallback={
                   <div className="grid min-h-screen place-items-center bg-slate-50 text-sm font-medium text-slate-600" role="status">
@@ -222,6 +235,14 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/dashboard/instructor/community"
+              element={
+                <ProtectedRoute allowedRoles={['instructor', 'admin']}>
+                  <StudentCommunity />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Admin */}
             <Route
@@ -229,6 +250,14 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/admin/community"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <StudentCommunity />
                 </ProtectedRoute>
               }
             />

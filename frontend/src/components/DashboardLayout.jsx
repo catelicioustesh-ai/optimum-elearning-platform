@@ -29,6 +29,7 @@ import Logo from './Logo.jsx'
 import { api } from '../lib/api.js'
 import { Link } from 'react-router-dom'
 import ProfilePhoto from './ProfilePhoto.jsx'
+import { useToast } from '../hooks/useToast.js'
 
 const roleLabels = {
   student: 'Student',
@@ -62,11 +63,13 @@ const sharedNavItems = {
     { to: '/dashboard/instructor/content', label: 'Course content', icon: BookOpen, group: 'Teaching' },
     { to: '/dashboard/instructor/submissions', label: 'Submissions', icon: FileCheck, group: 'Teaching' },
     { to: '/dashboard/instructor/students', label: 'Students', icon: Users, group: 'Teaching' },
+    { to: '/dashboard/instructor/community', label: 'Community', icon: Users, group: 'Teaching' },
   ],
   admin: [
     { to: '/dashboard/admin', label: 'Overview', icon: LayoutDashboard, end: true, group: 'Overview' },
     { to: '/dashboard/instructor/content', label: 'Courses & content', icon: BookOpen, group: 'Management' },
     { to: '/dashboard/instructor/submissions', label: 'Submissions', icon: FileCheck, group: 'Management' },
+    { to: '/dashboard/admin/community', label: 'Community', icon: Users, group: 'Management' },
     { to: '/dashboard/instructor/students', label: 'Students', icon: Users, group: 'Management' },
   ],
 }
@@ -83,12 +86,21 @@ export default function DashboardLayout({
   role: roleProp,
 }) {
   const { logout } = useAuth()
+  const toast = useToast()
   // Pages don't all pass `role`; default to the signed-in user's real role (was always 'student').
   const { auth } = useAuth()
   const role = roleProp || auth?.role || 'student'
   const { pathname, hash } = useLocation()
   const activeAnchor = hash.slice(1)
   const navigate = useNavigate()
+  const handleLogout = async () => {
+    try {
+      await logout()
+      toast('Logged out successfully.', 'success')
+    } catch {
+      toast('Could not securely log out. Check your connection and try again.', 'error')
+    }
+  }
   const [menuOpen, setMenuOpen] = useState(false)
   const [moreNavOpen, setMoreNavOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
@@ -595,7 +607,7 @@ export default function DashboardLayout({
                   )}
                   <button
                     type="button"
-                    onClick={logout}
+                    onClick={handleLogout}
                     className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-semibold text-rose-600 hover:bg-rose-50"
                   >
                     <LogOut size={14} /> Log out
@@ -668,7 +680,7 @@ export default function DashboardLayout({
               </button>
               <button
                 type="button"
-                onClick={logout}
+                onClick={handleLogout}
                 className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-sm font-semibold text-rose-700 hover:bg-rose-50"
               >
                 <LogOut size={18} aria-hidden="true" /> Log out

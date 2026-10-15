@@ -7,9 +7,9 @@ let nextToastId = 1
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([])
 
-  const toast = useCallback((message) => {
+  const toast = useCallback((message, type = 'success') => {
     const id = nextToastId++
-    setToasts((items) => [...items, { id, message, leaving: false }])
+    setToasts((items) => [...items, { id, message, type, leaving: false }])
 
     window.setTimeout(() => {
       setToasts((items) => items.map((item) => (item.id === id ? { ...item, leaving: true } : item)))
@@ -31,7 +31,12 @@ export function ToastProvider({ children }) {
       ...toasts.map((toastItem) =>
         React.createElement(
           'div',
-          { key: toastItem.id, className: `dg-toast${toastItem.leaving ? ' dg-bye' : ''}` },
+          {
+            key: toastItem.id,
+            className: `dg-toast${toastItem.leaving ? ' dg-bye' : ''}`,
+            'data-type': toastItem.type,
+            role: toastItem.type === 'error' ? 'alert' : 'status',
+          },
           React.createElement(
             'i',
             { 'aria-hidden': 'true' },
@@ -39,7 +44,11 @@ export function ToastProvider({ children }) {
               'svg',
               { viewBox: '0 0 24 24' },
               React.createElement('path', {
-                d: 'M4 12l5 5L20 6',
+                d: toastItem.type === 'error'
+                  ? 'M6 6l12 12M18 6L6 18'
+                  : toastItem.type === 'info'
+                    ? 'M12 8h.01M11 12h1v4h1'
+                    : 'M4 12l5 5L20 6',
                 fill: 'none',
                 stroke: 'currentColor',
                 strokeWidth: '2.4',

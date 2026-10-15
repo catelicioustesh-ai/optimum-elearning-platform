@@ -2,13 +2,13 @@
  * Single point of contact with the Django backend.
  * - Reads the API base URL from env (VITE_API_URL), so dev/staging/prod
  *   just swap .env files instead of editing code.
- * - Attaches the JWT access token to every request automatically.
- * - Refreshes near-expiry access tokens before requests; if a 401 still
- *   occurs and refresh cannot recover the session, redirects to /login.
+ * - Uses HttpOnly JWT cookies; JavaScript never reads auth tokens.
+ * - Adds CSRF protection to state-changing requests and refreshes sessions
+ *   after a 401 before redirecting to /login.
  */
 
 const DEFAULT_API_URL = import.meta.env.DEV
-  ? 'http://localhost:8000/api'
+  ? '/api'
   : `${window.location.origin}/api`
 
 function secureUrl(url) {
@@ -19,7 +19,6 @@ function secureUrl(url) {
 }
 
 const API_URL = secureUrl(new URL(import.meta.env.VITE_API_URL || DEFAULT_API_URL, window.location.origin)).href.replace(/\/$/, '')
-const ACCESS_TOKEN_REFRESH_SKEW_MS = 30_000
 
 export function mediaUrl(path) {
   if (!path) return null
@@ -36,43 +35,39 @@ export function backendUrl(path) {
   return secureUrl(apiBase).href
 }
 
-function getTokens() {
-  const raw = localStorage.getItem('auth')
-  if (!raw) return null
-  try {
-    return JSON.parse(raw)
-  } catch {
-    clearTokens()
-    return null
-  }
-}
-
-function setTokens(tokens) {
-  localStorage.setItem('auth', JSON.stringify(tokens))
-}
-
 function clearTokens() {
+  // Remove bearer tokens saved by earlier client versions.
   localStorage.removeItem('auth')
+  csrfToken = null
 }
 
-/**
- * Decode a JWT payload without verifying it (verification happens
- * server-side on every request — this is purely for reading the role/
- * email client-side to decide where to route the user).
- */
-function decodeToken(token) {
+let csrfToken = null
+
+async function getCSRFToken() {
+  if (csrfToken) return csrfToken
+  let res
   try {
-    const payload = token.split('.')[1]
-    return JSON.parse(atob(payload.replace(/-/g, '+').replace(/_/g, '/')))
-  } catch {
-    return null
+    res = await fetch(`${API_URL}/auth/csrf/`, { credentials: 'include' })
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw new ApiError('The secure session request was cancelled. Please try again.', {
+        code: 'REQUEST_ABORTED',
+      })
+    }
+    throw new ApiError('Unable to reach the server. Check your connection and try again.', {
+      code: 'NETWORK_ERROR',
+      data: { cause: error?.message },
+    })
   }
-}
-
-function accessTokenNeedsRefresh(token) {
-  const payload = decodeToken(token)
-  return Number.isFinite(payload?.exp)
-    && payload.exp * 1000 <= Date.now() + ACCESS_TOKEN_REFRESH_SKEW_MS
+  const data = await res.json().catch(() => null)
+  if (!res.ok || !data?.csrfToken) {
+    throw new ApiError('Unable to establish a secure session. Please try again.', {
+      status: res.status,
+      code: 'CSRF_TOKEN_UNAVAILABLE',
+    })
+  }
+  csrfToken = data.csrfToken
+  return csrfToken
 }
 
 export class ApiError extends Error {
@@ -85,21 +80,19 @@ export class ApiError extends Error {
   }
 }
 
-// Refresh tokens rotate and the old one is blacklisted, so two requests that
-// hit 401 at the same moment must share ONE refresh call — otherwise the second
-// uses an already-blacklisted token, fails, and the user is logged out.
+// Refresh tokens rotate and the old one is blacklisted, so simultaneous 401s
+// must share one refresh request.
 let refreshInFlight = null
 function refreshAccessToken() {
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
-      const tokens = getTokens()
-      if (!tokens?.refresh) return null
+      const token = await getCSRFToken()
       let res
       try {
         res = await fetch(`${API_URL}/auth/login/refresh/`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh: tokens.refresh }),
+          headers: { 'X-CSRFToken': token },
+          credentials: 'include',
         })
       } catch (error) {
         if (error?.name === 'AbortError') {
@@ -132,10 +125,7 @@ function refreshAccessToken() {
           data: refreshed,
         })
       }
-      if (!res.ok || !refreshed?.access) return null
-      const updated = { ...tokens, ...refreshed }
-      setTokens(updated)
-      return updated.access
+      return res.ok
     })().finally(() => { refreshInFlight = null })
   }
   return refreshInFlight
@@ -163,28 +153,22 @@ function errorMessage(data, status) {
   return parts.join(' ') || 'Request failed'
 }
 
-async function request(path, { method = 'GET', body, auth = true, isFormData = false, blob = false, keepalive = false } = {}) {
+async function request(path, { method = 'GET', body, auth = true, isFormData = false, blob = false, keepalive = false, redirectOnUnauthorized = true } = {}) {
   const headers = {}
   if (!isFormData) headers['Content-Type'] = 'application/json'
-  if (auth) {
-    const tokens = getTokens()
-    if (tokens?.refresh && (!tokens.access || accessTokenNeedsRefresh(tokens.access))) {
-      const access = await refreshAccessToken()
-      if (!access) {
-        clearTokens()
-        window.location.href = '/login'
-        return null
-      }
-    }
-  }
-  if (auth) {
-    const tokens = getTokens()
-    if (tokens?.access) headers.Authorization = `Bearer ${tokens.access}`
+  if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method.toUpperCase())) {
+    headers['X-CSRFToken'] = await getCSRFToken()
   }
   const buildBody = () => (isFormData ? body : body ? JSON.stringify(body) : undefined)
   const send = async () => {
     try {
-      return await fetch(`${API_URL}${path}`, { method, headers, body: buildBody(), keepalive })
+      return await fetch(`${API_URL}${path}`, {
+        method,
+        headers,
+        body: buildBody(),
+        keepalive,
+        credentials: 'include',
+      })
     } catch (error) {
       if (error?.name === 'AbortError') {
         throw new ApiError('The request was cancelled. Please try again.', { code: 'REQUEST_ABORTED' })
@@ -199,14 +183,13 @@ async function request(path, { method = 'GET', body, auth = true, isFormData = f
   let res = await send()
 
   if (res.status === 401 && auth) {
-    const access = await refreshAccessToken()
-    if (access) {
-      headers.Authorization = `Bearer ${access}`
+    const refreshed = await refreshAccessToken()
+    if (refreshed) {
       res = await send()
     }
-    if (res.status === 401) {
+    if (res.status === 401 && redirectOnUnauthorized) {
       clearTokens()
-      window.location.href = '/login'
+      window.location.assign('/login')
       return null
     }
   }
@@ -250,11 +233,18 @@ async function downloadFile(path, filename) {
 }
 
 export const api = {
-  login: (email, password) =>
-    request('/auth/login/', { method: 'POST', body: { email, password }, auth: false }),
+  login: async (email, password) => {
+    const result = await request('/auth/login/', {
+      method: 'POST',
+      body: { email, password },
+      auth: false,
+    })
+    if (result?.csrfToken) csrfToken = result.csrfToken
+    return result
+  },
 
-  logout: (refresh) =>
-    request('/auth/logout/', { method: 'POST', body: { refresh } }),
+  logout: () =>
+    request('/auth/logout/', { method: 'POST', body: {}, auth: false }),
 
   register: (payload) =>
     request('/auth/register/', { method: 'POST', body: payload, auth: false }),
@@ -271,7 +261,7 @@ export const api = {
   confirmPasswordReset: (payload) =>
     request('/auth/password-reset/confirm/', { method: 'POST', body: payload, auth: false }),
 
-  me: () => request('/auth/me/'),
+  me: () => request('/auth/me/', { redirectOnUnauthorized: false }),
 
   get: (path) => request(path),
   verifyCertificate: (certificateNumber) =>
@@ -289,4 +279,6 @@ export const api = {
   upload: (path, formData) => request(path, { method: 'POST', body: formData, isFormData: true }),
 }
 
-export { getTokens, setTokens, clearTokens, decodeToken }
+clearTokens()
+
+export { clearTokens }

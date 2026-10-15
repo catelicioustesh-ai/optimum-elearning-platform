@@ -20,7 +20,7 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from rest_framework import status
 from rest_framework.throttling import ScopedRateThrottle
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 
 from .services import email_verification_token, password_reset_token
@@ -68,26 +68,85 @@ class RegistrationAndLoginTests(AuthBase):
         self.assertTrue(hasattr(settings, "EMAIL_BACKEND"))
         self.assertFalse(hasattr(settings, "MAILERS"))
 
-    def test_registration_sends_verification_but_allows_login_before_verification(self):
+    def test_registration_requires_admin_approval_and_email_verification(self):
         response = self.register(" Learner@Example.com ")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         user = User.objects.get(username="learner")
         self.assertEqual(user.email, "learner@example.com")  # trimmed + lower-cased
         self.assertFalse(user.email_verified)
+        self.assertFalse(user.is_approved)
+        self.assertFalse(user.is_active)
         self.assertEqual(len(mail.outbox), 1)
 
-        login_before_verification = self.login(user.email)
-        self.assertEqual(login_before_verification.status_code, status.HTTP_200_OK)
-        self.assertIn("access", login_before_verification.data)
+        blocked_login = self.login(user.email)
+        self.assertEqual(blocked_login.status_code, status.HTTP_401_UNAUTHORIZED)
 
         uid, token, path = link_from_email(mail.outbox[0])
         self.assertEqual(path, "/verify-email")
         verified = self.client.post(reverse("email-verify"), {"uid": uid, "token": token}, format="json")
         self.assertEqual(verified.status_code, status.HTTP_200_OK, verified.data)
+        user.refresh_from_db()
+        self.assertTrue(user.email_verified)
+        self.assertFalse(user.is_active)
 
+        admin = self.make_user("admin@example.com", "admin", role="admin")
+        self.client.force_authenticate(user=admin)
+        approved = self.client.post(
+            reverse("dashboard-learner-approve", kwargs={"learner_id": user.id}),
+            {},
+            format="json",
+        )
+        self.assertEqual(approved.status_code, status.HTTP_200_OK, approved.data)
+        self.client.force_authenticate(user=None)
         login = self.login(user.email)
         self.assertEqual(login.status_code, status.HTTP_200_OK)
-        self.assertIn("access", login.data)
+        self.assertIn("user", login.data)
+        user.refresh_from_db()
+        self.assertTrue(user.is_approved)
+        self.assertTrue(user.is_active)
+
+    def test_cookie_authentication_requires_csrf_for_state_changes(self):
+        client = APIClient(enforce_csrf_checks=True)
+        csrf_response = client.get(reverse("csrf-token"))
+        csrf_token = csrf_response.data["csrfToken"]
+        login_response = client.post(
+            reverse("login"),
+            {"email": "verified@example.com", "password": GOOD_PASSWORD},
+            format="json",
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+        self.assertEqual(login_response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        self.make_user()
+        login_response = client.post(
+            reverse("login"),
+            {"email": "verified@example.com", "password": GOOD_PASSWORD},
+            format="json",
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+        self.assertEqual(login_response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("access", login_response.data)
+        self.assertNotIn("refresh", login_response.data)
+
+        blocked = client.patch(reverse("me"), {"first_name": "Changed"}, format="json")
+        self.assertEqual(blocked.status_code, status.HTTP_403_FORBIDDEN)
+        allowed = client.patch(
+            reverse("me"),
+            {"first_name": "Changed"},
+            format="json",
+            HTTP_X_CSRFTOKEN=login_response.data["csrfToken"],
+        )
+        self.assertEqual(allowed.status_code, status.HTTP_200_OK)
+        blocked_logout = client.post(reverse("logout"), {}, format="json")
+        self.assertEqual(blocked_logout.status_code, status.HTTP_403_FORBIDDEN)
+        logout = client.post(
+            reverse("logout"),
+            {},
+            format="json",
+            HTTP_X_CSRFTOKEN=login_response.data["csrfToken"],
+        )
+        self.assertEqual(logout.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(logout.cookies["access_token"]["max-age"], 0)
 
     def test_invalid_registration_email_is_rejected(self):
         for email in ("abc", "abc@", "@gmail.com", "abc@gmail"):
@@ -134,7 +193,7 @@ class RegistrationAndLoginTests(AuthBase):
         self.make_user("new@example.com", "newbie", verified=False)
         resp = self.login("new@example.com")
         self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertIn("access", resp.data)
+        self.assertIn("user", resp.data)
 
     def test_wrong_password_never_reveals_whether_account_is_unverified(self):
         self.make_user("new@example.com", "newbie", verified=False)
@@ -375,11 +434,12 @@ class PasswordResetLinkTests(AuthBase):
 
     def test_reset_signs_out_existing_sessions(self):
         login = self.login("verified@example.com")
-        refresh = login.data["refresh"]
+        refresh = login.cookies["refresh_token"].value
         uid, token = self.emailed_link()
         self.assertEqual(self.confirm(uid, token).status_code, 200)
         self.assertTrue(BlacklistedToken.objects.exists())
-        resp = self.client.post(reverse("login-refresh"), {"refresh": refresh}, format="json")
+        self.client.cookies["refresh_token"] = refresh
+        resp = self.client.post(reverse("login-refresh"), {}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_request_does_not_disclose_account_existence(self):
@@ -463,7 +523,10 @@ class LockoutSafetyTests(AuthBase):
 
     def test_refresh_token_survives_restart_of_session(self):
         self.make_user()
-        tokens = self.login("verified@example.com").data
-        r = self.client.post(reverse("login-refresh"), {"refresh": tokens["refresh"]}, format="json")
+        login = self.login("verified@example.com")
+        self.assertEqual(login.status_code, 200)
+        r = self.client.post(reverse("login-refresh"), {}, format="json")
         self.assertEqual(r.status_code, 200)
-        self.assertIn("access", r.data)
+        self.assertNotIn("access", r.data)
+        self.assertTrue(r.cookies["access_token"]["httponly"])
+        self.assertTrue(r.cookies["refresh_token"]["httponly"])

@@ -31,7 +31,7 @@ SECRET_KEY = os.environ.get(
     "dev-only-change-this-in-production",
 )
 
-DEBUG = os.environ.get("DJANGO_DEBUG", "True") == "True"
+DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
 
 ALLOWED_HOSTS = os.environ.get(
     "DJANGO_ALLOWED_HOSTS",
@@ -265,7 +265,7 @@ REST_FRAMEWORK = {
     "NUM_PROXIES": NUM_PROXIES_ENV,
 
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "apps.accounts.authentication.CookieJWTAuthentication",
     ),
 
     "DEFAULT_PERMISSION_CLASSES": (
@@ -416,14 +416,20 @@ SIMPLE_JWT = {
 
 CORS_ALLOWED_ORIGINS = os.environ.get(
     "CORS_ALLOWED_ORIGINS",
-    "http://localhost:5173",
+    "http://localhost:5173,http://127.0.0.1:5173",
 ).split(",")
+CORS_ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ALLOWED_ORIGINS if origin.strip()]
+CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in CORS_ALLOWED_ORIGINS
-    if origin.strip().startswith("https://")
+    if origin.strip().startswith(("http://", "https://"))
 ]
+
+CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_SAMESITE = "Lax"
 
 
 # --------------------------------------------------------------------------

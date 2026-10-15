@@ -8,20 +8,20 @@ shapes; update it whenever a serializer or endpoint changes.
 
 ## Connect to the backend
 
-- Local API root: `http://localhost:8000/api`
-- Configure the frontend with `VITE_API_URL=http://localhost:8000/api`.
-  The value is the API root without a trailing slash. The existing React client
-  defaults to this URL in [api.js](../frontend/src/lib/api.js).
-- If each developer runs the backend and frontend on their own PC, keep
-  `localhost`: the browser and backend are on the same computer. Each developer
-  needs their own backend `.env` and local SQL Server configuration. If the
-  backend is instead running on another PC, replace `localhost` with that
-  machine's reachable host/IP and configure Django's allowed hosts, CORS, and
+- Local API root: `/api` from the frontend; Vite proxies it to
+  `http://127.0.0.1:8000` during development.
+- Configure the frontend with `VITE_API_URL=/api` (the default in
+  `frontend/.env.example`). Keeping API calls on the frontend origin ensures
+  HttpOnly auth and CSRF cookies work consistently with both `localhost` and
+  `127.0.0.1`.
+- Vite also proxies `/admin` and `/media` to Django. Keep Django listening at
+  `127.0.0.1:8000`; for a backend on another machine, change the proxy target in
+  `frontend/vite.config.js` and configure Django's allowed hosts, CORS, and
   firewall accordingly.
 - Production must use the HTTPS API URL. The backend must allow the deployed
   frontend origin in `CORS_ALLOWED_ORIGINS`.
 - Requests and responses use JSON unless a route below says otherwise.
-  Authenticated calls send `Authorization: Bearer <access-token>`.
+  Authenticated calls use HttpOnly cookies; state-changing requests include the CSRF token.
 - For uploads, send `FormData` / `multipart/form-data` and let the browser set
   the multipart boundary. For downloads, treat the response as a blob; lesson
   attachments and student submissions are not public `/media/` URLs.
@@ -67,14 +67,15 @@ In a second terminal:
 cd frontend
 npm install
 Copy-Item .env.example .env.local
-# Keep VITE_API_URL=http://localhost:8000/api for the local backend.
+# Keep VITE_API_URL=/api so browser requests use Vite's same-origin proxy.
 npm run dev
 ```
 
 Open the Vite address printed by the frontend command (normally
-`http://localhost:5173`). Django's API is at `http://localhost:8000/api/` and
-its admin is at `http://localhost:8000/admin/`. Development email is printed
-in the backend terminal. The `createsuperuser` account has the platform admin
+`http://localhost:5173` or `http://127.0.0.1:5173`). Both addresses proxy API
+requests to Django at `http://127.0.0.1:8000/api/`; the admin is available at
+`/admin/` through the same frontend origin. Development email is printed in
+the backend terminal. The `createsuperuser` account has the platform admin
 role; use Django admin to create instructor accounts. Public registration
 creates student accounts only.
 
@@ -103,25 +104,23 @@ own local secrets and database credentials.
 
 1. Register with `POST /auth/register/` or sign in with
    `POST /auth/login/` using email and password.
-2. Keep both returned JWTs. Send the access token as a Bearer token.
-3. Access tokens last 15 minutes; refresh tokens last 7 days. Call
-   `POST /auth/login/refresh/` with `{ "refresh": "..." }` when the access
-   token expires. Refresh tokens rotate: persist both tokens from the response
-   and serialize concurrent refresh attempts so the same refresh token is not
-   submitted twice.
-4. On sign-out, call `POST /auth/logout/` with the refresh token, then clear
-   client session state. `GET /auth/me/` returns the current user.
+2. The browser stores the HttpOnly access and refresh cookies; JavaScript must
+   not read or persist JWTs. Login returns the user profile and a CSRF token.
+3. The API client sends cookies and the CSRF token for state-changing requests.
+   `POST /auth/login/refresh/` rotates cookies when a session expires.
+4. `POST /auth/logout/` clears the authentication cookies. `GET /auth/me/`
+   returns the current user.
 
 Roles are `student`, `instructor`, and `admin`. Public registration always
-creates a student; instructor/admin accounts are provisioned through Django
-admin. Token role claims are useful for user-interface routing only.
-Backend permissions are authoritative; expect `401`, `403`, or `404` even if
-the UI has already hidden a control.
-
+creates an inactive, unapproved student. The student must verify their email
+before an administrator can approve the account. Instructor/admin accounts are
+provisioned through Django admin. Route by the role in the login profile;
+backend permissions are authoritative, so expect `401`, `403`, or `404` even
+if the UI has already hidden a control.
 ## API route inventory
 
 Paths are relative to `/api`. `{id}` is a numeric resource ID unless noted.
-`🔒` means a valid access token is required. Instructor writes are restricted
+`🔒` means an authenticated cookie session is required. Instructor writes are restricted
 to courses that instructor owns.
 
 ### Authentication — `/auth/`
@@ -130,8 +129,8 @@ to courses that instructor owns.
 |---|---|---|
 | POST | `/auth/register/` | Public; creates a student |
 | POST | `/auth/login/` | Public |
-| POST | `/auth/login/refresh/` | Public; refresh token |
-| POST | `/auth/logout/` | 🔒 |
+| POST | `/auth/login/refresh/` | Public; refresh cookie |
+| POST | `/auth/logout/` | Public; clears session cookies |
 | GET | `/auth/me/` | 🔒 |
 | POST | `/auth/email/verify/` | Public |
 | POST | `/auth/email/resend-verification/` | Public |
@@ -201,6 +200,8 @@ on the sandbox service and can return `503` when that service is unavailable.
 | GET | `/dashboard/student/` | 🔒 |
 | GET | `/dashboard/instructor/` | 🔒; instructor/admin |
 | GET | `/dashboard/admin/` | 🔒; admin |
+| GET | `/dashboard/admin/learner-approvals/` | 🔒; admin |
+| POST | `/dashboard/admin/learner-approvals/{id}/approve/` | 🔒; admin; verified learners only |
 | GET | `/engagement/me/` | 🔒; student |
 | GET | `/engagement/notifications/` | 🔒; caller's notifications |
 | PATCH | `/engagement/notifications/{id}/read/` | 🔒; recipient |

@@ -3,6 +3,7 @@
 services:
   sandbox:
     build: ./sandbox
+    init: true
     environment:
       SANDBOX_TOKEN: ${SANDBOX_TOKEN:?set SANDBOX_TOKEN in backend/.env}
     networks: [runner_net]

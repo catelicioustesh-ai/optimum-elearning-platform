@@ -24,10 +24,14 @@ docker compose run --rm backend python manage.py migrate # NEW migrations are in
 docker compose run --rm backend python manage.py createsuperuser   # if you need one
 ```
 
-Open http://localhost:8080. For a quick **local trial over plain http** set `DJANGO_DEBUG=True` in
-`.env.docker` (production mode requires https `FRONTEND_URL`, real SMTP settings and SQL Server settings).
-For a real deployment put a TLS terminator (Caddy, Traefik, your cloud load balancer) in front of
-port 8080 and set `DJANGO_DEBUG=False`, `DJANGO_ALLOWED_HOSTS`, `CORS_ALLOWED_ORIGINS`, `FRONTEND_URL`.
+For a quick **local trial over plain HTTP**, set `DJANGO_DEBUG=True` in `.env.docker`, then open
+http://localhost:8080. Compose binds this development endpoint to loopback only; do not expose it
+to a network. Production must serve the website and API over HTTPS through a TLS-terminating
+reverse proxy (Caddy, Traefik, or a cloud load balancer). Configure that proxy to redirect all
+HTTP requests to HTTPS and overwrite `X-Forwarded-Proto` with the actual client scheme. The app's
+nginx redirects forwarded HTTP requests, while Django with `DJANGO_DEBUG=False` enforces HTTPS
+for API requests and enables secure cookies and HSTS. Set `DJANGO_ALLOWED_HOSTS`,
+`CORS_ALLOWED_ORIGINS`, and `FRONTEND_URL` to the HTTPS hostname.
 
 ### Windows PowerShell
 

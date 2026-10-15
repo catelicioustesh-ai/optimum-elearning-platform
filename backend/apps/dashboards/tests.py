@@ -111,6 +111,108 @@ class AdminDashboardStudentListTests(TestCase):
         self.assertIn(unassigned_student.email, student_emails)
         self.assertIn("enrolled_courses", students[0])
 
+    def test_admin_can_review_and_approve_pending_learners(self):
+        admin = User.objects.create_user(
+            username="admin-approval",
+            email="admin-approval@example.com",
+            password="Test-password-123!",
+            role="admin",
+        )
+        pending = User.objects.create_user(
+            username="pending-learner",
+            email="pending-learner@example.com",
+            password="Test-password-123!",
+            role="student",
+            email_verified=True,
+            is_approved=False,
+            is_active=False,
+        )
+        client = APIClient()
+        client.force_authenticate(user=admin)
+
+        dashboard = client.get("/api/dashboard/admin/")
+        self.assertEqual(dashboard.status_code, 200)
+        self.assertEqual(dashboard.data["total_students"], 0)
+        self.assertEqual(dashboard.data["pending_learner_approval_count"], 1)
+        self.assertEqual(
+            dashboard.data["pending_learner_approvals"][0]["id"], pending.id
+        )
+
+        pending_list = client.get("/api/dashboard/admin/learner-approvals/")
+        self.assertEqual(pending_list.status_code, 200)
+        self.assertEqual([item["id"] for item in pending_list.data], [pending.id])
+
+        approved = client.post(
+            f"/api/dashboard/admin/learner-approvals/{pending.id}/approve/",
+            {},
+            format="json",
+        )
+        self.assertEqual(approved.status_code, 200)
+        pending.refresh_from_db()
+        self.assertTrue(pending.is_approved)
+        self.assertTrue(pending.is_active)
+
+        dashboard_after_approval = client.get("/api/dashboard/admin/")
+        self.assertEqual(dashboard_after_approval.data["total_students"], 1)
+        self.assertEqual(dashboard_after_approval.data["pending_learner_approval_count"], 0)
+
+    def test_admin_cannot_approve_learner_before_email_verification(self):
+        admin = User.objects.create_user(
+            username="admin-unverified-approval",
+            email="admin-unverified-approval@example.com",
+            password="Admin-Strong-Pass-123!",
+            role="admin",
+        )
+        pending = User.objects.create_user(
+            username="unverified-learner",
+            email="unverified-learner@example.com",
+            password="Learner-Strong-Pass-123!",
+            role="student",
+            is_approved=False,
+            is_active=False,
+        )
+        client = APIClient()
+        client.force_authenticate(user=admin)
+
+        response = client.post(
+            f"/api/dashboard/admin/learner-approvals/{pending.id}/approve/",
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("verify their email", response.data["detail"])
+        pending.refresh_from_db()
+        self.assertFalse(pending.is_approved)
+        self.assertFalse(pending.is_active)
+
+    def test_non_admin_cannot_list_or_approve_pending_learners(self):
+        learner = User.objects.create_user(
+            username="learner-no-approve",
+            email="learner-no-approve@example.com",
+            password="Test-password-123!",
+            role="student",
+        )
+        pending = User.objects.create_user(
+            username="pending-no-approve",
+            email="pending-no-approve@example.com",
+            password="Test-password-123!",
+            role="student",
+            is_approved=False,
+            is_active=False,
+        )
+        client = APIClient()
+        client.force_authenticate(user=learner)
+        self.assertEqual(client.get("/api/dashboard/admin/learner-approvals/").status_code, 403)
+        self.assertEqual(
+            client.post(
+                f"/api/dashboard/admin/learner-approvals/{pending.id}/approve/",
+                {},
+                format="json",
+            ).status_code,
+            403,
+        )
+
 
 class InstructorDashboardCourseScopeTests(TestCase):
     def test_instructor_sees_owned_courses_and_admin_sees_all_courses(self):

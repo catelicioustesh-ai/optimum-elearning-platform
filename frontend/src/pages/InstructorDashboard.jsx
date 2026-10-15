@@ -135,7 +135,7 @@ export default function InstructorDashboard() {
       setGrading(null)
       load()
     } catch (err) {
-      toast(`Couldn't grade this submission: ${err.message}`)
+      toast(`Couldn't grade this submission: ${err.message}`, 'error')
     }
   }
 
