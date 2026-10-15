@@ -163,30 +163,25 @@ DATABASES = {
     "default": {
         "ENGINE": "mssql",
         "NAME": os.environ.get("MSSQL_DB_NAME", "e-learning"),
-        "USER": os.environ.get("MSSQL_DB_USER", "sa"),
-        "PASSWORD": os.environ.get("MSSQL_DB_PASSWORD", ""),
-        "HOST": os.environ.get("MSSQL_DB_HOST", "KENNETH\\USER"),
-        "PORT": os.environ.get("MSSQL_DB_PORT", "1433"),
+        "USER": "",
+        "PASSWORD": "",
+        "HOST": os.environ.get("MSSQL_DB_HOST", "KENNETH"),
+        "PORT": "",
         "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "60")),
         "OPTIONS": {
             "driver": os.environ.get(
                 "MSSQL_ODBC_DRIVER",
                 "ODBC Driver 18 for SQL Server",
             ),
-            "extra_params": os.environ.get(
-                "MSSQL_EXTRA_PARAMS",
-                (
-                    "Encrypt=yes;TrustServerCertificate=no;"
-                    if not DEBUG
-                    else "Encrypt=yes;TrustServerCertificate=yes;"
-                ),
+            "extra_params": (
+                "Trusted_Connection=yes;"
+                "Encrypt=yes;"
+                "TrustServerCertificate=yes;"
             ),
         },
     }
 }
-
-
-# --------------------------------------------------------------------------
+#---------------------------
 # Authentication
 # --------------------------------------------------------------------------
 
