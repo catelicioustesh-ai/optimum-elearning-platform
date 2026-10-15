@@ -18,6 +18,8 @@ import {
   Library,
   LogOut,
   Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
   Search,
   Settings,
   SunMedium,
@@ -102,6 +104,7 @@ export default function DashboardLayout({
     }
   }
   const [menuOpen, setMenuOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem('dashboard-sidebar-collapsed') === 'true')
   const [moreNavOpen, setMoreNavOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [showAllNotifications, setShowAllNotifications] = useState(false)
@@ -119,6 +122,10 @@ export default function DashboardLayout({
   const menuRef = useRef(null)
   const notifRef = useRef(null)
   const moreNavRef = useRef(null)
+
+  useEffect(() => {
+    localStorage.setItem('dashboard-sidebar-collapsed', String(sidebarCollapsed))
+  }, [sidebarCollapsed])
 
   useEffect(() => {
     if (role !== 'student' || !fetchStudentProfile) return undefined
@@ -336,19 +343,35 @@ export default function DashboardLayout({
       <a className="dashboard-skip-link" href="#dashboard-main">Skip to main content</a>
 
       {/* Left Sidebar */}
-      <aside className="dashboard-sidebar sticky top-0 z-10 hidden h-screen w-62.5 shrink-0 self-start overflow-hidden border-r border-slate-200 bg-white text-slate-700 lg:flex lg:flex-col shadow-[10px_0_30px_-18px_rgba(15,23,42,0.14)]">
-        <div className="border-b border-slate-200 px-5 py-4">
-          <Logo tone="light" height={32} />
-          {brandLabel && brandLabel !== 'Optimum LMS' && (
+      <aside className={`dashboard-sidebar sticky top-0 z-10 hidden h-screen shrink-0 self-start overflow-hidden border-r border-slate-200 bg-white text-slate-700 shadow-[10px_0_30px_-18px_rgba(15,23,42,0.14)] transition-[width] duration-300 ease-out lg:flex lg:flex-col ${sidebarCollapsed ? 'is-collapsed w-20' : 'w-62.5'}`}>
+        <div className={`dashboard-sidebar-brand flex min-h-18 items-center border-b border-slate-200 py-4 ${sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-5'}`}>
+          {sidebarCollapsed ? (
+            <Logo tone="light" mark height={32} />
+          ) : (
+            <div className="min-w-0">
+              <Logo tone="light" height={32} />
+              {brandLabel && brandLabel !== 'Optimum LMS' && (
             <div className="mt-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500">{brandLabel}</div>
+              )}
+            </div>
           )}
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((collapsed) => !collapsed)}
+            className="dashboard-sidebar-toggle grid h-9 w-9 shrink-0 place-items-center rounded-xl text-slate-500 transition hover:bg-blue-50 hover:text-blue-800 focus-visible:outline-offset-2"
+            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!sidebarCollapsed}
+            title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}
+          </button>
         </div>
 
-        <nav aria-label="Primary navigation" className="student-sidebar-nav min-h-0 flex-1 space-y-1.5 overflow-y-auto px-3 py-5">
+        <nav aria-label="Primary navigation" className={`student-sidebar-nav dashboard-sidebar-nav min-h-0 flex-1 space-y-1.5 overflow-y-auto py-5 ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
           {currentNavItems.map((item, index) => (
             <div key={item.to} className="student-sidebar-nav-item">
-              {item.group && item.group !== currentNavItems[index - 1]?.group && (
-                <p className="px-3.5 pb-1 pt-4 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 first:pt-0">
+              {!sidebarCollapsed && item.group && item.group !== currentNavItems[index - 1]?.group && (
+                <p className={`dashboard-sidebar-group px-3.5 pb-1 pt-4 text-[10px] font-bold uppercase tracking-[0.14em] text-slate-400 first:pt-0 group-${item.group.toLowerCase()}`}>
                   {item.group}
                 </p>
               )}
@@ -357,14 +380,16 @@ export default function DashboardLayout({
                   type="button"
                   aria-current={activeAnchor === item.anchor ? 'location' : undefined}
                   onClick={() => scrollToSection(item.anchor)}
-                  className={`flex w-full items-center gap-3 rounded-xl px-3.5 py-2.5 text-left text-sm font-medium transition-all ${
+                  className={`dashboard-sidebar-link flex w-full items-center rounded-xl py-2.5 text-left text-sm font-medium transition-all ${sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3.5'} ${
                     activeAnchor === item.anchor
-                      ? 'bg-blue-600 text-white shadow-[0_10px_20px_-8px_rgba(37,99,235,0.45)]'
+                      ? 'is-active bg-blue-600 text-white shadow-[0_10px_20px_-8px_rgba(37,99,235,0.45)]'
                       : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                   }`}
+                  aria-label={sidebarCollapsed ? item.label : undefined}
+                  title={sidebarCollapsed ? item.label : undefined}
                 >
                   <item.icon size={18} strokeWidth={2.2} aria-hidden="true" />
-                  <span>{item.label}</span>
+                  {!sidebarCollapsed && <span>{item.label}</span>}
                   {item.to === '/dashboard/student/notifications' && unreadCount > 0 && (
                     <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">
                       {unreadCount > 9 ? '9+' : unreadCount}
@@ -375,16 +400,19 @@ export default function DashboardLayout({
                 <NavLink
                   to={item.to}
                   end={item.end}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium transition-all ${
-                      isActive && !(item.end && hash)
-                        ? 'bg-blue-600 text-white shadow-[0_10px_20px_-8px_rgba(37,99,235,0.45)]'
+                  className={({ isActive }) => {
+                    const active = navItemIsActive(item, isActive) && !(item.end && hash)
+                    return `dashboard-sidebar-link flex items-center rounded-xl py-2.5 text-sm font-medium transition-all ${sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3.5'} ${
+                      active
+                        ? 'is-active bg-blue-600 text-white shadow-[0_10px_20px_-8px_rgba(37,99,235,0.45)]'
                         : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                     }`
-                  }
+                  }}
+                  aria-label={sidebarCollapsed ? item.label : undefined}
+                  title={sidebarCollapsed ? item.label : undefined}
                 >
                   <item.icon size={18} strokeWidth={2.2} aria-hidden="true" />
-                  <span>{item.label}</span>
+                  {!sidebarCollapsed && <span>{item.label}</span>}
                   {item.to === '/dashboard/student/notifications' && unreadCount > 0 && (
                     <span className="ml-auto grid h-5 min-w-5 place-items-center rounded-full bg-rose-600 px-1 text-[10px] font-bold text-white">
                       {unreadCount > 9 ? '9+' : unreadCount}
@@ -397,8 +425,8 @@ export default function DashboardLayout({
         </nav>
 
         {/* Sidebar Footer Progress & Avatar */}
-        <div className="mt-auto shrink-0 border-t border-slate-200 px-3 py-4">
-          <div className="mb-3 px-1">
+        <div className={`dashboard-sidebar-footer mt-auto shrink-0 border-t border-slate-200 py-4 ${sidebarCollapsed ? 'px-2' : 'px-3'}`}>
+          {!sidebarCollapsed && <div className="mb-3 px-1">
             <div className="mb-1.5 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-500">
               <span>{goalLabels[role] || 'Progress'}</span>
               <span className="text-slate-700">{goalPercent}%</span>
@@ -409,20 +437,20 @@ export default function DashboardLayout({
                 style={{ width: `${goalPercent}%` }}
               />
             </div>
-          </div>
-          <div className="flex items-center gap-3 rounded-xl bg-slate-100 p-3">
+          </div>}
+          <div className={`dashboard-sidebar-user flex items-center rounded-xl bg-slate-100 ${sidebarCollapsed ? 'justify-center p-2' : 'gap-3 p-3'}`} title={sidebarCollapsed ? `${displayName} · ${roleLabels[role] || 'User'}` : undefined}>
             <ProfilePhoto
               photoPath={profile?.profile_photo}
-              className="h-9 w-9 rounded-full object-cover"
+              className="h-9 w-9 shrink-0 rounded-full object-cover"
               fallback={initials.slice(0, 2)}
               fallbackClassName="flex h-9 w-9 items-center justify-center rounded-full bg-blue-700 text-xs font-bold text-white shadow-sm"
             />
-            <div className="min-w-0">
+            {!sidebarCollapsed && <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-slate-900">{displayName}</div>
               <div className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{roleLabels[role] || 'User'}</div>
-            </div>
+            </div>}
           </div>
-          {role === 'student' && profileCompletePercent !== null && (
+          {!sidebarCollapsed && role === 'student' && profileCompletePercent !== null && (
             <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50/70 p-3">
               <div className="flex items-center justify-between text-[11px] font-semibold text-slate-700">
                 <span>Profile completion</span><span>{profileCompletePercent}%</span>
@@ -618,7 +646,11 @@ export default function DashboardLayout({
           </div>
         </header>
 
-        <main id="dashboard-main" tabIndex="-1" key={pathname} className="dashboard-main dg-page relative z-0 min-w-0 flex-1 bg-slate-50 p-4 pb-24 md:p-6 md:pb-24 lg:pb-6">{children}</main>
+        <main id="dashboard-main" tabIndex="-1" className="dashboard-main dg-page relative z-0 min-w-0 flex-1 bg-slate-50 p-4 pb-24 md:p-6 md:pb-24 lg:pb-6">
+          <div key={pathname} className="dashboard-route-content">
+            {children}
+          </div>
+        </main>
       </div>
 
       {moreNavOpen && (

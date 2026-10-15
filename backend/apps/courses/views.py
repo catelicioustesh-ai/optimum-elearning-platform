@@ -93,6 +93,12 @@ class CourseViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         role = role_of(self.request.user)
+        if self.request.query_params.get("manage") == "true":
+            if role == ADMIN:
+                return qs
+            if role == INSTRUCTOR:
+                return qs.filter(instructor=self.request.user)
+            return qs.none()
         if role == STUDENT:
             return qs.filter(status=Course.Status.PUBLISHED)
         if role != "admin":
@@ -103,10 +109,12 @@ class CourseViewSet(viewsets.ModelViewSet):
         return CourseDetailSerializer if self.action == "retrieve" else CourseSerializer
 
     def perform_create(self, serializer):
-        status_value = self.request.data.get("status", Course.Status.PUBLISHED)
-        if status_value not in Course.Status.values:
-            raise ValidationError({"status": "Use 'draft' or 'published'."})
-        serializer.save(instructor=self.request.user, status=status_value)
+        status_value = self.request.data.get("status", Course.Status.DRAFT)
+        if status_value != Course.Status.DRAFT:
+            raise ValidationError({
+                "status": "New courses start as drafts. Add course content, then use the publish action."
+            })
+        serializer.save(instructor=self.request.user, status=Course.Status.DRAFT)
 
     def perform_update(self, serializer):
         require_teaches(self.request.user, serializer.instance)

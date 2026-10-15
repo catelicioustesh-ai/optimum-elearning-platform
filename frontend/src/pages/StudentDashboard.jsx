@@ -51,20 +51,34 @@ export default function StudentDashboard() {
     fetchStudentDashboardData()
       .then((result) => {
         if (cancelled) return
-        setData(result)
+        setData({ ...result, student: auth })
         setSelectedCourseId((current) => current || result.current_course?.course_id || null)
+        setLoading(false)
+
+        api.get('/engagement/me/')
+          .then((engagement) => {
+            if (!cancelled) {
+              setData((current) => current ? { ...current, engagement, engagementError: '' } : current)
+            }
+          })
+          .catch((engagementError) => {
+            if (!cancelled) {
+              setData((current) => current ? {
+                ...current,
+                engagement: null,
+                engagementError: engagementError.message || 'Unable to load achievements.',
+              } : current)
+            }
+          })
       })
       .catch((err) => {
         if (cancelled) return
         setData(null)
         setError(err.message || 'Unable to load learning progress.')
       })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
 
     return () => { cancelled = true }
-  }, [reloadKey])
+  }, [reloadKey, auth])
 
   const courses = data?.enrolled_courses || []
   const course = courses.find((item) => item.course_id === selectedCourseId) || data?.current_course || null
@@ -154,11 +168,12 @@ export default function StudentDashboard() {
         <title>Student Dashboard — Optimum LMS</title>
       </Helmet>
 
-      <div className="space-y-6" data-role="student">
-        <header className="flex flex-wrap items-end justify-between gap-4">
+      <div className="student-dashboard space-y-6" data-role="student">
+        <header className="student-dashboard-heading flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">Learning overview</p>
+            <p className="student-dashboard-eyebrow text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">Learning overview</p>
             <h1 className="mt-1 text-2xl font-bold text-slate-900">Your learning</h1>
+            <p className="mt-1.5 text-sm text-slate-600">A clear view of your courses, progress, and what to do next.</p>
           </div>
           {courses.length > 1 && (
             <label className="grid gap-1 text-xs font-semibold text-slate-600">
@@ -227,7 +242,7 @@ export default function StudentDashboard() {
 
         {!loading && !error && course && (
           <>
-            <section className="dg-hero flex flex-col gap-6 rounded-2xl p-6 text-white md:flex-row md:items-center md:justify-between sm:p-8">
+            <section className="dg-hero student-learning-hero flex flex-col gap-6 rounded-2xl p-6 text-white md:flex-row md:items-center md:justify-between sm:p-8">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-blue-100">
                   {greetingForHour(new Date().getHours())}, {displayName(data?.student, auth)} <span aria-hidden="true">👋</span>
@@ -251,96 +266,86 @@ export default function StudentDashboard() {
                 </button>
               </div>
 
-              <div className="w-full shrink-0 md:max-w-52" aria-label={`${course.progress_percent}% of modules complete`}>
-                <div className="flex items-center justify-between text-xs font-semibold text-blue-100">
-                  <span>Course progress</span>
-                  <span>{course.progress_percent}%</span>
+              <div className="student-hero-summary w-full shrink-0 md:max-w-72">
+                <div aria-label={`${course.progress_percent}% of modules complete`}>
+                  <div className="flex items-center justify-between text-xs font-semibold text-blue-100">
+                    <span>Course progress</span>
+                    <span>{course.progress_percent}%</span>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-950/40">
+                    <div className="dg-progress-fill h-full rounded-full bg-white" style={{ width: `${course.progress_percent}%` }} />
+                  </div>
+                  <p className="mt-2 text-right text-xs text-blue-100">{completedModules} of {modules.length} modules</p>
                 </div>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-950/40">
-                  <div className="dg-progress-fill h-full rounded-full bg-white" style={{ width: `${course.progress_percent}%` }} />
-                </div>
-                <p className="mt-2 text-right text-xs text-blue-100">{completedModules} of {modules.length} modules</p>
+                {engagement && (
+                  <div className="student-next-reward mt-4" aria-label={`${engagement.xp_to_next_reward} XP to next reward`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-orange-100">
+                        <Sparkles size={14} aria-hidden="true" /> Next reward
+                      </span>
+                      <span className="text-xs font-bold text-white">{engagement.xp_to_next_reward} XP to go</span>
+                    </div>
+                    <div
+                      className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/20"
+                      role="progressbar"
+                      aria-label="Progress toward next XP reward"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={engagement.reward_progress_percent}
+                    >
+                      <div className="h-full rounded-full bg-[#d99a73]" style={{ width: `${engagement.reward_progress_percent}%` }} />
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
 
-            {engagement && (
-              <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Your learning momentum">
-                <article className="dg-card rounded-2xl border border-blue-100 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Learning XP</p>
-                      <p className="mt-1 text-2xl font-bold text-slate-900">{engagement.xp}</p>
-                    </div>
-                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-700">
-                      <Sparkles size={19} aria-hidden="true" />
-                    </span>
+            <section className="student-dashboard-snapshot grid gap-3 sm:grid-cols-3" aria-label="Learning at a glance">
+              <article className="dg-card student-stat student-stat-blue rounded-2xl border-l-4 border-l-blue-500 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Courses underway</p>
+                    <p className="mt-1 text-2xl font-bold text-slate-900">{coursesInProgress}</p>
+                    <p className="mt-1 text-xs text-slate-500">{completionRate}% average completion</p>
                   </div>
-                  <p className="mt-2 text-xs text-slate-600">{engagement.xp_to_next_reward} XP to your next reward</p>
-                  <div
-                    className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100"
-                    role="progressbar"
-                    aria-label="Progress toward next XP reward"
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={engagement.reward_progress_percent}
-                  >
-                    <div className="h-full rounded-full bg-blue-600" style={{ width: `${engagement.reward_progress_percent}%` }} />
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-700">
+                    <BookOpen size={19} aria-hidden="true" />
+                  </span>
+                </div>
+              </article>
+              <article className="dg-card student-stat student-stat-terracotta rounded-2xl border-l-4 border-l-amber-500 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Learning streak</p>
+                    <p className="mt-1 text-2xl font-bold text-slate-900">{engagement ? `${engagement.current_streak} days` : '—'}</p>
+                    <p className="mt-1 text-xs text-slate-500">{engagement ? `Longest: ${engagement.longest_streak} days` : 'Keep showing up to build momentum'}</p>
                   </div>
-                </article>
-
-                <article className="dg-card rounded-2xl border border-orange-100 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Learning streak</p>
-                      <p className="mt-1 text-2xl font-bold text-slate-900">{engagement.current_streak} {engagement.current_streak === 1 ? 'day' : 'days'}</p>
-                    </div>
-                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-orange-50 text-orange-600">
-                      <Flame size={20} aria-hidden="true" />
-                    </span>
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-orange-50 text-orange-700">
+                    <Flame size={19} aria-hidden="true" />
+                  </span>
+                </div>
+              </article>
+              <article className="dg-card student-stat student-stat-sage rounded-2xl border-l-4 border-l-emerald-500 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Awaiting review</p>
+                    <p className="mt-1 text-2xl font-bold text-slate-900">{data.pending_labs}</p>
+                    <p className="mt-1 text-xs text-slate-500">Submitted work being reviewed</p>
                   </div>
-                  <p className="mt-2 text-xs text-slate-600">Longest: {engagement.longest_streak} {engagement.longest_streak === 1 ? 'day' : 'days'}</p>
-                  <p className="mt-1 text-xs font-medium text-orange-800">
-                    {engagement.current_streak ? 'Keep learning to maintain your momentum.' : 'Start a new streak with a learning activity.'}
-                  </p>
-                </article>
-
-                <article className="dg-card rounded-2xl border border-amber-100 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Achievements</p>
-                      <p className="mt-1 text-2xl font-bold text-slate-900">{earnedAchievements.length} <span className="text-base font-semibold text-slate-500">/ {achievements.length}</span></p>
-                    </div>
-                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-700">
-                      <Award size={19} aria-hidden="true" />
-                    </span>
-                  </div>
-                  <p className="mt-2 truncate text-xs text-slate-600">
-                    {nextAchievement ? `Next: ${nextAchievement.name}` : 'You have earned every achievement!'}
-                  </p>
-                </article>
-
-                <article className="dg-card rounded-2xl border border-emerald-100 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Certificates</p>
-                      <p className="mt-1 text-2xl font-bold text-slate-900">{issuedCertificates.length}</p>
-                    </div>
-                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
-                      <CheckCircle2 size={19} aria-hidden="true" />
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-slate-600">Issued for completed courses</p>
-                </article>
-              </section>
-            )}
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
+                    <Clock3 size={19} aria-hidden="true" />
+                  </span>
+                </div>
+              </article>
+            </section>
 
             <section id="learning-path" className="dg-card scroll-mt-6 rounded-2xl p-5 sm:p-6">
               <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
                 <div>
-                  <h2 className="text-base font-bold text-white">Learning path</h2>
+                  <h2 className="text-base font-bold text-slate-900">Learning path</h2>
                   <p className="dg-sub mt-1">{course.course_title}</p>
                 </div>
-                <span className="text-xs text-slate-400">{modules.length} modules</span>
+                <span className="text-xs text-slate-600">{modules.length} modules</span>
               </div>
               {modules.length ? (
                 <LearningPath
@@ -351,68 +356,15 @@ export default function StudentDashboard() {
                   }}
                 />
               ) : (
-                <p className="text-sm text-slate-300" role="status">Learning path unavailable. This course has no modules yet.</p>
+                <p className="text-sm text-slate-600" role="status">Learning path unavailable. This course has no modules yet.</p>
               )}
             </section>
-
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="dg-card rounded-2xl border-l-4 border-l-blue-500 p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Courses in progress</p>
-                    <p className="mt-2 text-2xl font-bold text-slate-900">{coursesInProgress}</p>
-                  </div>
-                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-700">
-                    <BookOpen size={19} aria-hidden="true" />
-                  </span>
-                </div>
-              </div>
-              <div className="dg-card rounded-2xl border-l-4 border-l-emerald-500 p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Completion rate</p>
-                    <p className="mt-2 text-2xl font-bold text-slate-900">{completionRate}%</p>
-                    <p className="mt-1 text-xs text-slate-500">Across enrolled courses</p>
-                  </div>
-                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
-                    <CheckCircle2 size={19} aria-hidden="true" />
-                  </span>
-                </div>
-              </div>
-              <div className="dg-card rounded-2xl border-l-4 border-l-amber-500 p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Awaiting review</p>
-                    <p className="mt-2 text-2xl font-bold text-slate-900">{data.pending_labs}</p>
-                  </div>
-                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-700">
-                    <Clock3 size={19} aria-hidden="true" />
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => document.getElementById('achievements')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="dg-card rounded-2xl border-l-4 border-l-amber-500 p-5 text-left transition hover:-translate-y-0.5 lms-focus-ring"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Achievements earned</p>
-                    <p className="mt-2 text-2xl font-bold text-slate-900">{earnedAchievements.length} / {achievements.length}</p>
-                  </div>
-                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-700">
-                    <Award size={19} aria-hidden="true" />
-                  </span>
-                </div>
-                <p className="mt-2 text-xs text-slate-600">{nextAchievement ? `Next: ${nextAchievement.name}` : 'View your achievement collection'}</p>
-              </button>
-            </div>
 
             {engagement && (
               <section className="dg-card rounded-2xl p-5 sm:p-6" aria-labelledby="engagement-heading">
                 <div className="flex flex-wrap items-end justify-between gap-3">
                   <div>
-                    <h2 id="engagement-heading" className="text-base font-bold text-white">Your progress & rewards</h2>
+                    <h2 id="engagement-heading" className="text-base font-bold text-slate-900">Your progress & rewards</h2>
                     <p className="dg-sub mt-1">See how close you are to your next milestone</p>
                   </div>
                 </div>
@@ -526,7 +478,12 @@ export default function StudentDashboard() {
                     {sectionToggle('achievements', engagement.achievements, 'achievements')}
                   </div>
                   <div id="certificates" className="scroll-mt-6">
-                    <h3 className="text-sm font-bold text-slate-900">Certificate roadmap</h3>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-bold text-slate-900">Certificate roadmap</h3>
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
+                        {issuedCertificates.length} earned
+                      </span>
+                    </div>
                     <p className="mt-1 text-xs text-slate-600">Track your enrolled courses toward completion and certificates.</p>
                     {courses.length ? (
                       <ul className="mt-3 grid gap-3">
@@ -628,7 +585,7 @@ export default function StudentDashboard() {
                         </ul>
                       </div>
                     )}
-                    {certificateError && <p className="mt-3 text-sm text-rose-300" role="alert">{certificateError}</p>}
+                    {certificateError && <p className="mt-3 text-sm text-rose-700" role="alert">{certificateError}</p>}
                   </div>
                 </div>
               </section>
@@ -638,7 +595,7 @@ export default function StudentDashboard() {
               <section id="deadlines" className="dg-card scroll-mt-6 rounded-2xl border-t-4 border-t-amber-400 p-5 sm:p-6">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-base font-bold text-white">Upcoming deadlines</h2>
+                    <h2 className="text-base font-bold text-slate-900">Upcoming deadlines</h2>
                     <p className="dg-sub mt-1">Your next work to complete</p>
                   </div>
                   <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800">{data.upcoming_deadlines.length} due</span>
@@ -648,8 +605,8 @@ export default function StudentDashboard() {
                     {sectionItems('deadlines', data.upcoming_deadlines).map((item) => (
                       <li key={item.activity_id} className="flex flex-wrap items-center justify-between gap-3 border-slate-200 py-3 first:pt-0 last:pb-0">
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-white">{item.title}</p>
-                          <p className="mt-1 text-xs text-slate-400">{item.course_title} · {item.activity_type}</p>
+                          <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+                          <p className="mt-1 text-xs text-slate-600">{item.course_title} · {item.activity_type}</p>
                           <p className="mt-1 text-xs font-semibold text-amber-800">Due {formatDeadline(item.deadline)}</p>
                         </div>
                         <button
@@ -671,7 +628,7 @@ export default function StudentDashboard() {
               <section className="dg-card rounded-2xl border-t-4 border-t-blue-500 p-5 sm:p-6">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-base font-bold text-white">Recent results</h2>
+                    <h2 className="text-base font-bold text-slate-900">Recent results</h2>
                     <p className="dg-sub mt-1">Latest graded submissions</p>
                   </div>
                   <button
@@ -687,8 +644,8 @@ export default function StudentDashboard() {
                     {sectionItems('recentGrades', data.recent_grades).map((result, index) => (
                       <li key={`${result.activity}-${index}`} className="flex flex-wrap items-center justify-between gap-3 border-slate-200 py-3 first:pt-0 last:pb-0">
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-white">{result.activity}</p>
-                          <p className="mt-1 text-xs text-slate-400">
+                          <p className="text-sm font-semibold text-slate-900">{result.activity}</p>
+                          <p className="mt-1 text-xs text-slate-600">
                             {result.graded_at ? `Graded ${new Date(result.graded_at).toLocaleDateString()}` : 'Recently graded'}
                             {result.feedback ? ` · ${result.feedback}` : ''}
                           </p>

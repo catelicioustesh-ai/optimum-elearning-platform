@@ -21,7 +21,7 @@ export default function LearningPath({ modules = [], onSelectModule }) {
 
   return (
     <div>
-      <p className="mb-3 text-xs text-slate-400">Select an available module to continue.</p>
+      <p className="mb-3 text-xs text-slate-600">Select an available module to continue.</p>
       <ol className="grid list-none grid-cols-2 gap-3 p-0 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
           {modules.map((module, index) => {
             const status = statusMeta[module.status] ? module.status : 'locked'
@@ -37,7 +37,7 @@ export default function LearningPath({ modules = [], onSelectModule }) {
                 className={`learning-path-step learning-path-step-${status} min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3 text-center transition-colors ${selectedHere ? 'border-blue-400 bg-blue-50' : ''}`}
                 style={{ '--path-delay': `${Math.min(index * 65, 780)}ms` }}
               >
-                <span className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <span className="mb-2 block text-[11px] font-semibold uppercase tracking-wide text-slate-600">
                   Module {module.order || index + 1}
                 </span>
                 <button
@@ -68,9 +68,9 @@ export default function LearningPath({ modules = [], onSelectModule }) {
       </ol>
 
       <div className="learning-path-progress mt-3" role="status" aria-label={`${completed} of ${modules.length} modules completed`}>
-        <div className="mb-1.5 flex items-center justify-between text-xs text-slate-300">
+        <div className="mb-1.5 flex items-center justify-between text-xs text-slate-600">
           <span>{completed} of {modules.length} modules completed</span>
-          <span className="font-semibold tabular-nums text-blue-200">{completedPercent}%</span>
+          <span className="font-semibold tabular-nums text-blue-700">{completedPercent}%</span>
         </div>
         <div className="learning-path-progress-track" aria-hidden="true">
           <div className="learning-path-progress-fill" style={{ width: `${completedPercent}%` }} />
@@ -79,10 +79,10 @@ export default function LearningPath({ modules = [], onSelectModule }) {
 
       {selected && (
         <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm" role="status">
-          <ContentIcon type="module" size={16} className="shrink-0 text-blue-300" />
-          <span className="font-semibold text-white">{selected.title}</span>
-          <span className="text-slate-300">{statusMeta[selected.status]?.label || 'Module'}</span>
-          {selected.mastery != null && <span className="text-slate-400">{selected.mastery}% mastery</span>}
+          <ContentIcon type="module" size={16} className="shrink-0 text-blue-700" />
+          <span className="font-semibold text-slate-900">{selected.title}</span>
+          <span className="text-slate-600">{statusMeta[selected.status]?.label || 'Module'}</span>
+          {selected.mastery != null && <span className="text-slate-600">{selected.mastery}% mastery</span>}
         </div>
       )}
     </div>

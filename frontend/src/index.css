@@ -157,6 +157,28 @@ select {
   min-width: 0;
 }
 
+.dashboard-route-content {
+  animation: dashboard-route-enter 180ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+@keyframes dashboard-route-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-route-content {
+    animation: none;
+  }
+}
+
 @media (max-width: 1023.98px) {
   .dashboard-mobile-nav {
     position: fixed;
@@ -242,6 +264,284 @@ select {
   box-shadow: 0 24px 60px rgb(15 23 42 / 24%);
 }
 
+.dashboard-sidebar {
+  border-color: var(--dashboard-border) !important;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgb(226 236 249 / 48%), transparent 42%),
+    var(--dashboard-surface) !important;
+  box-shadow: 12px 0 36px -30px rgb(22 48 82 / 40%);
+}
+
+.dashboard-sidebar-brand {
+  border-color: var(--dashboard-border) !important;
+}
+
+.dashboard-sidebar-toggle {
+  background: rgb(238 244 251 / 72%);
+}
+
+.dashboard-sidebar-toggle:hover {
+  background: #e7eff9;
+  transform: translateY(-1px);
+}
+
+.dashboard-sidebar-nav {
+  scrollbar-color: #bdcde0 transparent;
+  scrollbar-width: thin;
+}
+
+.dashboard-sidebar-nav .student-sidebar-nav-item {
+  margin-block: 0.15rem;
+}
+
+.dashboard-sidebar-nav .dashboard-sidebar-link {
+  position: relative;
+  min-height: 2.75rem;
+  overflow: hidden;
+  color: #53657a !important;
+  transition: color 170ms ease, background-color 170ms ease, box-shadow 170ms ease, transform 170ms ease;
+}
+
+.dashboard-sidebar-nav .dashboard-sidebar-link:hover {
+  transform: translateX(2px);
+  background: #edf3fa;
+  color: #17345a !important;
+}
+
+.dashboard-sidebar-nav .dashboard-sidebar-link.is-active {
+  color: #fff !important;
+  background: linear-gradient(105deg, #173f78, #245da5);
+  box-shadow: 0 8px 18px -12px rgb(18 58 111 / 72%);
+}
+
+.dashboard-sidebar-nav .dashboard-sidebar-link.is-active::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  border-radius: 0 4px 4px 0;
+  background: #e3b18c;
+  content: '';
+}
+
+.dashboard-sidebar-nav .dashboard-sidebar-link svg {
+  flex: none;
+  transition: transform 170ms ease;
+}
+
+.dashboard-sidebar-nav .dashboard-sidebar-link:hover svg {
+  transform: scale(1.08);
+}
+
+.dashboard-sidebar.is-collapsed .dashboard-sidebar-nav .dashboard-sidebar-link {
+  width: 3rem;
+  margin-inline: auto;
+}
+
+.dashboard-sidebar.is-collapsed .dashboard-sidebar-nav .dashboard-sidebar-link.is-active::before {
+  inset: 25% auto 25% 0;
+}
+
+.dashboard-sidebar.is-collapsed .dashboard-sidebar-nav .dashboard-sidebar-link > span {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.15rem;
+  display: grid;
+  min-width: 1rem;
+  height: 1rem;
+  place-items: center;
+  border-radius: 999px;
+  background: #be123c;
+  color: white !important;
+  font-size: 0.6rem;
+  line-height: 1;
+}
+
+.dashboard-sidebar-footer {
+  border-color: var(--dashboard-border) !important;
+}
+
+.dashboard-sidebar-group {
+  color: #748276 !important;
+}
+
+.dashboard-sidebar-group.group-learning,
+.dashboard-sidebar-group.group-overview {
+  color: #57759d !important;
+}
+
+.dashboard-sidebar-group.group-recognition,
+.dashboard-sidebar-group.group-achievements,
+.dashboard-sidebar-group.group-personal {
+  color: #a86a4d !important;
+}
+
+.dashboard-sidebar-group.group-teaching,
+.dashboard-sidebar-group.group-community,
+.dashboard-sidebar-group.group-management {
+  color: #67816b !important;
+}
+
+.dashboard-sidebar-footer .dg-progress-fill {
+  background: linear-gradient(90deg, #3470b3 0%, #6f95bf 68%, #91a98a 100%);
+}
+
+.dashboard-sidebar-footer a {
+  color: #a95535 !important;
+}
+
+.dashboard-sidebar-footer a:hover {
+  color: #85412a !important;
+}
+
+:root[data-theme='dark'] .dashboard-sidebar-group {
+  color: #a7b8a8 !important;
+}
+
+:root[data-theme='dark'] .dashboard-sidebar-group.group-learning,
+:root[data-theme='dark'] .dashboard-sidebar-group.group-overview {
+  color: #a9c9f2 !important;
+}
+
+:root[data-theme='dark'] .dashboard-sidebar-group.group-recognition,
+:root[data-theme='dark'] .dashboard-sidebar-group.group-achievements,
+:root[data-theme='dark'] .dashboard-sidebar-group.group-personal {
+  color: #e2ae8d !important;
+}
+
+:root[data-theme='dark'] .dashboard-sidebar-group.group-teaching,
+:root[data-theme='dark'] .dashboard-sidebar-group.group-community,
+:root[data-theme='dark'] .dashboard-sidebar-group.group-management {
+  color: #b5cfad !important;
+}
+
+:root[data-theme='dark'] .dashboard-sidebar-footer .dg-progress-fill {
+  background: linear-gradient(90deg, #6e9dd5 0%, #91b6e1 68%, #b5cfad 100%);
+}
+
+.dashboard-shell[data-role='instructor'] .dg-kpi:nth-child(4n + 1) {
+  border-top: 3px solid #527cae;
+}
+
+.dashboard-shell[data-role='instructor'] .dg-kpi:nth-child(4n + 2) {
+  border-top: 3px solid #809b7d;
+}
+
+.dashboard-shell[data-role='instructor'] .dg-kpi:nth-child(4n + 3) {
+  border-top: 3px solid #c28b66;
+}
+
+.dashboard-shell[data-role='instructor'] .dg-kpi:nth-child(4n) {
+  border-top: 3px solid #bd9e5e;
+}
+
+.dashboard-sidebar-user {
+  background-color: var(--dashboard-surface-muted);
+  transition: background-color 160ms ease, transform 160ms ease;
+}
+
+.dashboard-sidebar-user:hover {
+  transform: translateY(-1px);
+  background-color: #e7eef6;
+}
+
+.dashboard-mobile-nav {
+  border-color: #dce5ed;
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 -10px 32px rgb(27 50 78 / 10%);
+}
+
+.dashboard-mobile-nav-link {
+  position: relative;
+  transition: color 170ms ease, background-color 170ms ease, transform 170ms ease;
+}
+
+.dashboard-mobile-nav-link:active {
+  transform: scale(0.96);
+}
+
+.dashboard-mobile-nav-link.is-active {
+  background: #eaf1fb;
+  color: #1d4f91;
+}
+
+.dashboard-mobile-nav-link.is-active::before {
+  position: absolute;
+  top: 0.2rem;
+  left: 50%;
+  width: 1rem;
+  height: 2px;
+  border-radius: 999px;
+  background: #a95535;
+  content: '';
+  transform: translateX(-50%);
+}
+
+.dashboard-more-backdrop {
+  background: rgb(15 32 54 / 48%);
+  backdrop-filter: blur(6px);
+}
+
+.dashboard-more-sheet {
+  border-color: #dce5ed;
+  box-shadow: 0 28px 70px rgb(15 32 54 / 28%);
+  animation: dashboard-sheet-enter 200ms cubic-bezier(.2, .8, .2, 1) both;
+}
+
+@keyframes dashboard-sheet-enter {
+  from { opacity: 0; transform: translateY(14px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+:root[data-theme='dark'] .dashboard-sidebar {
+  background:
+    radial-gradient(ellipse at 50% 0%, rgb(46 70 101 / 24%), transparent 42%),
+    var(--dashboard-surface) !important;
+  box-shadow: 12px 0 36px -30px rgb(0 0 0 / 72%);
+}
+
+:root[data-theme='dark'] .dashboard-sidebar-toggle {
+  background: rgb(41 59 82 / 72%);
+  color: #b9cbe0;
+}
+
+:root[data-theme='dark'] .dashboard-sidebar-toggle:hover,
+:root[data-theme='dark'] .dashboard-sidebar-user:hover {
+  background: #2a3d55;
+}
+
+:root[data-theme='dark'] .dashboard-sidebar-nav .dashboard-sidebar-link {
+  color: #afbed1 !important;
+}
+
+:root[data-theme='dark'] .dashboard-sidebar-nav .dashboard-sidebar-link:hover {
+  background: #24364d;
+  color: #e8f0fa !important;
+}
+
+:root[data-theme='dark'] .dashboard-sidebar-nav .dashboard-sidebar-link.is-active {
+  background: linear-gradient(105deg, #1e467e, #285f9f);
+  color: #fff !important;
+}
+
+:root[data-theme='dark'] .dashboard-mobile-nav {
+  border-color: #34465e;
+  background: rgb(23 36 56 / 96%);
+}
+
+:root[data-theme='dark'] .dashboard-mobile-nav-link {
+  color: #a9bbd1;
+}
+
+:root[data-theme='dark'] .dashboard-mobile-nav-link.is-active {
+  background: #263b58;
+  color: #c3dcfb;
+}
+
+:root[data-theme='dark'] .dashboard-more-sheet {
+  border-color: #34465e;
+  background: #172438;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .dashboard-mobile-nav-link,
   .dashboard-shell button,
@@ -249,6 +549,23 @@ select {
     scroll-behavior: auto;
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+  }
+
+  .dashboard-sidebar-nav .dashboard-sidebar-link,
+  .dashboard-sidebar-toggle,
+  .dashboard-sidebar-user {
+    transition: none;
+  }
+
+  .dashboard-sidebar-nav .dashboard-sidebar-link:hover,
+  .dashboard-sidebar-toggle:hover,
+  .dashboard-sidebar-user:hover,
+  .dashboard-mobile-nav-link:active {
+    transform: none;
+  }
+
+  .dashboard-more-sheet {
+    animation: none;
   }
 }
 
@@ -764,4 +1081,986 @@ select {
 :root[data-theme='dark'] .dashboard-shell .dg-hero {
   border-color: rgba(37, 99, 235, 0.35);
   background: linear-gradient(125deg, #0f256e 0%, #1d4ed8 65%, #2563eb 100%);
+}
+
+.instructor-workspace .course-workspace-hero {
+  position: relative;
+  overflow: hidden;
+  border-color: #e8d7c9;
+  background:
+    radial-gradient(circle at 92% 12%, rgb(237 194 149 / 30%), transparent 27%),
+    linear-gradient(115deg, #fff8ef 0%, #fffdf9 48%, #edf6f1 100%);
+}
+
+.instructor-workspace .course-workspace-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+.instructor-workspace .course-workspace-pathway {
+  border-color: #d9e7de;
+  background: linear-gradient(120deg, #f4f7ef, #f8fbf8 58%, #fdf5eb);
+}
+
+.instructor-workspace .course-workspace-step {
+  padding: 0.85rem;
+  border: 1px solid rgb(211 224 213 / 75%);
+  border-radius: 0.85rem;
+  background: rgb(255 255 255 / 76%);
+  animation: course-step-enter 420ms both;
+}
+
+.instructor-workspace .course-workspace-step:nth-child(2) { animation-delay: 35ms; }
+.instructor-workspace .course-workspace-step:nth-child(3) { animation-delay: 70ms; }
+.instructor-workspace .course-workspace-step:nth-child(4) { animation-delay: 105ms; }
+.instructor-workspace .course-workspace-step:nth-child(5) { animation-delay: 140ms; }
+
+.instructor-workspace .course-workspace-card {
+  border-color: #e5e2d8;
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.instructor-workspace .course-workspace-card:hover {
+  transform: translateY(-3px);
+  border-color: #c2d4c8;
+  box-shadow: 0 12px 28px rgb(47 64 51 / 10%);
+}
+
+.instructor-workspace .course-workspace-card.is-selected {
+  border-color: #c2764d;
+  box-shadow: 0 0 0 2px rgb(194 118 77 / 18%);
+}
+
+.instructor-workspace .course-workspace-cover {
+  background: linear-gradient(135deg, #f2e6d5, #e4eee5);
+  color: #526b57;
+}
+
+.instructor-workspace .course-workspace-primary {
+  background-color: #a95535;
+  transition: background-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+
+.instructor-workspace .course-workspace-primary:hover:not(:disabled) {
+  background-color: #8e452c;
+  box-shadow: 0 5px 14px rgb(142 69 44 / 20%);
+  transform: translateY(-1px);
+}
+
+.instructor-workspace .course-workspace-primary:focus-visible {
+  outline: 3px solid #d99b70;
+  outline-offset: 3px;
+}
+
+.instructor-workspace .bg-blue-50 {
+  background-color: #f7f5ee;
+}
+
+.instructor-workspace .bg-blue-100 {
+  background-color: #e9eee5;
+}
+
+.instructor-workspace .bg-blue-600,
+.instructor-workspace .bg-blue-700 {
+  background-color: #a95535;
+}
+
+.instructor-workspace .bg-blue-600:hover,
+.instructor-workspace .bg-blue-700:hover {
+  background-color: #8e452c;
+}
+
+.instructor-workspace .bg-blue-800:hover {
+  background-color: #8e452c;
+}
+
+.instructor-workspace .text-blue-600,
+.instructor-workspace .text-blue-700,
+.instructor-workspace .text-blue-800 {
+  color: #526b57;
+}
+
+.instructor-workspace .text-blue-900 {
+  color: #5a6654;
+}
+
+.instructor-workspace .border-blue-200,
+.instructor-workspace .border-blue-500 {
+  border-color: #d7c8b8;
+}
+
+.instructor-workspace .file\:bg-blue-100::file-selector-button {
+  background-color: #e9eee5;
+}
+
+.instructor-workspace .file\:text-blue-700::file-selector-button {
+  color: #526b57;
+}
+
+@keyframes course-step-enter {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .instructor-workspace .course-workspace-step {
+    animation: none;
+  }
+
+  .instructor-workspace .course-workspace-card,
+  .instructor-workspace .course-workspace-primary {
+    transition: none;
+  }
+
+  .instructor-workspace .course-workspace-card:hover,
+  .instructor-workspace .course-workspace-primary:hover:not(:disabled) {
+    transform: none;
+  }
+}
+
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) {
+  --dashboard-bg: #f5f5ef;
+  --dashboard-surface: #fffefa;
+  --dashboard-surface-muted: #f1f3ec;
+  --dashboard-ink: #25352d;
+  --dashboard-muted: #68766d;
+  --dashboard-border: #e2e5da;
+}
+
+:root[data-theme='dark'] .dashboard-shell:is([data-role='instructor'], [data-role='student']) {
+  --dashboard-bg: #111a16;
+  --dashboard-surface: #18231d;
+  --dashboard-surface-muted: #202d25;
+  --dashboard-ink: #e9f0e9;
+  --dashboard-muted: #a5b4a7;
+  --dashboard-border: #35453a;
+}
+
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .dashboard-content {
+  background-color: var(--dashboard-bg);
+}
+
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .dashboard-main {
+  background:
+    radial-gradient(ellipse at 96% 0%, rgb(216 226 209 / 31%), transparent 31%),
+    radial-gradient(ellipse at 2% 62%, rgb(232 204 184 / 13%), transparent 29%),
+    var(--dashboard-bg);
+}
+
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .dg-card {
+  border-color: var(--dashboard-border);
+  background-color: var(--dashboard-surface);
+  background-image: linear-gradient(145deg, rgb(255 255 255 / 34%), transparent 62%);
+  box-shadow: 0 12px 28px -23px rgb(47 64 51 / 35%);
+}
+
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .dg-card:hover {
+  border-color: #c4d2c2;
+  box-shadow: 0 18px 34px -24px rgb(47 83 61 / 30%);
+}
+
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .dg-card::before {
+  background: radial-gradient(360px circle at var(--mx, 50%) var(--my, 50%), rgb(128 157 117 / 10%), transparent 60%);
+}
+
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .dg-hero {
+  border-color: rgb(99 132 101 / 35%);
+  background: linear-gradient(125deg, #294c40 0%, #3f6854 62%, #658367 100%);
+  box-shadow: 0 22px 48px -30px rgb(37 69 51 / 48%);
+}
+
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .dg-hero .text-blue-100 {
+  color: #e7efe5;
+}
+
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .dg-hero .text-blue-900 {
+  color: #294c40;
+}
+
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .bg-blue-50 {
+  background-color: #edf4fc;
+}
+
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .bg-blue-100 {
+  background-color: #dceafb;
+}
+
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .bg-blue-600,
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .bg-blue-700 {
+  background-color: #2457a6;
+}
+
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .bg-blue-600:hover,
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .bg-blue-700:hover,
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .bg-blue-800:hover,
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) [class~="hover:bg-blue-500"]:hover,
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) [class~="hover:bg-blue-800"]:hover {
+  background-color: #1b478b;
+}
+
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .text-blue-600,
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .text-blue-700,
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .text-blue-800,
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) [class~="hover:text-blue-700"]:hover {
+  color: #2457a6;
+}
+
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .border-blue-100,
+.dashboard-shell:is([data-role='instructor'], [data-role='student']) .border-blue-200 {
+  border-color: #cbdcf0;
+}
+
+:root[data-theme='dark'] .dashboard-shell:is([data-role='instructor'], [data-role='student']) .dashboard-main {
+  background:
+    radial-gradient(ellipse at 96% 0%, rgb(78 111 82 / 12%), transparent 32%),
+    var(--dashboard-bg);
+}
+
+:root[data-theme='dark'] .dashboard-shell:is([data-role='instructor'], [data-role='student']) .dg-card:hover {
+  border-color: #526b57;
+}
+
+:root[data-theme='dark'] .dashboard-shell:is([data-role='instructor'], [data-role='student']) .bg-blue-50 {
+  background-color: #213550;
+}
+
+:root[data-theme='dark'] .dashboard-shell:is([data-role='instructor'], [data-role='student']) .bg-blue-100 {
+  background-color: #2a4261;
+}
+
+:root[data-theme='dark'] .dashboard-shell:is([data-role='instructor'], [data-role='student']) .dashboard-main {
+  background:
+    radial-gradient(ellipse at 96% 0%, rgb(78 111 82 / 13%), transparent 32%),
+    radial-gradient(ellipse at 2% 62%, rgb(145 94 63 / 9%), transparent 29%),
+    var(--dashboard-bg);
+}
+
+:root[data-theme='dark'] .dashboard-shell:is([data-role='instructor'], [data-role='student']) .text-blue-600,
+:root[data-theme='dark'] .dashboard-shell:is([data-role='instructor'], [data-role='student']) .text-blue-700,
+:root[data-theme='dark'] .dashboard-shell:is([data-role='instructor'], [data-role='student']) .text-blue-800,
+:root[data-theme='dark'] .dashboard-shell:is([data-role='instructor'], [data-role='student']) [class~="hover:text-blue-700"]:hover {
+  color: #a9c9f2;
+}
+
+:root[data-theme='dark'] .instructor-workspace .bg-blue-50 {
+  background-color: #26352c;
+}
+
+:root[data-theme='dark'] .instructor-workspace .bg-blue-100 {
+  background-color: #304235;
+}
+
+:root[data-theme='dark'] .instructor-workspace .text-blue-600,
+:root[data-theme='dark'] .instructor-workspace .text-blue-700,
+:root[data-theme='dark'] .instructor-workspace .text-blue-800,
+:root[data-theme='dark'] .instructor-workspace .text-blue-900 {
+  color: #b6cfb3;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-shell:is([data-role='instructor'], [data-role='student']) .dg-card,
+  .dashboard-shell:is([data-role='instructor'], [data-role='student']) .dg-card::before {
+    transition: none;
+  }
+
+  .dashboard-shell:is([data-role='instructor'], [data-role='student']) .dg-card:hover {
+    transform: none;
+  }
+}
+
+.dashboard-shell[data-role='student'] {
+  --dashboard-bg: #f4f7f8;
+  --dashboard-surface: #ffffff;
+  --dashboard-surface-muted: #eef3f5;
+  --dashboard-ink: #172b43;
+  --dashboard-muted: #5c6e82;
+  --dashboard-border: #dce5e9;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] {
+  --dashboard-bg: #101a29;
+  --dashboard-surface: #172438;
+  --dashboard-surface-muted: #202f44;
+  --dashboard-ink: #e8f0fa;
+  --dashboard-muted: #a9bbd1;
+  --dashboard-border: #34465e;
+}
+
+.dashboard-shell[data-role='student'] .dashboard-main {
+  background:
+    radial-gradient(ellipse at 96% 0%, rgb(191 213 244 / 38%), transparent 33%),
+    radial-gradient(ellipse at 2% 32%, rgb(217 230 218 / 20%), transparent 34%),
+    radial-gradient(ellipse at 100% 58%, rgb(232 204 184 / 15%), transparent 30%),
+    var(--dashboard-bg);
+}
+
+.dashboard-shell[data-role='student'] .dg-card {
+  border-color: var(--dashboard-border);
+  background-color: var(--dashboard-surface);
+  box-shadow: 0 12px 30px -23px rgb(31 66 112 / 34%);
+}
+
+.dashboard-shell[data-role='student'] .dg-card:hover {
+  border-color: #bfd2c4;
+  box-shadow: 0 18px 36px -24px rgb(52 91 70 / 25%);
+}
+
+.dashboard-shell[data-role='student'] .dg-card::before {
+  background: radial-gradient(360px circle at var(--mx, 50%) var(--my, 50%), rgb(96 145 209 / 9%), transparent 60%);
+}
+
+.dashboard-shell[data-role='student'] .dg-hero {
+  border-color: rgb(59 105 172 / 38%);
+  background: linear-gradient(125deg, #102d5c 0%, #1d4f91 62%, #3675b9 100%);
+  box-shadow: 0 22px 48px -30px rgb(24 57 105 / 56%);
+}
+
+.dashboard-shell[data-role='student'] .bg-blue-50 {
+  background-color: #edf4fc;
+}
+
+.dashboard-shell[data-role='student'] .bg-blue-100 {
+  background-color: #dceafb;
+}
+
+.dashboard-shell[data-role='student'] .bg-blue-600,
+.dashboard-shell[data-role='student'] .bg-blue-700 {
+  background-color: #2457a6;
+}
+
+.dashboard-shell[data-role='student'] .bg-blue-600:hover,
+.dashboard-shell[data-role='student'] .bg-blue-700:hover,
+.dashboard-shell[data-role='student'] .bg-blue-800:hover,
+.dashboard-shell[data-role='student'] [class~="hover:bg-blue-500"]:hover,
+.dashboard-shell[data-role='student'] [class~="hover:bg-blue-800"]:hover {
+  background-color: #1b478b;
+}
+
+.dashboard-shell[data-role='student'] .text-blue-600,
+.dashboard-shell[data-role='student'] .text-blue-700,
+.dashboard-shell[data-role='student'] .text-blue-800,
+.dashboard-shell[data-role='student'] [class~="hover:text-blue-700"]:hover {
+  color: #2457a6;
+}
+
+.dashboard-shell[data-role='student'] .border-blue-100,
+.dashboard-shell[data-role='student'] .border-blue-200 {
+  border-color: #cbdcf0;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard > header {
+  padding: 0.5rem 0.125rem 0.25rem;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard > header h1 {
+  letter-spacing: -0.035em;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard > section,
+.dashboard-shell[data-role='student'] .student-dashboard > div > section {
+  scroll-margin-top: 1.5rem;
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-progress {
+  padding-top: 0.75rem;
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-progress > div:first-child {
+  color: var(--dashboard-muted);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-progress .text-blue-700 {
+  color: #2457a6;
+}
+
+.dashboard-shell[data-role='student'] #learning-path .mt-3.flex.flex-wrap {
+  border-color: var(--dashboard-border);
+  background-color: var(--dashboard-surface-muted);
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard .border-t-4 {
+  border-top-color: #7395c2;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard [id='deadlines'] {
+  border-top-color: #d29a52;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .dashboard-main {
+  background:
+    radial-gradient(ellipse at 96% 0%, rgb(67 105 158 / 18%), transparent 33%),
+    radial-gradient(ellipse at 100% 58%, rgb(145 94 63 / 11%), transparent 30%),
+    var(--dashboard-bg);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .dg-card:hover {
+  border-color: #59779d;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .bg-blue-50 {
+  background-color: #213550;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .bg-blue-100 {
+  background-color: #2a4261;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .text-blue-600,
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .text-blue-700,
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .text-blue-800,
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] [class~="hover:text-blue-700"]:hover {
+  color: #a9c9f2;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-heading {
+  padding: 0.5rem 0.125rem 0.25rem;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-heading h1 {
+  color: #17345a;
+  font-size: clamp(1.65rem, 2.4vw, 2rem);
+  letter-spacing: -0.04em;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-eyebrow::before {
+  width: 1.25rem;
+  height: 2px;
+  border-radius: 999px;
+  background: #a95535;
+  content: '';
+}
+
+.dashboard-shell[data-role='student'] .student-learning-hero {
+  position: relative;
+  min-height: 220px;
+  border-radius: 26px;
+  border-color: rgb(205 155 119 / 48%);
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  background:
+    radial-gradient(circle at 91% 11%, rgb(216 148 106 / 36%), transparent 24%),
+    radial-gradient(ellipse at 73% 115%, rgb(156 111 81 / 28%), transparent 34%),
+    linear-gradient(122deg, #102d5c 0%, #1d4f91 62%, #315f91 100%);
+  box-shadow: 0 22px 48px -30px rgb(38 67 104 / 50%);
+}
+
+.dashboard-shell[data-role='student'] .student-learning-hero::after {
+  position: absolute;
+  inset: auto 1.6rem 0;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(90deg, #7e9c80 0%, #c17a54 72%, #d5a277 100%);
+  content: '';
+}
+
+.dashboard-shell[data-role='student'] .student-learning-hero > div:first-of-type {
+  max-width: 62ch;
+}
+
+.dashboard-shell[data-role='student'] .student-learning-hero h2 {
+  max-width: 24ch;
+  font-size: clamp(1.5rem, 2.7vw, 2.1rem);
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+}
+
+.dashboard-shell[data-role='student'] .student-learning-hero .dg-resume-button {
+  box-shadow: 0 8px 18px -12px rgb(4 18 42 / 65%);
+}
+
+.dashboard-shell[data-role='student'] .student-hero-summary {
+  max-width: 15rem;
+  padding: 1rem;
+  border: 1px solid rgb(255 255 255 / 17%);
+  border-radius: 1rem;
+  background: rgb(8 31 67 / 24%);
+  backdrop-filter: blur(8px);
+}
+
+.dashboard-shell[data-role='student'] .student-momentum-card,
+.dashboard-shell[data-role='student'] .student-stat {
+  min-height: 112px;
+}
+
+.dashboard-shell[data-role='student'] .student-hero-summary {
+  max-width: 18rem;
+}
+
+.dashboard-shell[data-role='student'] .student-next-reward {
+  padding-top: 0.75rem;
+  border-top: 1px solid rgb(255 255 255 / 15%);
+}
+
+@media (max-width: 767px) {
+  .dashboard-shell[data-role='student'] .student-hero-summary {
+    max-width: none;
+  }
+}
+
+.dashboard-shell[data-role='student'] .student-momentum-card {
+  border-top: 3px solid #7898c1;
+}
+
+.dashboard-shell[data-role='student'] .student-momentum-streak {
+  border-top-color: #c17a54;
+}
+
+.dashboard-shell[data-role='student'] .student-momentum-achievements {
+  border-top-color: #b66f4d;
+}
+
+.dashboard-shell[data-role='student'] .student-momentum-certificates {
+  border-top-color: #7e9c80;
+}
+
+.dashboard-shell[data-role='student'] .student-stat {
+  overflow: hidden;
+}
+
+.dashboard-shell[data-role='student'] .student-stat-blue {
+  border-left-color: #4779b5;
+}
+
+.dashboard-shell[data-role='student'] .student-stat-sage {
+  border-left-color: #7e9c80;
+}
+
+.dashboard-shell[data-role='student'] .student-stat-terracotta {
+  border-left-color: #c17a54;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat {
+  min-height: 0;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px -20px rgb(47 63 83 / 35%);
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat p {
+  line-height: 1.35;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat-terracotta .bg-orange-50 {
+  background-color: #fbefe8;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat-terracotta .text-orange-700 {
+  color: #a95535;
+}
+
+.dashboard-shell[data-role='student'] .student-momentum-streak .bg-orange-50 {
+  background-color: #fbefe8;
+}
+
+.dashboard-shell[data-role='student'] .student-momentum-streak .text-orange-600 {
+  color: #a95535;
+}
+
+.dashboard-shell[data-role='student'] .student-momentum-streak .text-orange-800 {
+  color: #85452f;
+}
+
+.dashboard-shell[data-role='student'] .student-momentum-achievements .bg-amber-50 {
+  background-color: #fbefe8;
+}
+
+.dashboard-shell[data-role='student'] .student-momentum-achievements .text-amber-700 {
+  color: #a95535;
+}
+
+.dashboard-shell[data-role='student'] #achievements .achievement-earned {
+  border-color: #dfb69c;
+  background: linear-gradient(135deg, #fff7f0, #fbefe8);
+}
+
+.dashboard-shell[data-role='student'] #achievements .achievement-earned .bg-amber-100 {
+  background-color: #f4dfd1;
+}
+
+.dashboard-shell[data-role='student'] #achievements .achievement-earned .text-amber-700,
+.dashboard-shell[data-role='student'] #achievements .achievement-earned .text-amber-800 {
+  color: #954b30;
+}
+
+.dashboard-shell[data-role='student'] #achievements .achievement-earned .bg-amber-500 {
+  background-color: #b96b48;
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step {
+  border-color: #e5ddd3;
+  background: linear-gradient(145deg, #fffefa, #f8f5ef);
+  box-shadow: 0 5px 14px -12px rgb(112 79 58 / 38%);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step:hover {
+  transform: translateY(-2px);
+  border-color: #d5a789;
+  box-shadow: 0 10px 20px -16px rgb(147 82 51 / 34%);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step[class~="border-blue-400"] {
+  border-color: #c88d6c;
+  background: linear-gradient(145deg, #fff8f2, #f9eee7);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-progress-track {
+  height: 7px;
+  background: #e1e9f2;
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-progress-fill {
+  background: linear-gradient(90deg, #3972b7 0%, #718fb6 55%, #bd7959 100%);
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard [id='deadlines'] {
+  border-top-color: #c17a54;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-dashboard-heading h1 {
+  color: #e8f0fa;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-hero-summary {
+  border-color: rgb(255 255 255 / 14%);
+  background: rgb(8 20 39 / 35%);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat-terracotta .bg-orange-50 {
+  background-color: #432e26;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat-terracotta .text-orange-700 {
+  color: #e2ae8d;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #certificates .bg-emerald-50 {
+  background-color: #243a34;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #certificates .text-emerald-800 {
+  color: #a6d1b2;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-learning-hero {
+  border-color: rgb(194 127 89 / 45%);
+  background:
+    radial-gradient(circle at 91% 11%, rgb(193 122 84 / 26%), transparent 24%),
+    radial-gradient(ellipse at 73% 115%, rgb(156 111 81 / 19%), transparent 34%),
+    linear-gradient(122deg, #102d5c 0%, #1d4f91 62%, #315174 100%);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-momentum-streak .bg-orange-50,
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-momentum-achievements .bg-amber-50 {
+  background-color: #432e26;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-momentum-streak .text-orange-600,
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-momentum-achievements .text-amber-700 {
+  color: #e2ae8d;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-momentum-streak .text-orange-800 {
+  color: #edc5ad;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #achievements .achievement-earned {
+  border-color: #79513c;
+  background: linear-gradient(135deg, #352a25, #302721);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #achievements .achievement-earned .bg-amber-100 {
+  background-color: #4a352a;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #achievements .achievement-earned .text-amber-700,
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #achievements .achievement-earned .text-amber-800 {
+  color: #e2ae8d;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #achievements .achievement-earned .bg-amber-500 {
+  background-color: #c17a54;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-step {
+  border-color: #34465e;
+  background: linear-gradient(145deg, #1a2a40, #172438);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-step[class~="border-blue-400"] {
+  border-color: #996748;
+  background: linear-gradient(145deg, #3a302b, #2f2a28);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-step:hover {
+  border-color: #94694e;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-progress-track {
+  background: #34465e;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-shell[data-role='student'] #learning-path .learning-path-step {
+    transition: none;
+  }
+
+  .dashboard-shell[data-role='student'] #learning-path .learning-path-step:hover {
+    transform: none;
+  }
+
+  .dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat {
+    transition: none;
+  }
+
+  .dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat:hover {
+    transform: none;
+  }
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard {
+  --instructor-blue: #2457a6;
+  --instructor-sage: #71896f;
+  --instructor-terracotta: #a95535;
+  --instructor-gold: #b28a45;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-hero {
+  min-height: 230px;
+  border-color: #e7d9c8;
+  border-radius: 26px;
+  background:
+    radial-gradient(ellipse at 92% 8%, rgb(195 139 99 / 21%), transparent 29%),
+    radial-gradient(ellipse at 70% 100%, rgb(132 158 128 / 17%), transparent 38%),
+    linear-gradient(118deg, #fff8ef 0%, #fffdf8 54%, #f0f5ed 100%);
+  box-shadow: 0 22px 48px -36px rgb(62 77 59 / 38%);
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-hero::before {
+  background-image: radial-gradient(rgb(83 108 84 / 11%) 1px, transparent 1.3px);
+  mask-image: linear-gradient(100deg, transparent 32%, #000);
+  -webkit-mask-image: linear-gradient(100deg, transparent 32%, #000);
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-hero .dg-orb {
+  filter: blur(48px);
+  opacity: 0.14;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-hero h1 {
+  color: #294c40;
+  font-size: clamp(1.85rem, 3vw, 2.4rem);
+  letter-spacing: -0.04em;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-hero .dg-day {
+  color: #a05d3d;
+  font-weight: 700;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-hero p {
+  color: #596c5d;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-hero .dg-btn {
+  min-height: 42px;
+  border: 1px solid #d9e1d5;
+  background: rgb(255 255 255 / 84%);
+  color: #385443;
+  box-shadow: 0 5px 16px -14px rgb(40 71 53 / 60%);
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-hero .dg-btn:first-child {
+  border-color: #984a2f;
+  background: #a95535;
+  color: #fff;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-hero .dg-btn:first-child:hover {
+  background: #8e452c;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-hero .dg-btn:hover {
+  border-color: #b7c9b8;
+  background-color: #f5f8f1;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-hero .dg-btn:first-child:hover {
+  border-color: #8e452c;
+  background-color: #8e452c;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-kpis .dg-kpi {
+  min-height: 142px;
+  border-top: 3px solid #547ca9;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-kpis .dg-kpi:nth-child(2) {
+  border-top-color: #c17a54;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-kpis .dg-kpi:nth-child(3) {
+  border-top-color: #81977a;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-kpis .dg-kpi:nth-child(4) {
+  border-top-color: #ba9a59;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-kpis .dg-kpi:nth-child(1) .dg-ic {
+  background: #e8f0fb;
+  color: #2457a6;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-kpis .dg-kpi:nth-child(2) .dg-ic {
+  background: #fbefe8;
+  color: #a95535;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-kpis .dg-kpi:nth-child(3) .dg-ic {
+  background: #edf2e9;
+  color: #607a5e;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-dashboard-kpis .dg-kpi:nth-child(4) .dg-ic {
+  background: #f7f1e3;
+  color: #987638;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-grading-card {
+  border-color: #d9e3d8;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(211 226 205 / 26%), transparent 36%),
+    var(--dashboard-surface);
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-grading-card > div:first-of-type {
+  margin-bottom: 0.35rem;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-grading-card .dg-gb {
+  background: var(--instructor-blue);
+  transition: transform 160ms ease, background-color 160ms ease;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-grading-card .dg-gb:hover {
+  background: #1b478b;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-certificate-card {
+  border-color: #e8d7c9;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(222 190 153 / 18%), transparent 38%),
+    var(--dashboard-surface);
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-certificate-card .text-white {
+  color: var(--dashboard-ink);
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-certificate-card .text-slate-300,
+.dashboard-shell[data-role='instructor'] .instructor-certificate-card .text-slate-400 {
+  color: var(--dashboard-muted);
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-certificate-card .text-rose-200 {
+  color: #a63f3f;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-certificate-card .text-amber-200 {
+  color: #8a641e;
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-certificate-card select,
+.dashboard-shell[data-role='instructor'] .instructor-certificate-card input {
+  border-color: var(--dashboard-border);
+  background-color: var(--dashboard-surface);
+  color: var(--dashboard-ink);
+}
+
+.dashboard-shell[data-role='instructor'] .instructor-certificate-card li {
+  border-color: var(--dashboard-border);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='instructor'] .instructor-dashboard-hero {
+  border-color: #425345;
+  background:
+    radial-gradient(ellipse at 92% 8%, rgb(176 111 74 / 14%), transparent 29%),
+    radial-gradient(ellipse at 70% 100%, rgb(112 142 109 / 12%), transparent 38%),
+    linear-gradient(118deg, #202a23 0%, #1b2721 54%, #263027 100%);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='instructor'] .instructor-dashboard-hero h1 {
+  color: #eef3e9;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='instructor'] .instructor-dashboard-hero .dg-day {
+  color: #e2ae8d;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='instructor'] .instructor-dashboard-hero p {
+  color: #c2d0c3;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='instructor'] .instructor-dashboard-hero .dg-btn {
+  border-color: #465648;
+  background: #26332a;
+  color: #e3ebe0;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='instructor'] .instructor-dashboard-hero .dg-btn:first-child {
+  border-color: #c2764d;
+  background: #a95535;
+  color: #fff;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='instructor'] .instructor-dashboard-kpis .dg-kpi:nth-child(1) .dg-ic {
+  background: #263b58;
+  color: #a9c9f2;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='instructor'] .instructor-dashboard-kpis .dg-kpi:nth-child(2) .dg-ic {
+  background: #432e26;
+  color: #e2ae8d;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='instructor'] .instructor-dashboard-kpis .dg-kpi:nth-child(3) .dg-ic {
+  background: #2b3a2d;
+  color: #b5cfad;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='instructor'] .instructor-dashboard-kpis .dg-kpi:nth-child(4) .dg-ic {
+  background: #3b3526;
+  color: #dfc27b;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='instructor'] .instructor-grading-card,
+:root[data-theme='dark'] .dashboard-shell[data-role='instructor'] .instructor-certificate-card {
+  border-color: var(--dashboard-border);
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(112 142 109 / 9%), transparent 38%),
+    var(--dashboard-surface);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='instructor'] .instructor-certificate-card .text-rose-200 {
+  color: #f3a3a3;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='instructor'] .instructor-certificate-card .text-amber-200 {
+  color: #e5c77e;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-shell[data-role='instructor'] .instructor-dashboard-hero .dg-btn,
+  .dashboard-shell[data-role='instructor'] .instructor-grading-card .dg-gb {
+    transition: none;
+  }
 }

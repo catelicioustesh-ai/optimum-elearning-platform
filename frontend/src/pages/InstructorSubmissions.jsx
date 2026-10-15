@@ -115,7 +115,7 @@ function SubmissionRow({ submission, onGraded }) {
   }
 
   return (
-    <div className="rounded-2xl border border-line bg-paper p-5">
+    <div className="dg-card rounded-2xl border border-line bg-paper p-5">
       <div className="flex items-start justify-between">
         <div>
           <p className="font-medium text-ink">{submission.activity_title}</p>
