@@ -218,11 +218,20 @@ class LogoutView(APIView):
 
 class MeView(APIView):
     """GET /api/auth/me/ — the currently authenticated user."""
-    permission_classes = [permissions.IsAuthenticated]
     parser_classes = [JSONParser, MultiPartParser, FormParser]
 
-    @extend_schema(responses=UserSerializer)
+    def get_permissions(self):
+        permission_class = (
+            permissions.AllowAny
+            if self.request.method == "GET"
+            else permissions.IsAuthenticated
+        )
+        return [permission_class()]
+
+    @extend_schema(responses={200: UserSerializer, 204: None})
     def get(self, request):
+        if not request.user.is_authenticated:
+            return Response(status=status.HTTP_204_NO_CONTENT)
         return Response(UserSerializer(request.user, context={"request": request}).data)
 
     @extend_schema(request=UserSerializer, responses=UserSerializer)

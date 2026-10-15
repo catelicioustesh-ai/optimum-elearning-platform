@@ -276,7 +276,8 @@ export const api = {
   // File uploads (PDFs, etc.) — must NOT set Content-Type manually; the
   // browser sets it (including the multipart boundary) when the body is
   // a real FormData object. Setting it ourselves breaks the upload.
-  upload: (path, formData) => request(path, { method: 'POST', body: formData, isFormData: true }),
+  upload: (path, formData, { method = 'POST' } = {}) =>
+    request(path, { method, body: formData, isFormData: true }),
 }
 
 clearTokens()
