@@ -36,14 +36,17 @@ export function AuthProvider({ children }) {
     return () => { active = false }
   }, [])
 
-  const login = useCallback(async (email, password) => {
-    const result = await api.login(email, password)
-    const user = result?.user
+  const establishSession = useCallback((user) => {
     if (!user?.role) throw new Error('The server returned an invalid sign-in session. Please try again.')
     const session = toAuthUser(user)
     setAuth(session)
     return session
   }, [])
+
+  const login = useCallback(async (email, password) => {
+    const result = await api.login(email, password)
+    return establishSession(result?.user)
+  }, [establishSession])
 
   const updateAuthProfile = useCallback((profile) => {
     setAuth((current) => current ? { ...current, ...profile } : current)
@@ -56,7 +59,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ auth, login, logout, loading, updateAuthProfile }}>
+    <AuthContext.Provider value={{ auth, login, establishSession, logout, loading, updateAuthProfile }}>
       {children}
     </AuthContext.Provider>
   )

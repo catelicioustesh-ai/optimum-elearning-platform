@@ -1,10 +1,13 @@
 from typing import TypedDict, cast
+import secrets
+from uuid import uuid4
 
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import update_last_login
 from django.contrib.auth.forms import SetPasswordForm
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.http import FileResponse
 from mimetypes import guess_type
@@ -15,7 +18,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_protect
 from rest_framework import generics, permissions, status, serializers
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.exceptions import APIException, AuthenticationFailed, PermissionDenied
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -28,11 +31,12 @@ from rest_framework_simplejwt.tokens import RefreshToken, TokenError
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema
 
-from .models import User
+from .models import ExternalIdentity, Role, User
 from .serializers import (
     DetailResponseSerializer,
     EmailActionSerializer,
     EmailTokenSerializer,
+    ExternalProviderLoginSerializer,
     PasswordResetSerializer,
     RegisterSerializer,
     UserSerializer,
@@ -47,6 +51,7 @@ from .services import (
 
 ACCESS_COOKIE = "access_token"
 REFRESH_COOKIE = "refresh_token"
+SOCIAL_NONCE_COOKIE = "social_login_nonce"
 
 
 def set_auth_cookies(response, token_data):
@@ -160,6 +165,359 @@ class LoginView(TokenObtainPairView):
             "csrfToken": get_token(request),
         })
         set_auth_cookies(response, serializer.validated_data)
+        return response
+
+
+class ExternalVerificationUnavailable(APIException):
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    default_detail = "The identity provider is temporarily unavailable. Please try again shortly."
+    default_code = "identity_provider_unavailable"
+
+
+def verify_google_credential(credential):
+    """Verify the browser credential against Google's signing keys and our audience."""
+    from google.auth.exceptions import GoogleAuthError
+    from google.auth.transport.requests import Request as GoogleRequest
+    from google.oauth2 import id_token
+    from requests.exceptions import RequestException
+
+    try:
+        claims = id_token.verify_oauth2_token(
+            credential,
+            GoogleRequest(),
+            audience=settings.GOOGLE_OAUTH_CLIENT_ID,
+        )
+    except ValueError as exc:
+        raise AuthenticationFailed("The Google credential is invalid or has expired.") from exc
+    except (GoogleAuthError, RequestException) as exc:
+        raise ExternalVerificationUnavailable() from exc
+
+    email = claims.get("email")
+    if (
+        not claims.get("sub")
+        or not isinstance(email, str)
+        or not email.strip()
+        or claims.get("email_verified") is not True
+    ):
+        raise AuthenticationFailed("Google must provide a verified email address to sign in.")
+    return claims
+
+
+def verify_microsoft_credential(credential):
+    import jwt
+    from jwt.exceptions import PyJWKClientError
+    from requests.exceptions import RequestException
+
+    client_id = settings.MICROSOFT_OAUTH_CLIENT_ID
+    if not client_id:
+        raise ExternalVerificationUnavailable(
+            "Microsoft sign-in has not been configured. Please use another sign-in method."
+        )
+
+    try:
+        key = jwt.PyJWKClient(
+            "https://login.microsoftonline.com/common/discovery/v2.0/keys"
+        ).get_signing_key_from_jwt(credential).key
+        claims = jwt.decode(
+            credential,
+            key,
+            algorithms=["RS256"],
+            audience=client_id,
+            options={"verify_iss": False},
+        )
+    except (jwt.PyJWTError, PyJWKClientError, RequestException) as exc:
+        raise AuthenticationFailed("The Microsoft credential is invalid or has expired.") from exc
+
+    tenant_id = claims.get("tid")
+    if (
+        not isinstance(tenant_id, str)
+        or claims.get("ver") != "2.0"
+        or claims.get("iss") != f"https://login.microsoftonline.com/{tenant_id}/v2.0"
+    ):
+        raise AuthenticationFailed("The Microsoft credential has an invalid issuer.")
+    return claims
+
+
+def verify_apple_credential(credential):
+    import jwt
+    from jwt.exceptions import PyJWKClientError
+    from requests.exceptions import RequestException
+
+    client_id = settings.APPLE_OAUTH_CLIENT_ID
+    if not client_id:
+        raise ExternalVerificationUnavailable(
+            "Apple sign-in has not been configured. Please use another sign-in method."
+        )
+
+    try:
+        key = jwt.PyJWKClient(
+            "https://appleid.apple.com/auth/keys"
+        ).get_signing_key_from_jwt(credential).key
+        claims = jwt.decode(
+            credential,
+            key,
+            algorithms=["RS256"],
+            audience=client_id,
+            issuer="https://appleid.apple.com",
+        )
+    except (jwt.PyJWTError, PyJWKClientError, RequestException) as exc:
+        raise AuthenticationFailed("The Apple credential is invalid or has expired.") from exc
+    return claims
+
+
+def verify_provider_credential(provider, credential):
+    verifiers = {
+        ExternalIdentity.Provider.GOOGLE: verify_google_credential,
+        ExternalIdentity.Provider.MICROSOFT: verify_microsoft_credential,
+        ExternalIdentity.Provider.APPLE: verify_apple_credential,
+    }
+    client_id_setting = {
+        ExternalIdentity.Provider.GOOGLE: "GOOGLE_OAUTH_CLIENT_ID",
+        ExternalIdentity.Provider.MICROSOFT: "MICROSOFT_OAUTH_CLIENT_ID",
+        ExternalIdentity.Provider.APPLE: "APPLE_OAUTH_CLIENT_ID",
+    }
+    client_id = getattr(settings, client_id_setting.get(provider, ""), "")
+    if not client_id:
+        provider_name = provider.title() if provider else "Social"
+        raise ExternalVerificationUnavailable(
+            f"{provider_name} sign-in has not been configured. Please use your email and password."
+        )
+
+    claims = verifiers[provider](credential)
+    email = claims.get("email")
+    if provider == ExternalIdentity.Provider.MICROSOFT:
+        verified = claims.get("email_verified") is True
+    elif provider == ExternalIdentity.Provider.APPLE:
+        verified = claims.get("email_verified") in (True, "true")
+    else:
+        verified = claims.get("email_verified") is True
+
+    if not claims.get("sub"):
+        raise AuthenticationFailed(f"{provider.title()} did not provide a stable account identifier.")
+
+    if not isinstance(email, str) or not email.strip() or not verified:
+        if provider == ExternalIdentity.Provider.MICROSOFT:
+            claims.pop("email", None)
+            return claims
+        raise AuthenticationFailed(
+            f"{provider.title()} must provide a verified email address to sign in."
+        )
+    claims["email"] = email
+    return claims
+
+
+def resolve_external_user(provider, claims):
+    """Resolve a linked identity or create a verified student awaiting approval."""
+    subject = claims["sub"]
+    email = claims.get("email")
+    email = email.strip().lower() if isinstance(email, str) else ""
+    try:
+        with transaction.atomic():
+            identity = ExternalIdentity.objects.select_related("user").filter(
+                provider=provider,
+                subject=subject,
+            ).first()
+            if identity:
+                user = identity.user
+            else:
+                if not email:
+                    raise AuthenticationFailed(
+                        f"{provider.title()} must provide a verified email address for first-time sign-in."
+                    )
+
+                user = User.objects.select_for_update().filter(email__iexact=email).first()
+                if user:
+                    raise AuthenticationFailed(
+                        "An LMS account already uses this email. Sign in to that account first; "
+                        "provider accounts cannot be linked automatically."
+                    )
+                else:
+                    user = User.objects.create_user(
+                        username=f"{provider}_{uuid4().hex[:12]}",
+                        email=email,
+                        password=None,
+                        first_name=str(claims.get("given_name", ""))[:150],
+                        last_name=str(claims.get("family_name", ""))[:150],
+                        role=Role.STUDENT,
+                        email_verified=True,
+                        is_approved=False,
+                        is_active=False,
+                    )
+                    ExternalIdentity.objects.create(
+                        user=user,
+                        provider=provider,
+                        subject=subject,
+                    )
+        return user
+    except IntegrityError as exc:
+        # A simultaneous first sign-in may have created the unique email or subject.
+        identity = ExternalIdentity.objects.select_related("user").filter(
+            provider=provider,
+            subject=subject,
+        ).first()
+        if identity:
+            return identity.user
+        raise AuthenticationFailed(
+            f"{provider.title()} sign-in could not be completed because this account was updated at the same time. Please try again."
+        ) from exc
+
+
+def validate_social_nonce(request, claims, nonce):
+    cookie_nonce = request.COOKIES.get(SOCIAL_NONCE_COOKIE, "")
+    token_nonce = claims.get("nonce", "")
+    if (
+        not cookie_nonce
+        or not secrets.compare_digest(cookie_nonce, nonce)
+        or not isinstance(token_nonce, str)
+        or not secrets.compare_digest(cookie_nonce, token_nonce)
+    ):
+        raise AuthenticationFailed("The sign-in request expired. Please start again.")
+
+
+def link_external_identity(user, provider, claims):
+    subject = claims["sub"]
+    try:
+        with transaction.atomic():
+            identity = ExternalIdentity.objects.select_for_update().filter(
+                provider=provider,
+                subject=subject,
+            ).first()
+            if identity:
+                if identity.user_id != user.pk:
+                    raise PermissionDenied(
+                        f"This {provider.title()} account is already linked to another LMS account."
+                    )
+                return
+
+            existing = ExternalIdentity.objects.select_for_update().filter(
+                user=user,
+                provider=provider,
+            ).first()
+            if existing:
+                raise PermissionDenied(
+                    f"This LMS account is already linked to a different {provider.title()} account."
+                )
+            ExternalIdentity.objects.create(
+                user=user,
+                provider=provider,
+                subject=subject,
+            )
+    except IntegrityError as exc:
+        identity = ExternalIdentity.objects.filter(
+            provider=provider,
+            subject=subject,
+            user=user,
+        ).first()
+        if identity:
+            return
+        raise PermissionDenied(
+            f"This {provider.title()} account could not be linked because the account was updated at the same time. Please try again."
+        ) from exc
+
+
+class ExternalProviderLoginView(APIView):
+    """Verify a provider ID token and issue the usual cookie session."""
+    provider = None
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+    throttle_scope = "auth"
+
+    @method_decorator(csrf_protect)
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
+
+    @extend_schema(request=ExternalProviderLoginSerializer, responses={200: UserSerializer})
+    def post(self, request):
+        serializer = ExternalProviderLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        claims = verify_provider_credential(self.provider, serializer.validated_data["credential"])
+        nonce = serializer.validated_data["nonce"]
+        validate_social_nonce(request, claims, nonce)
+
+        user = resolve_external_user(self.provider, claims)
+
+        if not user.is_approved:
+            response = Response(
+                {"detail": "Your verified email is linked to a learner account awaiting administrator approval."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+            response.delete_cookie(SOCIAL_NONCE_COOKIE, path="/api/auth/", samesite="Lax")
+            return response
+        if not user.is_active:
+            response = Response(
+                {"detail": "This account is not currently active. Please contact an administrator."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+            response.delete_cookie(SOCIAL_NONCE_COOKIE, path="/api/auth/", samesite="Lax")
+            return response
+
+        refresh = EmailTokenObtainPairSerializer.get_token(user)
+        token_data = {"refresh": str(refresh), "access": str(refresh.access_token)}
+        if api_settings.UPDATE_LAST_LOGIN:
+            update_last_login(User, user)
+        rotate_token(request)
+        response = Response({
+            "user": UserSerializer(user, context={"request": request}).data,
+            "csrfToken": get_token(request),
+        })
+        set_auth_cookies(response, token_data)
+        response.delete_cookie(SOCIAL_NONCE_COOKIE, path="/api/auth/", samesite="Lax")
+        return response
+
+
+class GoogleLoginView(ExternalProviderLoginView):
+    provider = ExternalIdentity.Provider.GOOGLE
+
+
+class MicrosoftLoginView(ExternalProviderLoginView):
+    provider = ExternalIdentity.Provider.MICROSOFT
+
+
+class AppleLoginView(ExternalProviderLoginView):
+    provider = ExternalIdentity.Provider.APPLE
+
+
+class ExternalProviderLinkView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_scope = "auth"
+
+    @method_decorator(csrf_protect)
+    def dispatch(self, *args, **kwargs):
+        return super().dispatch(*args, **kwargs)
+
+    @extend_schema(request=ExternalProviderLoginSerializer, responses={200: DetailResponseSerializer})
+    def post(self, request, provider):
+        if provider not in ExternalIdentity.Provider.values:
+            raise serializers.ValidationError({"provider": "Choose a supported identity provider."})
+
+        serializer = ExternalProviderLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        claims = verify_provider_credential(provider, serializer.validated_data["credential"])
+        validate_social_nonce(request, claims, serializer.validated_data["nonce"])
+        link_external_identity(request.user, provider, claims)
+
+        response = Response({"detail": f"{provider.title()} account linked."})
+        response.delete_cookie(SOCIAL_NONCE_COOKIE, path="/api/auth/", samesite="Lax")
+        return response
+
+
+class SocialLoginNonceView(APIView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        nonce = secrets.token_urlsafe(32)
+        response = Response({"nonce": nonce})
+        response.set_cookie(
+            SOCIAL_NONCE_COOKIE,
+            nonce,
+            max_age=300,
+            httponly=True,
+            secure=not settings.DEBUG,
+            samesite="Lax",
+            path="/api/auth/",
+        )
+        response["Cache-Control"] = "no-store"
         return response
 
 

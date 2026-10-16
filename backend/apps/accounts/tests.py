@@ -19,11 +19,13 @@ from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from rest_framework import status
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.test import APIClient, APITestCase
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 
 from .services import email_verification_token, password_reset_token
+from .models import ExternalIdentity
 
 User = get_user_model()
 
@@ -228,6 +230,259 @@ class RegistrationAndLoginTests(AuthBase):
                 for _ in range(12)
             ]
         self.assertIn(status.HTTP_429_TOO_MANY_REQUESTS, codes)
+
+
+class ExternalProviderLoginTests(AuthBase):
+    def provider_login(self, provider, claims):
+        nonce = self.client.get(reverse("social-login-nonce")).data["nonce"]
+        claims = {**claims, "nonce": nonce}
+        with patch("apps.accounts.views.verify_provider_credential", return_value=claims):
+            return self.client.post(
+                reverse(f"{provider}-login"),
+                {"credential": "test-provider-id-token", "nonce": nonce},
+                format="json",
+            )
+
+    def google_login(self, claims):
+        return self.provider_login("google", claims)
+
+    def test_first_google_sign_in_creates_verified_student_pending_approval(self):
+        response = self.google_login({
+            "sub": "google-sub-new-student",
+            "email": "New.Student@Example.com",
+            "email_verified": True,
+            "given_name": "New",
+            "family_name": "Student",
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        user = User.objects.get(email="new.student@example.com")
+        self.assertEqual(user.role, "student")
+        self.assertTrue(user.email_verified)
+        self.assertFalse(user.is_approved)
+        self.assertFalse(user.is_active)
+        self.assertTrue(ExternalIdentity.objects.filter(
+            user=user,
+            provider=ExternalIdentity.Provider.GOOGLE,
+            subject="google-sub-new-student",
+        ).exists())
+        self.assertNotIn("access_token", response.cookies)
+
+    def test_approved_existing_account_is_not_linked_by_email(self):
+        user = self.make_user(
+            "instructor@example.com",
+            "instructor",
+            verified=False,
+            role="instructor",
+            is_approved=True,
+            is_active=True,
+        )
+
+        response = self.google_login({
+            "sub": "google-sub-instructor",
+            "email": "INSTRUCTOR@example.com",
+            "email_verified": True,
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.data)
+        user.refresh_from_db()
+        self.assertEqual(user.role, "instructor")
+        self.assertFalse(user.email_verified)
+        self.assertTrue(user.check_password(GOOD_PASSWORD))
+        self.assertFalse(ExternalIdentity.objects.filter(user=user).exists())
+        self.assertNotIn("access_token", response.cookies)
+
+    def test_linked_identity_signs_in_when_provider_email_changes(self):
+        user = self.make_user(
+            "instructor@example.com",
+            "instructor",
+            role="instructor",
+            is_approved=True,
+            is_active=True,
+        )
+        ExternalIdentity.objects.create(
+            user=user,
+            provider=ExternalIdentity.Provider.GOOGLE,
+            subject="google-sub-instructor",
+        )
+
+        response = self.google_login({
+            "sub": "google-sub-instructor",
+            "email": "new-address@example.com",
+            "email_verified": True,
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["user"]["id"], user.id)
+        self.assertIn("access_token", response.cookies)
+
+    def test_google_identity_cannot_be_linked_to_a_second_account(self):
+        user = self.make_user("learner@example.com", "learner")
+        ExternalIdentity.objects.create(
+            user=user,
+            provider=ExternalIdentity.Provider.GOOGLE,
+            subject="already-linked-subject",
+        )
+
+        response = self.google_login({
+            "sub": "different-google-subject",
+            "email": user.email,
+            "email_verified": True,
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(
+            ExternalIdentity.objects.get(user=user, provider=ExternalIdentity.Provider.GOOGLE).subject,
+            "already-linked-subject",
+        )
+        self.assertNotIn("access_token", response.cookies)
+
+    def test_all_configured_provider_routes_can_sign_in_existing_accounts(self):
+        for provider in ("google", "microsoft", "apple"):
+            with self.subTest(provider=provider):
+                email = f"{provider}@example.com"
+                user = self.make_user(email, provider, role="student", is_approved=True, is_active=True)
+                ExternalIdentity.objects.create(
+                    user=user,
+                    provider=provider,
+                    subject=f"{provider}-subject",
+                )
+                response = self.provider_login(provider, {
+                    "sub": f"{provider}-subject",
+                    "email": email,
+                    "email_verified": True,
+                })
+                self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+                self.assertIn("access_token", response.cookies)
+
+    def test_linked_microsoft_identity_can_sign_in_without_an_email_claim(self):
+        user = self.make_user(
+            "microsoft@example.com",
+            "microsoft",
+            role="student",
+            is_approved=True,
+            is_active=True,
+        )
+        ExternalIdentity.objects.create(
+            user=user,
+            provider=ExternalIdentity.Provider.MICROSOFT,
+            subject="microsoft-subject",
+        )
+
+        response = self.provider_login("microsoft", {
+            "sub": "microsoft-subject",
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertIn("access_token", response.cookies)
+
+    def test_authenticated_user_can_explicitly_link_provider_identity(self):
+        user = self.make_user("link-target@example.com", "link-target", verified=False)
+        nonce = self.client.get(reverse("social-login-nonce")).data["nonce"]
+        claims = {
+            "sub": "google-sub-explicit-link",
+            "email": "different-provider-email@example.com",
+            "email_verified": True,
+            "nonce": nonce,
+        }
+        self.client.force_authenticate(user=user)
+        with patch("apps.accounts.views.verify_provider_credential", return_value=claims):
+            response = self.client.post(
+                reverse("social-link", args=["google"]),
+                {"credential": "test-provider-id-token", "nonce": nonce},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertTrue(ExternalIdentity.objects.filter(
+            user=user,
+            provider=ExternalIdentity.Provider.GOOGLE,
+            subject="google-sub-explicit-link",
+        ).exists())
+        user.refresh_from_db()
+        self.assertFalse(user.email_verified)
+
+    def test_provider_identity_cannot_be_explicitly_linked_to_another_user(self):
+        owner = self.make_user("identity-owner@example.com", "identity-owner")
+        target = self.make_user("link-target@example.com", "link-target")
+        ExternalIdentity.objects.create(
+            user=owner,
+            provider=ExternalIdentity.Provider.GOOGLE,
+            subject="google-sub-owned",
+        )
+        nonce = self.client.get(reverse("social-login-nonce")).data["nonce"]
+        claims = {
+            "sub": "google-sub-owned",
+            "email": "identity-owner@example.com",
+            "email_verified": True,
+            "nonce": nonce,
+        }
+        self.client.force_authenticate(user=target)
+        with patch("apps.accounts.views.verify_provider_credential", return_value=claims):
+            response = self.client.post(
+                reverse("social-link", args=["google"]),
+                {"credential": "test-provider-id-token", "nonce": nonce},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(
+            ExternalIdentity.objects.get(
+                provider=ExternalIdentity.Provider.GOOGLE,
+                subject="google-sub-owned",
+            ).user_id,
+            owner.id,
+        )
+
+    def test_provider_identity_linking_requires_an_authenticated_user(self):
+        nonce = self.client.get(reverse("social-login-nonce")).data["nonce"]
+
+        response = self.client.post(
+            reverse("social-link", args=["google"]),
+            {"credential": "test-provider-id-token", "nonce": nonce},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_microsoft_username_is_not_accepted_as_a_verified_email(self):
+        from apps.accounts.views import verify_provider_credential
+
+        with patch("apps.accounts.views.settings.MICROSOFT_OAUTH_CLIENT_ID", "test-client"), patch(
+            "apps.accounts.views.verify_microsoft_credential",
+            return_value={
+                "sub": "microsoft-unverified-subject",
+                "preferred_username": "existing@example.com",
+                "xms_edov": True,
+            },
+        ):
+            claims = verify_provider_credential(
+                ExternalIdentity.Provider.MICROSOFT,
+                "test-provider-id-token",
+            )
+
+        self.assertNotIn("email", claims)
+        with self.assertRaises(AuthenticationFailed):
+            from apps.accounts.views import resolve_external_user
+
+            resolve_external_user(ExternalIdentity.Provider.MICROSOFT, claims)
+
+    def test_provider_credential_must_match_server_issued_nonce(self):
+        nonce = self.client.get(reverse("social-login-nonce")).data["nonce"]
+        with patch("apps.accounts.views.verify_provider_credential", return_value={
+            "sub": "google-sub-replay",
+            "email": "replay@example.com",
+            "email_verified": True,
+            "nonce": "not-the-issued-nonce",
+        }):
+            response = self.client.post(
+                reverse("google-login"),
+                {"credential": "test-provider-id-token", "nonce": nonce},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(User.objects.filter(email="replay@example.com").exists())
 
 
 class PasswordRuleTests(AuthBase):

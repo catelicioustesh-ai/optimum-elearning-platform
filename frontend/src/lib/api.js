@@ -257,6 +257,24 @@ export const api = {
     return result
   },
 
+  socialLoginNonce: () => request('/auth/social/nonce/', { auth: false }),
+
+  socialLogin: async (provider, credential, nonce) => {
+    const result = await request(`/auth/${provider}/`, {
+      method: 'POST',
+      body: { credential, nonce },
+      auth: false,
+    })
+    if (result?.csrfToken) csrfToken = result.csrfToken
+    return result
+  },
+
+  socialLink: (provider, credential, nonce) =>
+    request(`/auth/social/link/${provider}/`, {
+      method: 'POST',
+      body: { credential, nonce },
+    }),
+
   logout: () =>
     request('/auth/logout/', { method: 'POST', body: {}, auth: false }),
 
