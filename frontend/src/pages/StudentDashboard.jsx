@@ -51,7 +51,7 @@ export default function StudentDashboard() {
     fetchStudentDashboardData()
       .then((result) => {
         if (cancelled) return
-        setData({ ...result, student: auth })
+        setData(result)
         setSelectedCourseId((current) => current || result.current_course?.course_id || null)
         setLoading(false)
 
@@ -78,7 +78,7 @@ export default function StudentDashboard() {
       })
 
     return () => { cancelled = true }
-  }, [reloadKey, auth])
+  }, [reloadKey])
 
   const courses = data?.enrolled_courses || []
   const course = courses.find((item) => item.course_id === selectedCourseId) || data?.current_course || null
@@ -157,11 +157,12 @@ export default function StudentDashboard() {
   return (
     <DashboardLayout
       navItems={dashboardNavItems}
-      user={{ name: displayName(data?.student, auth) }}
+      user={{ name: displayName(auth, auth) }}
       weeklyGoal={course?.progress_percent || 0}
       studentHighlights={engagement ? { currentStreak: engagement.current_streak, nextAchievement } : null}
-      studentProfile={data?.student}
+      studentProfile={auth}
       fetchStudentProfile={false}
+      fetchStudentEngagement={false}
       role="student"
     >
       <Helmet>
@@ -245,7 +246,7 @@ export default function StudentDashboard() {
             <section className="dg-hero student-learning-hero flex flex-col gap-6 rounded-2xl p-6 text-white md:flex-row md:items-center md:justify-between sm:p-8">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-blue-100">
-                  {greetingForHour(new Date().getHours())}, {displayName(data?.student, auth)} <span aria-hidden="true">👋</span>
+                  {greetingForHour(new Date().getHours())}, {displayName(auth, auth)} <span aria-hidden="true">👋</span>
                 </p>
                 <h2 className="mt-2 text-2xl font-bold text-white">{course.course_title}</h2>
                 {course.current_module ? (

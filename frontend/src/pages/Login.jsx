@@ -4,7 +4,6 @@ import { Helmet } from 'react-helmet-async'
 import { ArrowRight, Award, BookOpen, Check, Flame, Sparkles, TrendingUp, TriangleAlert } from 'lucide-react'
 import { useAuth } from '../context/useAuth.js'
 import AuthBrand from '../components/AuthBrand.jsx'
-import Logo from '../components/Logo.jsx'
 import EmailInput from '../components/EmailInput.jsx'
 import PasswordInput from '../components/PasswordInput.jsx'
 import { useToast } from '../hooks/useToast.js'
@@ -68,8 +67,8 @@ export default function Login() {
         <meta name="description" content="Sign in to continue learning, practicing, and earning with Optimum LMS." />
       </Helmet>
 
-      <div className="relative z-10 grid w-full max-w-6xl overflow-hidden rounded-[30px] border border-border bg-surface shadow-[0_30px_90px_rgba(15,23,42,0.16)] md:min-h-[690px] md:grid-cols-[0.95fr_1.05fr]">
-        <section className="auth-hero hidden flex-col justify-between p-8 sm:p-10 md:flex lg:p-12" aria-label="Optimum LMS learning experience">
+      <div className="login-card relative z-10 grid w-full max-w-6xl overflow-hidden rounded-[30px] border border-border bg-surface md:min-h-[680px] md:grid-cols-[0.92fr_1.08fr]">
+        <section className="auth-hero login-story hidden flex-col justify-between p-8 sm:p-10 md:flex lg:p-12" aria-label="Optimum LMS learning experience">
           <div>
             <AuthBrand compact />
 
@@ -129,10 +128,10 @@ export default function Login() {
           </div>
         </section>
 
-        <section className="flex items-center justify-center px-6 py-10 sm:px-10 md:px-12 lg:px-16" aria-labelledby="login-heading">
-          <div className="w-full max-w-md">
+        <section className="login-form-panel flex items-center justify-center px-6 py-10 sm:px-10 md:px-12 lg:px-16" aria-labelledby="login-heading">
+          <div className="login-form-content w-full max-w-md">
             <div className="mb-9 md:hidden">
-              <Logo tone="light" height={36} />
+              <AuthBrand compact />
             </div>
 
             <div className="mb-8">
@@ -179,11 +178,16 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={loading}
+                aria-busy={loading}
                 className="login-submit mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3.5 text-sm font-bold text-primary-foreground shadow-[0_14px_30px_rgba(37,99,235,0.22)] transition hover:bg-primary-hover active:scale-[0.99] disabled:cursor-wait disabled:opacity-70"
               >
                 {loading ? (
                   <>
-                    <span className="login-spinner" aria-hidden="true" />
+                    <span className="login-loading-dots" aria-hidden="true">
+                      <span />
+                      <span />
+                      <span />
+                    </span>
                     Signing you in…
                   </>
                 ) : (

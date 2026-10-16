@@ -85,12 +85,12 @@ export default function DashboardLayout({
   studentHighlights = null,
   studentProfile: studentProfileProp = null,
   fetchStudentProfile = true,
+  fetchStudentEngagement = true,
   role: roleProp,
 }) {
-  const { logout } = useAuth()
+  const { auth, logout } = useAuth()
   const toast = useToast()
   // Pages don't all pass `role`; default to the signed-in user's real role (was always 'student').
-  const { auth } = useAuth()
   const role = roleProp || auth?.role || 'student'
   const { pathname, hash } = useLocation()
   const activeAnchor = hash.slice(1)
@@ -128,7 +128,7 @@ export default function DashboardLayout({
   }, [sidebarCollapsed])
 
   useEffect(() => {
-    if (role !== 'student' || !fetchStudentProfile) return undefined
+    if (!auth || role !== 'student' || !fetchStudentProfile) return undefined
     let cancelled = false
     api.me()
       .then((profile) => {
@@ -138,10 +138,10 @@ export default function DashboardLayout({
         if (!cancelled) setProfileError(error.message || 'Your registered name could not be loaded.')
       })
     return () => { cancelled = true }
-  }, [role, fetchStudentProfile])
+  }, [auth, role, fetchStudentProfile])
 
   useEffect(() => {
-    if (role !== 'student' || !notifOpen || studentHighlights || studentEngagement) return undefined
+    if (!auth || role !== 'student' || !notifOpen || !fetchStudentEngagement || studentHighlights || studentEngagement) return undefined
     let cancelled = false
     api.get('/engagement/me/')
       .then((data) => {
@@ -154,7 +154,7 @@ export default function DashboardLayout({
         if (!cancelled) setStudentEngagementError(error.message || 'Learning streak details are unavailable.')
       })
     return () => { cancelled = true }
-  }, [notifOpen, role, studentEngagement, studentHighlights])
+  }, [auth, fetchStudentEngagement, notifOpen, role, studentEngagement, studentHighlights])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -214,7 +214,7 @@ export default function DashboardLayout({
   }, [])
 
   useEffect(() => {
-    if (!notifOpen && role !== 'student') return undefined
+    if (!auth || (!notifOpen && role !== 'student')) return undefined
     let cancelled = false
     function refreshNotifications() {
       api.get('/engagement/notifications/')
@@ -239,7 +239,7 @@ export default function DashboardLayout({
       window.clearTimeout(timeoutId)
       if (intervalId) window.clearInterval(intervalId)
     }
-  }, [notifOpen, notificationReload, role])
+  }, [auth, notifOpen, notificationReload, role])
 
   useEffect(() => {
     function onClickOutside(e) {

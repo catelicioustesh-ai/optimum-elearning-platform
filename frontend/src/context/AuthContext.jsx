@@ -11,6 +11,9 @@ function toAuthUser(user) {
     first_name: user.first_name,
     last_name: user.last_name,
     username: user.username,
+    bio: user.bio,
+    profile_photo: user.profile_photo,
+    leaderboard_opt_in: user.leaderboard_opt_in,
   }
 }
 
@@ -42,6 +45,10 @@ export function AuthProvider({ children }) {
     return session
   }, [])
 
+  const updateAuthProfile = useCallback((profile) => {
+    setAuth((current) => current ? { ...current, ...profile } : current)
+  }, [])
+
   const logout = useCallback(async () => {
     await api.logout()
     clearTokens()
@@ -49,7 +56,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   return (
-    <AuthContext.Provider value={{ auth, login, logout, loading }}>
+    <AuthContext.Provider value={{ auth, login, logout, loading, updateAuthProfile }}>
       {children}
     </AuthContext.Provider>
   )

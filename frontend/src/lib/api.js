@@ -83,6 +83,20 @@ export class ApiError extends Error {
 // Refresh tokens rotate and the old one is blacklisted, so simultaneous 401s
 // must share one refresh request.
 let refreshInFlight = null
+const getRequestsInFlight = new Map()
+
+function getOnce(path, options = {}) {
+  const key = `${path}:${options.redirectOnUnauthorized === false ? 'no-redirect' : 'redirect'}`
+  const existing = getRequestsInFlight.get(key)
+  if (existing) return existing
+
+  const pending = request(path, options).finally(() => {
+    getRequestsInFlight.delete(key)
+  })
+  getRequestsInFlight.set(key, pending)
+  return pending
+}
+
 function refreshAccessToken() {
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
@@ -261,9 +275,9 @@ export const api = {
   confirmPasswordReset: (payload) =>
     request('/auth/password-reset/confirm/', { method: 'POST', body: payload, auth: false }),
 
-  me: () => request('/auth/me/', { redirectOnUnauthorized: false }),
+  me: () => getOnce('/auth/me/', { redirectOnUnauthorized: false }),
 
-  get: (path) => request(path),
+  get: (path) => getOnce(path),
   verifyCertificate: (certificateNumber) =>
     request(`/engagement/certificates/${encodeURIComponent(certificateNumber)}/verify/`, { auth: false }),
   getBlob: (path) => request(path, { blob: true }),

@@ -1,5 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/useAuth.js'
+import LoadingState from './LoadingState.jsx'
 
 /**
  * IMPORTANT: this is a UX convenience, not the real security boundary.
@@ -15,7 +16,11 @@ export default function ProtectedRoute({ children, allowedRoles }) {
   const location = useLocation()
 
   if (loading) {
-    return <div className="grid min-h-screen place-items-center text-sm text-text-muted" role="status">Loading your session...</div>
+    return (
+      <div className="grid min-h-screen place-items-center bg-surface-muted px-5">
+        <LoadingState label="Checking your secure session…" />
+      </div>
+    )
   }
   if (!auth) {
     return <Navigate to="/login" replace state={{ from: location }} />
