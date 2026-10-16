@@ -2190,10 +2190,34 @@ select {
   transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
 }
 
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step {
+  border-radius: 1rem;
+}
+
 .dashboard-shell[data-role='student'] #learning-path .learning-path-step:hover {
   transform: translateY(-2px);
   border-color: #d5a789;
   box-shadow: 0 10px 20px -16px rgb(147 82 51 / 34%);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step-active {
+  border-color: #c88d6c;
+  background: linear-gradient(145deg, #fff8f2, #f9eee7);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-module-number,
+.dashboard-shell[data-role='student'] #learning-path .learning-path-node,
+.dashboard-shell[data-role='student'] #learning-path .learning-path-status {
+  position: relative;
+  z-index: 1;
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-node-current {
+  box-shadow: 0 0 0 5px rgb(37 99 235 / 10%), 0 8px 18px -8px rgb(23 52 90 / 45%);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-connector {
+  opacity: 0.75;
 }
 
 .dashboard-shell[data-role='student'] #learning-path .learning-path-step[class~="border-blue-400"] {
@@ -2282,6 +2306,11 @@ select {
 :root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-step {
   border-color: #34465e;
   background: linear-gradient(145deg, #1a2a40, #172438);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-step-active {
+  border-color: #996748;
+  background: linear-gradient(145deg, #3a302b, #2f2a28);
 }
 
 :root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-step[class~="border-blue-400"] {
@@ -2551,5 +2580,1144 @@ select {
   .dashboard-shell[data-role='instructor'] .instructor-dashboard-hero .dg-btn,
   .dashboard-shell[data-role='instructor'] .instructor-grading-card .dg-gb {
     transition: none;
+  }
+}
+
+.landing-page {
+  background:
+    radial-gradient(ellipse at 90% 6%, rgb(191 219 254 / 28%), transparent 30rem),
+    #f5f7fb;
+}
+
+.landing-header {
+  border-color: #e4eaf2;
+  background: rgb(255 255 255 / 84%);
+}
+
+.landing-hero {
+  border-color: rgb(119 162 219 / 35%);
+  border-radius: 30px;
+  background:
+    radial-gradient(ellipse at 87% 5%, rgb(103 232 249 / 20%), transparent 30%),
+    radial-gradient(ellipse at 8% 100%, rgb(254 215 170 / 20%), transparent 34%),
+    linear-gradient(145deg, #f8fbff, #eef4fb 58%, #f8f8f4);
+  box-shadow: 0 24px 60px -48px rgb(16 45 92 / 35%);
+  color: #172b43;
+}
+
+.landing-hero::before {
+  position: absolute;
+  top: -10rem;
+  right: 22%;
+  width: 25rem;
+  height: 25rem;
+  border: 1px solid rgb(36 87 166 / 10%);
+  border-radius: 50%;
+  box-shadow: 0 0 0 36px rgb(36 87 166 / 3%), 0 0 0 72px rgb(36 87 166 / 2%);
+  content: '';
+  pointer-events: none;
+}
+
+.landing-hero > div {
+  position: relative;
+  z-index: 1;
+}
+
+.landing-hero h1 {
+  color: #102d5c;
+  font-size: clamp(2.6rem, 5vw, 4.25rem);
+  letter-spacing: -0.055em;
+  line-height: 1.04;
+}
+
+.landing-hero h1 span {
+  background: linear-gradient(90deg, #2457a6, #517bd0 68%, #a95535);
+  background-clip: text;
+  color: transparent;
+  font-family: "Segoe Print", "Bradley Hand", cursive;
+  font-size: 0.9em;
+  font-style: italic;
+  font-weight: 700;
+  letter-spacing: -0.07em;
+  white-space: nowrap;
+}
+
+.landing-hero p {
+  color: #526782;
+}
+
+.landing-hero > div > div:first-child > div:first-child {
+  border-color: #d7e4f5;
+  background: linear-gradient(100deg, #edf4fc, #f1f6f7);
+  color: #2457a6;
+}
+
+.landing-hero > div > div:first-child > div:first-child svg {
+  color: #517bd0;
+}
+
+.landing-hero > div > div:first-child a:not(.landing-primary) {
+  color: #425b78;
+}
+
+.landing-hero > div > div:first-child a:not(.landing-primary):hover {
+  color: #102d5c;
+}
+
+.landing-hero > div > div:first-child > div:last-child {
+  color: #526782;
+}
+
+.landing-hero > div > div:first-child > div:last-child svg {
+  color: #6ee7b7;
+}
+
+.landing-primary {
+  border-color: #1e40af;
+  border-radius: 0.9rem;
+  background: #1d4ed8;
+  padding: 0.9rem 1.1rem;
+  color: #fff;
+  box-shadow: 0 10px 24px rgb(30 64 175 / 20%);
+}
+
+.landing-primary:hover {
+  background: #1e40af;
+  color: #fff;
+  transform: translateY(-2px);
+}
+
+.landing-primary:focus-visible {
+  outline-color: #67e8f9;
+}
+
+.landing-hero-content h1 {
+  max-width: 13ch;
+}
+
+.landing-hero-content > p {
+  max-width: 44rem;
+}
+
+.landing-hero-benefits {
+  padding-top: 1.25rem;
+  border-top: 1px solid rgb(16 43 70 / 9%);
+}
+
+.landing-workspace {
+  padding-top: 5.5rem;
+  padding-bottom: 5.5rem;
+}
+
+.landing-workspace > div:first-child {
+  justify-content: center;
+  text-align: center;
+}
+
+.landing-workspace > div:first-child > div {
+  margin-inline: auto;
+}
+
+.landing-workspace > .landing-role-callout {
+  margin-top: 2rem;
+}
+
+.landing-role-callout {
+  border: 1px solid #d9e3ef;
+  background:
+    radial-gradient(ellipse at 85% 0%, rgb(34 211 238 / 12%), transparent 36%),
+    linear-gradient(125deg, #fff, #f3f7fc 72%, #f8f7f3);
+  box-shadow: 0 16px 38px -30px rgb(16 45 92 / 28%);
+}
+
+.landing-role-callout h3 {
+  color: #172b43;
+}
+
+.landing-role-callout p {
+  color: #526782;
+}
+
+.landing-role-callout > div > span {
+  background: #e9f1fb;
+  color: #2457a6;
+}
+
+.landing-page main > section:last-child {
+  background: #fff;
+}
+
+.landing-page footer {
+  border-color: #e4eaf2;
+}
+
+.dashboard-shell[data-role='student'] .student-learning-hero {
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 91% 11%, rgb(216 148 106 / 36%), transparent 24%),
+    radial-gradient(ellipse at 73% 115%, rgb(156 111 81 / 28%), transparent 34%),
+    linear-gradient(122deg, #102d5c 0%, #1d4f91 62%, #315f91 100%);
+}
+
+.dashboard-shell[data-role='student'] .student-learning-hero::before {
+  position: absolute;
+  z-index: -1;
+  top: -8rem;
+  right: 23%;
+  width: 23rem;
+  height: 23rem;
+  border: 1px solid rgb(219 234 254 / 12%);
+  border-radius: 50%;
+  box-shadow: 0 0 0 34px rgb(219 234 254 / 5%), 0 0 0 68px rgb(219 234 254 / 3%);
+  content: '';
+  pointer-events: none;
+  animation: student-hero-orbit 18s ease-in-out infinite alternate;
+}
+
+.dashboard-shell[data-role='student'] .student-learning-hero > div {
+  position: relative;
+  z-index: 1;
+}
+
+.dashboard-shell[data-role='student'] .student-progress-ring {
+  position: relative;
+  display: grid;
+  width: 4.75rem;
+  height: 4.75rem;
+  flex: none;
+  place-items: center;
+}
+
+.dashboard-shell[data-role='student'] .student-progress-ring svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  transform: rotate(-90deg);
+}
+
+.dashboard-shell[data-role='student'] .student-progress-ring circle {
+  fill: none;
+  stroke-width: 5;
+}
+
+.dashboard-shell[data-role='student'] .student-progress-ring-track {
+  stroke: rgb(255 255 255 / 18%);
+}
+
+.dashboard-shell[data-role='student'] .student-progress-ring-value {
+  stroke: #8ce2e8;
+  stroke-dasharray: 188.5;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 5px rgb(103 232 249 / 55%));
+  transition: stroke-dashoffset 700ms cubic-bezier(.2,.8,.2,1);
+}
+
+.dashboard-shell[data-role='student'] .student-progress-ring > span {
+  display: grid;
+  justify-items: center;
+}
+
+.dashboard-shell[data-role='student'] .student-progress-ring strong {
+  color: #fff;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.dashboard-shell[data-role='student'] .student-progress-ring small {
+  margin-top: 0.2rem;
+  color: #dbeafe;
+  font-size: 0.55rem;
+  font-weight: 600;
+}
+
+.dashboard-shell[data-role='student'] .student-course-progress-track {
+  background: rgb(8 31 67 / 42%);
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat {
+  position: relative;
+  min-height: 7.25rem;
+  overflow: hidden;
+  border: 1px solid var(--dashboard-border);
+  border-left: 3px solid #4779b5;
+  border-radius: 1.1rem;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(96 145 209 / 9%), transparent 44%),
+    var(--dashboard-surface);
+  box-shadow: 0 12px 28px -24px rgb(31 66 112 / 42%);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat::after {
+  position: absolute;
+  top: -1.8rem;
+  right: -1.2rem;
+  width: 5rem;
+  height: 5rem;
+  border: 1px solid rgb(96 145 209 / 12%);
+  border-radius: 50%;
+  box-shadow: 0 0 0 12px rgb(96 145 209 / 4%);
+  content: '';
+  pointer-events: none;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat-terracotta {
+  border-left-color: #c17a54;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(193 122 84 / 11%), transparent 44%),
+    var(--dashboard-surface);
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat-sage {
+  border-left-color: #7e9c80;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(126 156 128 / 11%), transparent 44%),
+    var(--dashboard-surface);
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat:hover {
+  transform: translateY(-3px);
+  border-color: #b9ccdb;
+  box-shadow: 0 18px 34px -25px rgb(31 66 112 / 42%);
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat > div > span {
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid rgb(36 87 166 / 9%);
+  border-radius: 0.9rem;
+}
+
+.dashboard-shell[data-role='student'] #learning-path,
+.dashboard-shell[data-role='student'] [aria-labelledby='engagement-heading'],
+.dashboard-shell[data-role='student'] #deadlines,
+.dashboard-shell[data-role='student'] #deadlines + section {
+  border-radius: 1.25rem;
+  box-shadow: 0 14px 34px -27px rgb(31 66 112 / 38%);
+}
+
+.dashboard-shell[data-role='student'] #engagement-heading {
+  font-size: 1.1rem;
+  letter-spacing: -0.02em;
+}
+
+.dashboard-shell[data-role='student'] .student-next-reward {
+  position: relative;
+  margin-top: 0.85rem;
+  padding-top: 0.85rem;
+}
+
+.dashboard-shell[data-role='student'] .student-next-reward [role='progressbar'] {
+  height: 0.45rem;
+  box-shadow: inset 0 1px 2px rgb(4 18 42 / 20%);
+}
+
+.dashboard-shell[data-role='student'] .student-next-reward [role='progressbar'] > div {
+  box-shadow: 0 0 12px rgb(231 173 121 / 42%);
+  transition: width 700ms cubic-bezier(.2,.8,.2,1);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat {
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(96 145 209 / 12%), transparent 44%),
+    var(--dashboard-surface);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat-terracotta {
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(193 122 84 / 13%), transparent 44%),
+    var(--dashboard-surface);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat-sage {
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(126 156 128 / 13%), transparent 44%),
+    var(--dashboard-surface);
+}
+
+@keyframes student-hero-orbit {
+  from { transform: translate3d(0, 0, 0) rotate(-7deg); }
+  to { transform: translate3d(14px, 10px, 0) rotate(7deg); }
+}
+
+@media (max-width: 767px) {
+  .landing-hero {
+    margin-inline: 0.75rem;
+    border-radius: 1.5rem;
+  }
+
+  .landing-hero-content {
+    padding-top: 3.5rem;
+    padding-bottom: 3.5rem;
+  }
+
+  .landing-hero-content h1 {
+    font-size: clamp(2.35rem, 11vw, 3.5rem);
+  }
+
+  .landing-hero-content h1 span {
+    white-space: normal;
+  }
+
+  .landing-workspace {
+    padding-top: 3.5rem;
+    padding-bottom: 3.5rem;
+  }
+
+  .landing-role-callout {
+    align-items: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-shell[data-role='student'] .student-learning-hero::before {
+    animation: none;
+  }
+
+  .dashboard-shell[data-role='student'] .student-progress-ring-value,
+  .dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat,
+  .dashboard-shell[data-role='student'] .student-next-reward [role='progressbar'] > div {
+    transition: none;
+  }
+}
+
+.dashboard-shell[data-role='student'] .student-reward-overview {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  overflow: hidden;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid #cbe4d8;
+  border-radius: 1.15rem;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(92 190 143 / 18%), transparent 42%),
+    linear-gradient(115deg, #f2faf5, #e9f6ef 55%, #f5faf5);
+}
+
+.dashboard-shell[data-role='student'] .student-reward-overview::after {
+  position: absolute;
+  top: -2.8rem;
+  right: 7rem;
+  width: 7.5rem;
+  height: 7.5rem;
+  border: 1px solid rgb(35 132 91 / 10%);
+  border-radius: 50%;
+  box-shadow: 0 0 0 15px rgb(35 132 91 / 4%);
+  content: '';
+  pointer-events: none;
+}
+
+.dashboard-shell[data-role='student'] .student-reward-emblem {
+  display: grid;
+  width: 3.25rem;
+  height: 3.25rem;
+  flex: none;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 76%);
+  border-radius: 1rem;
+  background: linear-gradient(145deg, #d7f0e0, #bde5ce);
+  color: #26744e;
+  box-shadow: 0 5px 16px -12px rgb(25 108 67 / 42%);
+}
+
+.dashboard-shell[data-role='student'] .student-reward-eyebrow {
+  color: #388262;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.dashboard-shell[data-role='student'] .student-reward-xp {
+  color: #164d37;
+  font-size: 1.35rem;
+  letter-spacing: -0.04em;
+}
+
+.dashboard-shell[data-role='student'] .student-reward-caption {
+  color: #587b68;
+  font-size: 0.75rem;
+}
+
+.dashboard-shell[data-role='student'] .student-reward-track {
+  height: 0.45rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #d1e8d9;
+}
+
+.dashboard-shell[data-role='student'] .student-reward-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #48a878, #82c99a);
+  box-shadow: 0 0 12px rgb(56 151 95 / 24%);
+  transition: width 700ms cubic-bezier(.2,.8,.2,1);
+}
+
+.dashboard-shell[data-role='student'] .student-reward-next {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 6.75rem;
+  justify-items: end;
+  padding-left: 1rem;
+  border-left: 1px solid #cbe4d8;
+}
+
+.dashboard-shell[data-role='student'] .student-reward-next span,
+.dashboard-shell[data-role='student'] .student-reward-next small {
+  color: #557b66;
+  font-size: 0.65rem;
+}
+
+.dashboard-shell[data-role='student'] .student-reward-next strong {
+  color: #176b46;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-shell[data-role='student'] .student-next-achievement {
+  border-color: #cbe4d8;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(92 190 143 / 12%), transparent 48%),
+    linear-gradient(145deg, #f5fbf6, #eff8f1);
+}
+
+.dashboard-shell[data-role='student'] .student-next-achievement-label,
+.dashboard-shell[data-role='student'] .student-next-achievement-link {
+  color: #26744e;
+}
+
+.dashboard-shell[data-role='student'] .student-next-achievement-count {
+  border: 1px solid #d7ecdd;
+  color: #28724e;
+}
+
+.dashboard-shell[data-role='student'] .student-next-achievement [role='progressbar'] {
+  background: #dcefe2;
+}
+
+.dashboard-shell[data-role='student'] .student-next-achievement-fill {
+  background: linear-gradient(90deg, #39966a, #77c48c);
+  box-shadow: 0 0 12px rgb(57 150 106 / 24%);
+}
+
+.dashboard-shell[data-role='student'] #achievements .student-achievement-earned {
+  border-color: #c7e5d2;
+  background: linear-gradient(140deg, #f2faf4, #eaf6ee);
+}
+
+.dashboard-shell[data-role='student'] #achievements .student-achievement-icon {
+  background: #d9f0e1;
+  color: #26744e;
+}
+
+.dashboard-shell[data-role='student'] #achievements .student-achievement-label {
+  background: #d9f0e1;
+  color: #26744e;
+}
+
+.dashboard-shell[data-role='student'] #achievements .student-achievement-date {
+  color: #388262;
+}
+
+.dashboard-shell[data-role='student'] #achievements .student-achievement-fill {
+  background: linear-gradient(90deg, #39966a, #77c48c);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-reward-overview {
+  border-color: #2d5a49;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(92 190 143 / 12%), transparent 42%),
+    linear-gradient(115deg, #18342f, #1a392f 55%, #1a302b);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-reward-emblem {
+  border-color: #38634e;
+  background: linear-gradient(145deg, #284d3c, #244537);
+  color: #91d5a9;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-reward-eyebrow,
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-reward-caption,
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-reward-next span,
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-reward-next small {
+  color: #a5cdb2;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-reward-xp,
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-reward-next strong {
+  color: #c0ebca;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-reward-track {
+  background: #315243;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-reward-next {
+  border-color: #38634e;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-next-achievement {
+  border-color: #315b48;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(92 190 143 / 10%), transparent 48%),
+    linear-gradient(145deg, #1a342c, #192f29);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-next-achievement-label,
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-next-achievement-link,
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-next-achievement-count {
+  color: #a8ddb6;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-next-achievement-count {
+  border-color: #315b48;
+  background: #203d32;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-next-achievement [role='progressbar'] {
+  background: #315243;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #achievements .student-achievement-earned {
+  border-color: #315b48;
+  background: linear-gradient(140deg, #1a342c, #192f29);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #achievements .student-achievement-icon,
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #achievements .student-achievement-label {
+  background: #284d3c;
+  color: #a8ddb6;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #achievements .student-achievement-date {
+  color: #a8ddb6;
+}
+
+@media (max-width: 639px) {
+  .dashboard-shell[data-role='student'] .student-reward-overview {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-shell[data-role='student'] .student-reward-overview > div:nth-child(2) {
+    flex-basis: calc(100% - 4.25rem);
+  }
+
+  .dashboard-shell[data-role='student'] .student-reward-next {
+    display: flex;
+    width: 100%;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 0.35rem;
+    padding: 0.75rem 0 0;
+    border-top: 1px solid #cbe4d8;
+    border-left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-shell[data-role='student'] .student-reward-track > span {
+    transition: none;
+  }
+}
+
+.dashboard-shell[data-role='student'] .student-learning-hero {
+  background:
+    radial-gradient(ellipse at 87% 10%, rgb(4 159 217 / 24%), transparent 31%),
+    radial-gradient(ellipse at 24% 120%, rgb(89 184 122 / 24%), transparent 44%),
+    radial-gradient(rgb(255 255 255 / 8%) 1px, transparent 1px) 0 0 / 22px 22px,
+    linear-gradient(122deg, #0b2340 0%, #103e67 58%, #145b75 100%);
+}
+
+.dashboard-shell[data-role='student'] .student-welcome-copy {
+  max-width: 66ch;
+}
+
+.dashboard-shell[data-role='student'] .student-welcome-label {
+  padding: 0.4rem 0.7rem;
+  border: 1px solid rgb(175 230 196 / 24%);
+  border-radius: 999px;
+  background: rgb(32 115 78 / 22%);
+  color: #b9edc9;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+.dashboard-shell[data-role='student'] .student-welcome-label svg {
+  color: #8edba8;
+}
+
+.dashboard-shell[data-role='student'] .student-greeting-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem;
+  color: #e5f1fb;
+  font-size: clamp(1rem, 1.7vw, 1.2rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.dashboard-shell[data-role='student'] .student-greeting-name {
+  color: #fff;
+  font-family: "Segoe Print", "Bradley Hand", cursive;
+  font-size: 1.12em;
+  font-style: italic;
+  font-weight: 700;
+  letter-spacing: -0.045em;
+}
+
+.dashboard-shell[data-role='student'] .student-greeting-wave {
+  display: inline-block;
+  margin-left: 0.1rem;
+  transform-origin: 75% 80%;
+  animation: student-greeting-wave 2.8s ease-in-out infinite;
+}
+
+.dashboard-shell[data-role='student'] .student-course-label {
+  color: #a9c9da;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.17em;
+}
+
+.dashboard-shell[data-role='student'] .student-learning-hero h2 {
+  color: #fff;
+  font-size: clamp(1.55rem, 2.7vw, 2.1rem);
+}
+
+.dashboard-shell[data-role='student'] .student-current-module {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  color: #d3e5ee;
+}
+
+.dashboard-shell[data-role='student'] .student-current-module-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  flex: none;
+  border-radius: 50%;
+  background: #7fd39a;
+  box-shadow: 0 0 0 4px rgb(127 211 154 / 13%), 0 0 12px rgb(127 211 154 / 48%);
+}
+
+.dashboard-shell[data-role='student'] .student-course-complete {
+  color: #b9edc9;
+}
+
+.dashboard-shell[data-role='student'] .student-learning-hero .dg-resume-button {
+  border: 1px solid rgb(198 237 209 / 80%);
+  background: linear-gradient(115deg, #fff, #effaf1);
+  color: #174c38;
+  box-shadow: 0 9px 22px -14px rgb(4 18 42 / 62%);
+}
+
+.dashboard-shell[data-role='student'] .student-learning-hero .dg-resume-button:hover {
+  background: #e2f5e7;
+  color: #123f2e;
+  transform: translateY(-2px);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-learning-hero {
+  background:
+    radial-gradient(ellipse at 87% 10%, rgb(4 159 217 / 20%), transparent 31%),
+    radial-gradient(ellipse at 24% 120%, rgb(89 184 122 / 18%), transparent 44%),
+    radial-gradient(rgb(255 255 255 / 6%) 1px, transparent 1px) 0 0 / 22px 22px,
+    linear-gradient(122deg, #09192c 0%, #0e304e 58%, #123c4d 100%);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-welcome-label {
+  border-color: rgb(145 213 169 / 22%);
+  background: rgb(32 115 78 / 24%);
+  color: #b9edc9;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-course-label {
+  color: #a6c3d1;
+}
+
+@keyframes student-greeting-wave {
+  0%, 55%, 100% { transform: rotate(0); }
+  61%, 73%, 85% { transform: rotate(12deg); }
+  67%, 79%, 91% { transform: rotate(-7deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-shell[data-role='student'] .student-greeting-wave {
+    animation: none;
+  }
+}
+
+.dashboard-shell[data-role='student'] {
+  --dashboard-bg: #f3f7fa;
+  --dashboard-surface: #fff;
+  --dashboard-surface-muted: #edf4f8;
+  --dashboard-ink: #102b46;
+  --dashboard-muted: #60758a;
+  --dashboard-border: #dce7ef;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] {
+  --dashboard-bg: #0d1928;
+  --dashboard-surface: #142438;
+  --dashboard-surface-muted: #1c3045;
+  --dashboard-ink: #e9f3fb;
+  --dashboard-muted: #a6bdd0;
+  --dashboard-border: #2b4055;
+}
+
+.dashboard-shell[data-role='student'] .dashboard-main {
+  background:
+    radial-gradient(ellipse at 96% 0%, rgb(4 159 217 / 9%), transparent 31rem),
+    radial-gradient(ellipse at 0% 48%, rgb(10 84 143 / 4%), transparent 28rem),
+    var(--dashboard-bg);
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-heading h1 {
+  color: #102b46;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-dashboard-heading h1 {
+  color: #e9f3fb;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-eyebrow {
+  color: #1477ad;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-eyebrow::before {
+  width: 1.5rem;
+  height: 3px;
+  background: linear-gradient(90deg, #049fd9, #65c8d0);
+}
+
+.dashboard-shell[data-role='student'] .dg-card {
+  border-color: #dce7ef;
+  box-shadow: 0 10px 26px -23px rgb(16 43 70 / 35%);
+}
+
+.dashboard-shell[data-role='student'] .dg-card:hover {
+  border-color: #b8d8e8;
+  box-shadow: 0 16px 34px -26px rgb(16 84 125 / 32%);
+}
+
+.dashboard-shell[data-role='student'] .student-learning-hero {
+  border-color: rgb(79 177 211 / 36%);
+  background:
+    radial-gradient(ellipse at 88% 18%, rgb(4 159 217 / 25%), transparent 31%),
+    radial-gradient(ellipse at 66% 115%, rgb(101 200 208 / 17%), transparent 38%),
+    radial-gradient(rgb(255 255 255 / 9%) 1px, transparent 1px) 0 0 / 22px 22px,
+    linear-gradient(122deg, #0b2340 0%, #103e67 58%, #145b83 100%);
+  box-shadow: 0 22px 48px -34px rgb(8 45 77 / 54%);
+}
+
+.dashboard-shell[data-role='student'] .student-learning-hero::before {
+  top: -10rem;
+  right: 10%;
+  border-color: rgb(103 232 249 / 16%);
+  box-shadow: 0 0 0 34px rgb(103 232 249 / 5%), 0 0 0 68px rgb(103 232 249 / 3%);
+}
+
+.dashboard-shell[data-role='student'] .student-learning-hero::after {
+  background: linear-gradient(90deg, #049fd9 0%, #65c8d0 56%, rgb(255 255 255 / 40%) 100%);
+}
+
+.dashboard-shell[data-role='student'] .student-progress-ring-value {
+  stroke: #65d1df;
+  filter: drop-shadow(0 0 5px rgb(4 159 217 / 55%));
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat {
+  border-color: #dce7ef;
+  border-left-color: #049fd9;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(4 159 217 / 8%), transparent 45%),
+    var(--dashboard-surface);
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat::after {
+  border-color: rgb(4 159 217 / 13%);
+  box-shadow: 0 0 0 12px rgb(4 159 217 / 4%);
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat-terracotta {
+  border-left-color: #e0a342;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(224 163 66 / 9%), transparent 45%),
+    var(--dashboard-surface);
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat-sage {
+  border-left-color: #36a99a;
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(54 169 154 / 9%), transparent 45%),
+    var(--dashboard-surface);
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat-terracotta .bg-orange-50 {
+  background-color: #fff5e5;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat-terracotta .text-orange-700 {
+  color: #a56a12;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat-sage .bg-emerald-50 {
+  background-color: #e6f5f2;
+}
+
+.dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat-sage .text-emerald-700 {
+  color: #14796f;
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step {
+  border-color: #dce7ef;
+  background: linear-gradient(145deg, #fff, #f3f8fb);
+  box-shadow: 0 5px 14px -12px rgb(16 43 70 / 38%);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step:hover {
+  border-color: #80c5df;
+  box-shadow: 0 10px 20px -16px rgb(4 113 164 / 35%);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step-active,
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step[class~="border-blue-400"] {
+  border-color: #54b5d5;
+  background: linear-gradient(145deg, #f3fbfe, #eaf5fa);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-connector-current {
+  background: linear-gradient(90deg, #65c8d0, #049fd9, #65c8d0);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-progress-fill {
+  background: linear-gradient(90deg, #049fd9, #42b9c4, #1d72aa);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-step {
+  border-color: #2b4055;
+  background: linear-gradient(145deg, #172b40, #142438);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-step-active,
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-step[class~="border-blue-400"] {
+  border-color: #348cab;
+  background: linear-gradient(145deg, #1b3b53, #172e45);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat-terracotta {
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(224 163 66 / 10%), transparent 45%),
+    var(--dashboard-surface);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] .student-dashboard-snapshot .student-stat-sage {
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(54 169 154 / 10%), transparent 45%),
+    var(--dashboard-surface);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-scroll {
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 1rem;
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-list {
+  gap: 1.5rem;
+  padding: 0.5rem 0.25rem 0.75rem;
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step {
+  min-height: 220px;
+  width: 14rem;
+  padding: 1rem;
+  scroll-snap-align: start;
+  text-align: center;
+  box-shadow: 0 8px 22px -19px rgb(16 43 70 / 44%);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step:not(.learning-path-step-locked):hover,
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step:focus-within {
+  transform: translateY(-3px);
+  border-color: #80c5df;
+  box-shadow: 0 16px 28px -22px rgb(4 113 164 / 38%);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step-index {
+  display: grid;
+  width: 1.6rem;
+  height: 1.6rem;
+  place-items: center;
+  border: 1px solid #dce7ef;
+  border-radius: 0.55rem;
+  background: #f3f7fa;
+  color: #60758a;
+  font-size: 0.65rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step-indicator {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: #b8c6d0;
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step-indicator-done,
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step-indicator-mastered {
+  background: #20a68a;
+  box-shadow: 0 0 0 3px rgb(32 166 138 / 12%);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step-indicator-active,
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step-indicator-current {
+  background: #049fd9;
+  box-shadow: 0 0 0 4px rgb(4 159 217 / 13%);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step-indicator-failed {
+  background: #d68d20;
+  box-shadow: 0 0 0 3px rgb(214 141 32 / 12%);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step-indicator-locked {
+  background: #b8c6d0;
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step-active {
+  border-color: #80c5df;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgb(4 159 217 / 9%), transparent 56%),
+    linear-gradient(145deg, #fff, #eff9fc);
+  box-shadow: 0 14px 28px -21px rgb(4 113 164 / 35%);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step-active .learning-path-step-index {
+  border-color: #c2e6f1;
+  background: #e8f7fb;
+  color: #087eaa;
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step-locked {
+  background: linear-gradient(145deg, #fff, #f7f9fa);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-step-locked .learning-path-step-title {
+  color: #586d7d;
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-connector {
+  top: 5.375rem;
+  left: 100%;
+  width: 1.5rem;
+  height: 2px;
+  border-radius: 999px;
+  background: #d5e0e8;
+  opacity: 1;
+  transform: scaleX(0);
+  transform-origin: left;
+  animation: learning-path-draw .65s ease-out forwards;
+  animation-delay: var(--path-delay, 0ms);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-connector-done {
+  background: linear-gradient(90deg, #20a68a, #65c8d0);
+  background-size: 200% 100%;
+  animation: learning-path-draw .65s ease-out forwards, learning-path-flow 2.8s linear infinite;
+  animation-delay: var(--path-delay, 0ms), calc(var(--path-delay, 0ms) + .65s);
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-connector-current {
+  background: linear-gradient(90deg, #65c8d0, #049fd9, #65c8d0);
+  background-size: 200% 100%;
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-connector-current::after {
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border-color: #fff;
+  background: #049fd9;
+}
+
+.dashboard-shell[data-role='student'] #learning-path .learning-path-node-current {
+  box-shadow: 0 0 0 5px rgb(4 159 217 / 11%), 0 10px 22px -12px rgb(4 113 164 / 55%);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-step-index {
+  border-color: #2b4055;
+  background: #1c3045;
+  color: #a6bdd0;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-step-indicator {
+  background-color: #52697d;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-step-indicator-done,
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-step-indicator-mastered {
+  background-color: #45c5a6;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-step-indicator-active,
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-step-indicator-current {
+  background-color: #55c6e8;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-step-active {
+  border-color: #348cab;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgb(4 159 217 / 14%), transparent 56%),
+    linear-gradient(145deg, #1b3b53, #172e45);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-step-active .learning-path-step-index {
+  border-color: #2b6077;
+  background: #1c4157;
+  color: #8bd9ed;
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-step-locked {
+  background: linear-gradient(145deg, #172b40, #142438);
+}
+
+:root[data-theme='dark'] .dashboard-shell[data-role='student'] #learning-path .learning-path-connector {
+  background: #354b60;
+}
+
+@media (max-width: 639px) {
+  .dashboard-shell[data-role='student'] #learning-path .learning-path-step {
+    width: 13.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-shell[data-role='student'] #learning-path .learning-path-scroll {
+    scroll-snap-type: none;
+  }
+
+  .dashboard-shell[data-role='student'] #learning-path .learning-path-step,
+  .dashboard-shell[data-role='student'] #learning-path .learning-path-step:hover {
+    transform: none;
+    transition: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dashboard-shell[data-role='student'] .student-learning-hero::before {
+    animation: none;
   }
 }

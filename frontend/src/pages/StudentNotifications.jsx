@@ -18,6 +18,9 @@ export default function StudentNotifications() {
         if (cancelled) return
         setNotifications(data.results || [])
         setUnreadCount(data.unread_count || 0)
+        window.dispatchEvent(new CustomEvent('engagement-notifications-count-changed', {
+          detail: { unreadCount: data.unread_count || 0 },
+        }))
       })
       .catch((err) => { if (!cancelled) setError(err.message || 'Notifications could not be loaded.') })
       .finally(() => { if (!cancelled) setLoading(false) })

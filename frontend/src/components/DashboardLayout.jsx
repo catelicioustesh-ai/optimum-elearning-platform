@@ -93,6 +93,7 @@ export default function DashboardLayout({
   // Pages don't all pass `role`; default to the signed-in user's real role (was always 'student').
   const role = roleProp || auth?.role || 'student'
   const { pathname, hash } = useLocation()
+  const isNotificationsPage = pathname === '/dashboard/student/notifications'
   const activeAnchor = hash.slice(1)
   const navigate = useNavigate()
   const handleLogout = async () => {
@@ -214,7 +215,7 @@ export default function DashboardLayout({
   }, [])
 
   useEffect(() => {
-    if (!auth || (!notifOpen && role !== 'student')) return undefined
+    if (!auth || (!notifOpen && (role !== 'student' || isNotificationsPage))) return undefined
     let cancelled = false
     function refreshNotifications() {
       api.get('/engagement/notifications/')
@@ -231,7 +232,7 @@ export default function DashboardLayout({
         })
     }
     const timeoutId = window.setTimeout(refreshNotifications, notifOpen ? 0 : 1500)
-    const intervalId = role === 'student'
+    const intervalId = role === 'student' && !isNotificationsPage
       ? window.setInterval(refreshNotifications, 5 * 60 * 1000)
       : null
     return () => {
@@ -239,7 +240,7 @@ export default function DashboardLayout({
       window.clearTimeout(timeoutId)
       if (intervalId) window.clearInterval(intervalId)
     }
-  }, [auth, notifOpen, notificationReload, role])
+  }, [auth, isNotificationsPage, notifOpen, notificationReload, role])
 
   useEffect(() => {
     function onClickOutside(e) {

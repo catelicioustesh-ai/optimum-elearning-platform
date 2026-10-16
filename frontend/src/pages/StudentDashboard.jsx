@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, Award, BookOpen, CalendarClock, CheckCircle2, Clock3, Download, Flame, LockKeyhole, RotateCw, Sparkles } from 'lucide-react'
+import { ArrowRight, Award, BookOpen, CalendarClock, CheckCircle2, Clock3, Download, Flame, LockKeyhole, RotateCw, Sparkles, Trophy } from 'lucide-react'
 
 import DashboardLayout from '../components/DashboardLayout.jsx'
 import LearningPath from '../components/LearningPath.jsx'
@@ -92,12 +92,14 @@ export default function StudentDashboard() {
     (certificate) => !courses.some((item) => String(item.course_id) === String(certificate.course_id)),
   ) || []
   const coursesInProgress = courses.filter((item) => !item.completed).length
+  const courseProgressPercent = Math.min(100, Math.max(0, Number(course?.progress_percent) || 0))
   const completionRate = courses.length
     ? Math.round(courses.reduce((total, item) => total + item.progress_percent, 0) / courses.length)
     : 0
   const nextAchievement = achievements
     .filter((item) => !item.earned_at)
     .sort((left, right) => right.progress_percent - left.progress_percent)[0] || null
+  const rewardProgressPercent = Math.min(100, Math.max(0, engagement?.reward_progress_percent || 0))
   const dashboardNavItems = navItems.filter((item) => {
     if (!item.anchor) return true
     if (!course) return false
@@ -244,18 +246,26 @@ export default function StudentDashboard() {
         {!loading && !error && course && (
           <>
             <section className="dg-hero student-learning-hero flex flex-col gap-6 rounded-2xl p-6 text-white md:flex-row md:items-center md:justify-between sm:p-8">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-blue-100">
-                  {greetingForHour(new Date().getHours())}, {displayName(auth, auth)} <span aria-hidden="true">👋</span>
+              <div className="student-welcome-copy min-w-0">
+                <p className="student-welcome-label inline-flex items-center gap-2">
+                  <Sparkles size={14} aria-hidden="true" />
+                  YOUR LEARNING SPACE
                 </p>
-                <h2 className="mt-2 text-2xl font-bold text-white">{course.course_title}</h2>
+                <p className="student-greeting-line mt-3">
+                  {greetingForHour(new Date().getHours())},{' '}
+                  <span className="student-greeting-name">{displayName(auth, auth)}</span>
+                  <span className="student-greeting-wave" aria-hidden="true">👋</span>
+                </p>
+                <p className="student-course-label mt-5">PICK UP WHERE YOU LEFT OFF</p>
+                <h2 className="mt-1 text-2xl font-bold text-white">{course.course_title}</h2>
                 {course.current_module ? (
-                  <p className="mt-2 text-sm text-blue-100">
-                    Current module: <span className="font-semibold text-white">{course.current_module}</span>
+                  <p className="student-current-module mt-2 text-sm text-blue-100">
+                    <span className="student-current-module-dot" aria-hidden="true" />
+                    Up next: <span className="font-semibold text-white">{course.current_module}</span>
                     {course.current_lesson_title ? ` · ${course.current_lesson_title}` : ''}
                   </p>
                 ) : (
-                  <p className="mt-2 text-sm text-blue-100">All available modules are complete.</p>
+                  <p className="student-course-complete mt-2 text-sm text-blue-100">All available modules are complete. Brilliant work.</p>
                 )}
                 <button
                   type="button"
@@ -268,23 +278,39 @@ export default function StudentDashboard() {
               </div>
 
               <div className="student-hero-summary w-full shrink-0 md:max-w-72">
-                <div aria-label={`${course.progress_percent}% of modules complete`}>
-                  <div className="flex items-center justify-between text-xs font-semibold text-blue-100">
-                    <span>Course progress</span>
-                    <span>{course.progress_percent}%</span>
-                  </div>
-                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-950/40">
-                    <div className="dg-progress-fill h-full rounded-full bg-white" style={{ width: `${course.progress_percent}%` }} />
-                  </div>
-                  <p className="mt-2 text-right text-xs text-blue-100">{completedModules} of {modules.length} modules</p>
+                <div className="student-course-progress flex items-center gap-4" aria-label={`${courseProgressPercent}% of modules complete`}>
+                  <span className="student-progress-ring" aria-hidden="true">
+                    <svg viewBox="0 0 76 76">
+                      <circle className="student-progress-ring-track" cx="38" cy="38" r="30" />
+                      <circle
+                        className="student-progress-ring-value"
+                        cx="38"
+                        cy="38"
+                        r="30"
+                        style={{ strokeDashoffset: `${188.5 * (1 - courseProgressPercent / 100)}` }}
+                      />
+                    </svg>
+                    <span><strong>{courseProgressPercent}%</strong><small>complete</small></span>
+                  </span>
+                  <span className="min-w-0">
+                    <strong className="block text-sm text-white">Course progress</strong>
+                    <span className="mt-1 block text-xs text-blue-100">{completedModules} of {modules.length} modules complete</span>
+                    <span className="student-course-progress-track mt-3 block h-1.5 overflow-hidden rounded-full bg-blue-950/40">
+                      <span className="dg-progress-fill block h-full rounded-full bg-white" style={{ width: `${courseProgressPercent}%` }} />
+                    </span>
+                  </span>
                 </div>
                 {engagement && (
-                  <div className="student-next-reward mt-4" aria-label={`${engagement.xp_to_next_reward} XP to next reward`}>
+                  <div className="student-next-reward mt-4" aria-label={`${engagement.xp} XP earned, ${engagement.xp_to_next_reward} XP to next reward`}>
                     <div className="flex items-center justify-between gap-3">
                       <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-orange-100">
                         <Sparkles size={14} aria-hidden="true" /> Next reward
                       </span>
-                      <span className="text-xs font-bold text-white">{engagement.xp_to_next_reward} XP to go</span>
+                      <span className="text-xs font-semibold text-blue-100">At {engagement.next_reward_at} XP</span>
+                    </div>
+                    <div className="mt-1 flex items-baseline justify-between gap-3">
+                      <span className="text-lg font-bold leading-none text-white">{engagement.xp.toLocaleString()} <span className="text-xs font-semibold text-blue-100">XP earned</span></span>
+                      <span className="shrink-0 text-xs font-bold text-white">{engagement.xp_to_next_reward} XP to go</span>
                     </div>
                     <div
                       className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/20"
@@ -292,9 +318,9 @@ export default function StudentDashboard() {
                       aria-label="Progress toward next XP reward"
                       aria-valuemin={0}
                       aria-valuemax={100}
-                      aria-valuenow={engagement.reward_progress_percent}
+                      aria-valuenow={rewardProgressPercent}
                     >
-                      <div className="h-full rounded-full bg-[#d99a73]" style={{ width: `${engagement.reward_progress_percent}%` }} />
+                      <div className="h-full rounded-full bg-[#e7ad79]" style={{ width: `${rewardProgressPercent}%` }} />
                     </div>
                   </div>
                 )}
@@ -351,9 +377,10 @@ export default function StudentDashboard() {
               {modules.length ? (
                 <LearningPath
                   modules={modules}
-                  completedPct={course.progress_percent}
                   onSelectModule={(module) => {
-                    if (module.status !== 'locked') navigate(`/dashboard/student/courses/${course.course_id}`)
+                    if (module.status !== 'locked') {
+                      navigate(`/dashboard/student/courses/${course.course_id}?module=${module.module_id}`)
+                    }
                   }}
                 />
               ) : (
@@ -366,7 +393,25 @@ export default function StudentDashboard() {
                 <div className="flex flex-wrap items-end justify-between gap-3">
                   <div>
                     <h2 id="engagement-heading" className="text-base font-bold text-slate-900">Your progress & rewards</h2>
-                    <p className="dg-sub mt-1">See how close you are to your next milestone</p>
+                    <p className="dg-sub mt-1">Every lesson adds momentum. Keep going to unlock your next reward.</p>
+                  </div>
+                </div>
+                <div className="student-reward-overview mt-5" aria-label={`${engagement.xp} XP earned, ${engagement.xp_to_next_reward} XP until the next reward`}>
+                  <span className="student-reward-emblem" aria-hidden="true"><Trophy size={23} /></span>
+                  <div className="min-w-0 flex-1">
+                    <p className="student-reward-eyebrow">Your learning momentum</p>
+                    <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <strong className="student-reward-xp">{engagement.xp.toLocaleString()} XP</strong>
+                      <span className="student-reward-caption">earned through learning</span>
+                    </div>
+                    <div className="student-reward-track mt-3" role="progressbar" aria-label="Progress toward next XP reward" aria-valuemin={0} aria-valuemax={100} aria-valuenow={rewardProgressPercent}>
+                      <span style={{ width: `${rewardProgressPercent}%` }} />
+                    </div>
+                  </div>
+                  <div className="student-reward-next">
+                    <span>Next reward</span>
+                    <strong>{engagement.xp_to_next_reward} XP</strong>
+                    <small>to unlock</small>
                   </div>
                 </div>
                 <div className="mt-5 grid gap-6 lg:grid-cols-2">
@@ -378,14 +423,14 @@ export default function StudentDashboard() {
                       </span>
                     </div>
                     {nextAchievement && (
-                      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                      <div className="student-next-achievement mt-3 rounded-2xl border p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <p className="text-xs font-bold uppercase tracking-wide text-amber-800">Next milestone</p>
+                            <p className="student-next-achievement-label text-xs font-bold uppercase tracking-wide">Up next</p>
                             <p className="mt-1 font-bold text-slate-900">{nextAchievement.name}</p>
                             <p className="mt-1 text-xs text-slate-700">{nextAchievement.description}</p>
                           </div>
-                          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-amber-900">
+                          <span className="student-next-achievement-count rounded-full bg-white px-2.5 py-1 text-xs font-bold">
                             {Math.max(0, nextAchievement.threshold - nextAchievement.progress)} {achievementUnits[nextAchievement.metric] || 'steps'} to go
                           </span>
                         </div>
@@ -397,12 +442,12 @@ export default function StudentDashboard() {
                           aria-valuemax={100}
                           aria-valuenow={nextAchievement.progress_percent}
                         >
-                          <div className="h-full rounded-full bg-amber-500" style={{ width: `${nextAchievement.progress_percent}%` }} />
+                          <div className="student-next-achievement-fill h-full rounded-full" style={{ width: `${nextAchievement.progress_percent}%` }} />
                         </div>
                         <button
                           type="button"
                           onClick={resumeLearning}
-                          className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-amber-900 underline underline-offset-2 lms-focus-ring"
+                          className="student-next-achievement-link mt-3 inline-flex items-center gap-1 text-xs font-bold underline underline-offset-2 lms-focus-ring"
                         >
                           Continue learning <ArrowRight size={13} aria-hidden="true" />
                         </button>
@@ -418,13 +463,13 @@ export default function StudentDashboard() {
                               key={item.code}
                               className={`achievement-card rounded-xl border p-4 ${
                                 earned
-                                  ? 'achievement-earned border-amber-300 bg-amber-50'
+                                  ? 'student-achievement-earned achievement-earned border-emerald-300 bg-emerald-50'
                                   : 'border-slate-200 bg-slate-50'
                               }`}
                             >
                               <div className="flex items-start gap-3">
                                 <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${
-                                  earned ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-500'
+                                  earned ? 'student-achievement-icon bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'
                                 }`}>
                                   {earned
                                     ? <Award size={18} aria-hidden="true" />
@@ -434,7 +479,7 @@ export default function StudentDashboard() {
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <p className="text-sm font-semibold text-slate-900">{item.name}</p>
                                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                                      earned ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'
+                                      earned ? 'student-achievement-label bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
                                     }`}>
                                       {earned ? 'Earned' : item.category}
                                     </span>
@@ -445,7 +490,7 @@ export default function StudentDashboard() {
                                       {item.progress} / {item.threshold} {unit}
                                     </span>
                                     {earned && item.earned_at && (
-                                      <span className="text-amber-800">
+                                      <span className="student-achievement-date text-emerald-800">
                                         {new Date(item.earned_at).toLocaleDateString()}
                                       </span>
                                     )}
@@ -460,7 +505,7 @@ export default function StudentDashboard() {
                                   >
                                     <div
                                       className={`dg-progress-fill h-full rounded-full ${
-                                        earned ? 'bg-amber-500' : 'bg-blue-600'
+                                        earned ? 'student-achievement-fill bg-emerald-500' : 'bg-blue-600'
                                       }`}
                                       style={{ width: `${item.progress_percent}%` }}
                                     />
