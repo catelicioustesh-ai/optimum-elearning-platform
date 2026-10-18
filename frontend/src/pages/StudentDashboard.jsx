@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import { useNavigate } from 'react-router-dom'
-import { ArrowRight, Award, BookOpen, CalendarClock, CheckCircle2, Clock3, Download, Flame, LockKeyhole, RotateCw, Sparkles } from 'lucide-react'
+import { ArrowRight, Award, BookOpen, CalendarClock, CheckCircle2, Clock3, Download, Flame, LockKeyhole, RotateCw, Sparkles, Trophy } from 'lucide-react'
 
 import DashboardLayout from '../components/DashboardLayout.jsx'
 import LearningPath from '../components/LearningPath.jsx'
@@ -53,14 +53,28 @@ export default function StudentDashboard() {
         if (cancelled) return
         setData(result)
         setSelectedCourseId((current) => current || result.current_course?.course_id || null)
+        setLoading(false)
+
+        api.get('/engagement/me/')
+          .then((engagement) => {
+            if (!cancelled) {
+              setData((current) => current ? { ...current, engagement, engagementError: '' } : current)
+            }
+          })
+          .catch((engagementError) => {
+            if (!cancelled) {
+              setData((current) => current ? {
+                ...current,
+                engagement: null,
+                engagementError: engagementError.message || 'Unable to load achievements.',
+              } : current)
+            }
+          })
       })
       .catch((err) => {
         if (cancelled) return
         setData(null)
         setError(err.message || 'Unable to load learning progress.')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
       })
 
     return () => { cancelled = true }
@@ -78,12 +92,14 @@ export default function StudentDashboard() {
     (certificate) => !courses.some((item) => String(item.course_id) === String(certificate.course_id)),
   ) || []
   const coursesInProgress = courses.filter((item) => !item.completed).length
+  const courseProgressPercent = Math.min(100, Math.max(0, Number(course?.progress_percent) || 0))
   const completionRate = courses.length
     ? Math.round(courses.reduce((total, item) => total + item.progress_percent, 0) / courses.length)
     : 0
   const nextAchievement = achievements
     .filter((item) => !item.earned_at)
     .sort((left, right) => right.progress_percent - left.progress_percent)[0] || null
+  const rewardProgressPercent = Math.min(100, Math.max(0, engagement?.reward_progress_percent || 0))
   const dashboardNavItems = navItems.filter((item) => {
     if (!item.anchor) return true
     if (!course) return false
@@ -143,22 +159,24 @@ export default function StudentDashboard() {
   return (
     <DashboardLayout
       navItems={dashboardNavItems}
-      user={{ name: displayName(data?.student, auth) }}
+      user={{ name: displayName(auth, auth) }}
       weeklyGoal={course?.progress_percent || 0}
       studentHighlights={engagement ? { currentStreak: engagement.current_streak, nextAchievement } : null}
-      studentProfile={data?.student}
+      studentProfile={auth}
       fetchStudentProfile={false}
+      fetchStudentEngagement={false}
       role="student"
     >
       <Helmet>
         <title>Student Dashboard — Optimum LMS</title>
       </Helmet>
 
-      <div className="space-y-6" data-role="student">
-        <header className="flex flex-wrap items-end justify-between gap-4">
+      <div className="student-dashboard space-y-6" data-role="student">
+        <header className="student-dashboard-heading flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">Learning overview</p>
+            <p className="student-dashboard-eyebrow text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">Learning overview</p>
             <h1 className="mt-1 text-2xl font-bold text-slate-900">Your learning</h1>
+            <p className="mt-1.5 text-sm text-slate-600">A clear view of your courses, progress, and what to do next.</p>
           </div>
           {courses.length > 1 && (
             <label className="grid gap-1 text-xs font-semibold text-slate-600">
@@ -227,19 +245,27 @@ export default function StudentDashboard() {
 
         {!loading && !error && course && (
           <>
-            <section className="dg-hero flex flex-col gap-6 rounded-2xl p-6 text-white md:flex-row md:items-center md:justify-between sm:p-8">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-blue-100">
-                  {greetingForHour(new Date().getHours())}, {displayName(data?.student, auth)} <span aria-hidden="true">👋</span>
+            <section className="dg-hero student-learning-hero flex flex-col gap-6 rounded-2xl p-6 text-white md:flex-row md:items-center md:justify-between sm:p-8">
+              <div className="student-welcome-copy min-w-0">
+                <p className="student-welcome-label inline-flex items-center gap-2">
+                  <Sparkles size={14} aria-hidden="true" />
+                  YOUR LEARNING SPACE
                 </p>
-                <h2 className="mt-2 text-2xl font-bold text-white">{course.course_title}</h2>
+                <p className="student-greeting-line mt-3">
+                  {greetingForHour(new Date().getHours())},{' '}
+                  <span className="student-greeting-name">{displayName(auth, auth)}</span>
+                  <span className="student-greeting-wave" aria-hidden="true">👋</span>
+                </p>
+                <p className="student-course-label mt-5">PICK UP WHERE YOU LEFT OFF</p>
+                <h2 className="mt-1 text-2xl font-bold text-white">{course.course_title}</h2>
                 {course.current_module ? (
-                  <p className="mt-2 text-sm text-blue-100">
-                    Current module: <span className="font-semibold text-white">{course.current_module}</span>
+                  <p className="student-current-module mt-2 text-sm text-blue-100">
+                    <span className="student-current-module-dot" aria-hidden="true" />
+                    Up next: <span className="font-semibold text-white">{course.current_module}</span>
                     {course.current_lesson_title ? ` · ${course.current_lesson_title}` : ''}
                   </p>
                 ) : (
-                  <p className="mt-2 text-sm text-blue-100">All available modules are complete.</p>
+                  <p className="student-course-complete mt-2 text-sm text-blue-100">All available modules are complete. Brilliant work.</p>
                 )}
                 <button
                   type="button"
@@ -251,169 +277,141 @@ export default function StudentDashboard() {
                 </button>
               </div>
 
-              <div className="w-full shrink-0 md:max-w-52" aria-label={`${course.progress_percent}% of modules complete`}>
-                <div className="flex items-center justify-between text-xs font-semibold text-blue-100">
-                  <span>Course progress</span>
-                  <span>{course.progress_percent}%</span>
+              <div className="student-hero-summary w-full shrink-0 md:max-w-72">
+                <div className="student-course-progress flex items-center gap-4" aria-label={`${courseProgressPercent}% of modules complete`}>
+                  <span className="student-progress-ring" aria-hidden="true">
+                    <svg viewBox="0 0 76 76">
+                      <circle className="student-progress-ring-track" cx="38" cy="38" r="30" />
+                      <circle
+                        className="student-progress-ring-value"
+                        cx="38"
+                        cy="38"
+                        r="30"
+                        style={{ strokeDashoffset: `${188.5 * (1 - courseProgressPercent / 100)}` }}
+                      />
+                    </svg>
+                    <span><strong>{courseProgressPercent}%</strong><small>complete</small></span>
+                  </span>
+                  <span className="min-w-0">
+                    <strong className="block text-sm text-white">Course progress</strong>
+                    <span className="mt-1 block text-xs text-blue-100">{completedModules} of {modules.length} modules complete</span>
+                    <span className="student-course-progress-track mt-3 block h-1.5 overflow-hidden rounded-full bg-blue-950/40">
+                      <span className="dg-progress-fill block h-full rounded-full bg-white" style={{ width: `${courseProgressPercent}%` }} />
+                    </span>
+                  </span>
                 </div>
-                <div className="mt-2 h-2 overflow-hidden rounded-full bg-blue-950/40">
-                  <div className="dg-progress-fill h-full rounded-full bg-white" style={{ width: `${course.progress_percent}%` }} />
-                </div>
-                <p className="mt-2 text-right text-xs text-blue-100">{completedModules} of {modules.length} modules</p>
+                {engagement && (
+                  <div className="student-next-reward mt-4" aria-label={`${engagement.xp} XP earned, ${engagement.xp_to_next_reward} XP to next reward`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-orange-100">
+                        <Sparkles size={14} aria-hidden="true" /> Next reward
+                      </span>
+                      <span className="text-xs font-semibold text-blue-100">At {engagement.next_reward_at} XP</span>
+                    </div>
+                    <div className="mt-1 flex items-baseline justify-between gap-3">
+                      <span className="text-lg font-bold leading-none text-white">{engagement.xp.toLocaleString()} <span className="text-xs font-semibold text-blue-100">XP earned</span></span>
+                      <span className="shrink-0 text-xs font-bold text-white">{engagement.xp_to_next_reward} XP to go</span>
+                    </div>
+                    <div
+                      className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/20"
+                      role="progressbar"
+                      aria-label="Progress toward next XP reward"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={rewardProgressPercent}
+                    >
+                      <div className="h-full rounded-full bg-[#e7ad79]" style={{ width: `${rewardProgressPercent}%` }} />
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
 
-            {engagement && (
-              <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Your learning momentum">
-                <article className="dg-card rounded-2xl border border-blue-100 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Learning XP</p>
-                      <p className="mt-1 text-2xl font-bold text-slate-900">{engagement.xp}</p>
-                    </div>
-                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-700">
-                      <Sparkles size={19} aria-hidden="true" />
-                    </span>
+            <section className="student-dashboard-snapshot grid gap-3 sm:grid-cols-3" aria-label="Learning at a glance">
+              <article className="dg-card student-stat student-stat-blue rounded-2xl border-l-4 border-l-blue-500 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Courses underway</p>
+                    <p className="mt-1 text-2xl font-bold text-slate-900">{coursesInProgress}</p>
+                    <p className="mt-1 text-xs text-slate-500">{completionRate}% average completion</p>
                   </div>
-                  <p className="mt-2 text-xs text-slate-600">{engagement.xp_to_next_reward} XP to your next reward</p>
-                  <div
-                    className="mt-2 h-1.5 overflow-hidden rounded-full bg-blue-100"
-                    role="progressbar"
-                    aria-label="Progress toward next XP reward"
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={engagement.reward_progress_percent}
-                  >
-                    <div className="h-full rounded-full bg-blue-600" style={{ width: `${engagement.reward_progress_percent}%` }} />
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-700">
+                    <BookOpen size={19} aria-hidden="true" />
+                  </span>
+                </div>
+              </article>
+              <article className="dg-card student-stat student-stat-terracotta rounded-2xl border-l-4 border-l-amber-500 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Learning streak</p>
+                    <p className="mt-1 text-2xl font-bold text-slate-900">{engagement ? `${engagement.current_streak} days` : '—'}</p>
+                    <p className="mt-1 text-xs text-slate-500">{engagement ? `Longest: ${engagement.longest_streak} days` : 'Keep showing up to build momentum'}</p>
                   </div>
-                </article>
-
-                <article className="dg-card rounded-2xl border border-orange-100 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Learning streak</p>
-                      <p className="mt-1 text-2xl font-bold text-slate-900">{engagement.current_streak} {engagement.current_streak === 1 ? 'day' : 'days'}</p>
-                    </div>
-                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-orange-50 text-orange-600">
-                      <Flame size={20} aria-hidden="true" />
-                    </span>
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-orange-50 text-orange-700">
+                    <Flame size={19} aria-hidden="true" />
+                  </span>
+                </div>
+              </article>
+              <article className="dg-card student-stat student-stat-sage rounded-2xl border-l-4 border-l-emerald-500 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Awaiting review</p>
+                    <p className="mt-1 text-2xl font-bold text-slate-900">{data.pending_labs}</p>
+                    <p className="mt-1 text-xs text-slate-500">Submitted work being reviewed</p>
                   </div>
-                  <p className="mt-2 text-xs text-slate-600">Longest: {engagement.longest_streak} {engagement.longest_streak === 1 ? 'day' : 'days'}</p>
-                  <p className="mt-1 text-xs font-medium text-orange-800">
-                    {engagement.current_streak ? 'Keep learning to maintain your momentum.' : 'Start a new streak with a learning activity.'}
-                  </p>
-                </article>
-
-                <article className="dg-card rounded-2xl border border-amber-100 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Achievements</p>
-                      <p className="mt-1 text-2xl font-bold text-slate-900">{earnedAchievements.length} <span className="text-base font-semibold text-slate-500">/ {achievements.length}</span></p>
-                    </div>
-                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-700">
-                      <Award size={19} aria-hidden="true" />
-                    </span>
-                  </div>
-                  <p className="mt-2 truncate text-xs text-slate-600">
-                    {nextAchievement ? `Next: ${nextAchievement.name}` : 'You have earned every achievement!'}
-                  </p>
-                </article>
-
-                <article className="dg-card rounded-2xl border border-emerald-100 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Certificates</p>
-                      <p className="mt-1 text-2xl font-bold text-slate-900">{issuedCertificates.length}</p>
-                    </div>
-                    <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
-                      <CheckCircle2 size={19} aria-hidden="true" />
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-slate-600">Issued for completed courses</p>
-                </article>
-              </section>
-            )}
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
+                    <Clock3 size={19} aria-hidden="true" />
+                  </span>
+                </div>
+              </article>
+            </section>
 
             <section id="learning-path" className="dg-card scroll-mt-6 rounded-2xl p-5 sm:p-6">
               <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
                 <div>
-                  <h2 className="text-base font-bold text-white">Learning path</h2>
+                  <h2 className="text-base font-bold text-slate-900">Learning path</h2>
                   <p className="dg-sub mt-1">{course.course_title}</p>
                 </div>
-                <span className="text-xs text-slate-400">{modules.length} modules</span>
+                <span className="text-xs text-slate-600">{modules.length} modules</span>
               </div>
               {modules.length ? (
                 <LearningPath
                   modules={modules}
-                  completedPct={course.progress_percent}
                   onSelectModule={(module) => {
-                    if (module.status !== 'locked') navigate(`/dashboard/student/courses/${course.course_id}`)
+                    if (module.status !== 'locked') {
+                      navigate(`/dashboard/student/courses/${course.course_id}?module=${module.module_id}`)
+                    }
                   }}
                 />
               ) : (
-                <p className="text-sm text-slate-300" role="status">Learning path unavailable. This course has no modules yet.</p>
+                <p className="text-sm text-slate-600" role="status">Learning path unavailable. This course has no modules yet.</p>
               )}
             </section>
-
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="dg-card rounded-2xl border-l-4 border-l-blue-500 p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Courses in progress</p>
-                    <p className="mt-2 text-2xl font-bold text-slate-900">{coursesInProgress}</p>
-                  </div>
-                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-blue-50 text-blue-700">
-                    <BookOpen size={19} aria-hidden="true" />
-                  </span>
-                </div>
-              </div>
-              <div className="dg-card rounded-2xl border-l-4 border-l-emerald-500 p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Completion rate</p>
-                    <p className="mt-2 text-2xl font-bold text-slate-900">{completionRate}%</p>
-                    <p className="mt-1 text-xs text-slate-500">Across enrolled courses</p>
-                  </div>
-                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
-                    <CheckCircle2 size={19} aria-hidden="true" />
-                  </span>
-                </div>
-              </div>
-              <div className="dg-card rounded-2xl border-l-4 border-l-amber-500 p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Awaiting review</p>
-                    <p className="mt-2 text-2xl font-bold text-slate-900">{data.pending_labs}</p>
-                  </div>
-                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-700">
-                    <Clock3 size={19} aria-hidden="true" />
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => document.getElementById('achievements')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                className="dg-card rounded-2xl border-l-4 border-l-amber-500 p-5 text-left transition hover:-translate-y-0.5 lms-focus-ring"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Achievements earned</p>
-                    <p className="mt-2 text-2xl font-bold text-slate-900">{earnedAchievements.length} / {achievements.length}</p>
-                  </div>
-                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-700">
-                    <Award size={19} aria-hidden="true" />
-                  </span>
-                </div>
-                <p className="mt-2 text-xs text-slate-600">{nextAchievement ? `Next: ${nextAchievement.name}` : 'View your achievement collection'}</p>
-              </button>
-            </div>
 
             {engagement && (
               <section className="dg-card rounded-2xl p-5 sm:p-6" aria-labelledby="engagement-heading">
                 <div className="flex flex-wrap items-end justify-between gap-3">
                   <div>
-                    <h2 id="engagement-heading" className="text-base font-bold text-white">Your progress & rewards</h2>
-                    <p className="dg-sub mt-1">See how close you are to your next milestone</p>
+                    <h2 id="engagement-heading" className="text-base font-bold text-slate-900">Your progress & rewards</h2>
+                    <p className="dg-sub mt-1">Every lesson adds momentum. Keep going to unlock your next reward.</p>
+                  </div>
+                </div>
+                <div className="student-reward-overview mt-5" aria-label={`${engagement.xp} XP earned, ${engagement.xp_to_next_reward} XP until the next reward`}>
+                  <span className="student-reward-emblem" aria-hidden="true"><Trophy size={23} /></span>
+                  <div className="min-w-0 flex-1">
+                    <p className="student-reward-eyebrow">Your learning momentum</p>
+                    <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <strong className="student-reward-xp">{engagement.xp.toLocaleString()} XP</strong>
+                      <span className="student-reward-caption">earned through learning</span>
+                    </div>
+                    <div className="student-reward-track mt-3" role="progressbar" aria-label="Progress toward next XP reward" aria-valuemin={0} aria-valuemax={100} aria-valuenow={rewardProgressPercent}>
+                      <span style={{ width: `${rewardProgressPercent}%` }} />
+                    </div>
+                  </div>
+                  <div className="student-reward-next">
+                    <span>Next reward</span>
+                    <strong>{engagement.xp_to_next_reward} XP</strong>
+                    <small>to unlock</small>
                   </div>
                 </div>
                 <div className="mt-5 grid gap-6 lg:grid-cols-2">
@@ -425,14 +423,14 @@ export default function StudentDashboard() {
                       </span>
                     </div>
                     {nextAchievement && (
-                      <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                      <div className="student-next-achievement mt-3 rounded-2xl border p-4">
                         <div className="flex items-start justify-between gap-3">
                           <div>
-                            <p className="text-xs font-bold uppercase tracking-wide text-amber-800">Next milestone</p>
+                            <p className="student-next-achievement-label text-xs font-bold uppercase tracking-wide">Up next</p>
                             <p className="mt-1 font-bold text-slate-900">{nextAchievement.name}</p>
                             <p className="mt-1 text-xs text-slate-700">{nextAchievement.description}</p>
                           </div>
-                          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-amber-900">
+                          <span className="student-next-achievement-count rounded-full bg-white px-2.5 py-1 text-xs font-bold">
                             {Math.max(0, nextAchievement.threshold - nextAchievement.progress)} {achievementUnits[nextAchievement.metric] || 'steps'} to go
                           </span>
                         </div>
@@ -444,12 +442,12 @@ export default function StudentDashboard() {
                           aria-valuemax={100}
                           aria-valuenow={nextAchievement.progress_percent}
                         >
-                          <div className="h-full rounded-full bg-amber-500" style={{ width: `${nextAchievement.progress_percent}%` }} />
+                          <div className="student-next-achievement-fill h-full rounded-full" style={{ width: `${nextAchievement.progress_percent}%` }} />
                         </div>
                         <button
                           type="button"
                           onClick={resumeLearning}
-                          className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-amber-900 underline underline-offset-2 lms-focus-ring"
+                          className="student-next-achievement-link mt-3 inline-flex items-center gap-1 text-xs font-bold underline underline-offset-2 lms-focus-ring"
                         >
                           Continue learning <ArrowRight size={13} aria-hidden="true" />
                         </button>
@@ -465,13 +463,13 @@ export default function StudentDashboard() {
                               key={item.code}
                               className={`achievement-card rounded-xl border p-4 ${
                                 earned
-                                  ? 'achievement-earned border-amber-300 bg-amber-50'
+                                  ? 'student-achievement-earned achievement-earned border-emerald-300 bg-emerald-50'
                                   : 'border-slate-200 bg-slate-50'
                               }`}
                             >
                               <div className="flex items-start gap-3">
                                 <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${
-                                  earned ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-500'
+                                  earned ? 'student-achievement-icon bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'
                                 }`}>
                                   {earned
                                     ? <Award size={18} aria-hidden="true" />
@@ -481,7 +479,7 @@ export default function StudentDashboard() {
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <p className="text-sm font-semibold text-slate-900">{item.name}</p>
                                     <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                                      earned ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-600'
+                                      earned ? 'student-achievement-label bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
                                     }`}>
                                       {earned ? 'Earned' : item.category}
                                     </span>
@@ -492,7 +490,7 @@ export default function StudentDashboard() {
                                       {item.progress} / {item.threshold} {unit}
                                     </span>
                                     {earned && item.earned_at && (
-                                      <span className="text-amber-800">
+                                      <span className="student-achievement-date text-emerald-800">
                                         {new Date(item.earned_at).toLocaleDateString()}
                                       </span>
                                     )}
@@ -507,7 +505,7 @@ export default function StudentDashboard() {
                                   >
                                     <div
                                       className={`dg-progress-fill h-full rounded-full ${
-                                        earned ? 'bg-amber-500' : 'bg-blue-600'
+                                        earned ? 'student-achievement-fill bg-emerald-500' : 'bg-blue-600'
                                       }`}
                                       style={{ width: `${item.progress_percent}%` }}
                                     />
@@ -526,7 +524,12 @@ export default function StudentDashboard() {
                     {sectionToggle('achievements', engagement.achievements, 'achievements')}
                   </div>
                   <div id="certificates" className="scroll-mt-6">
-                    <h3 className="text-sm font-bold text-slate-900">Certificate roadmap</h3>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-bold text-slate-900">Certificate roadmap</h3>
+                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
+                        {issuedCertificates.length} earned
+                      </span>
+                    </div>
                     <p className="mt-1 text-xs text-slate-600">Track your enrolled courses toward completion and certificates.</p>
                     {courses.length ? (
                       <ul className="mt-3 grid gap-3">
@@ -628,7 +631,7 @@ export default function StudentDashboard() {
                         </ul>
                       </div>
                     )}
-                    {certificateError && <p className="mt-3 text-sm text-rose-300" role="alert">{certificateError}</p>}
+                    {certificateError && <p className="mt-3 text-sm text-rose-700" role="alert">{certificateError}</p>}
                   </div>
                 </div>
               </section>
@@ -638,7 +641,7 @@ export default function StudentDashboard() {
               <section id="deadlines" className="dg-card scroll-mt-6 rounded-2xl border-t-4 border-t-amber-400 p-5 sm:p-6">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-base font-bold text-white">Upcoming deadlines</h2>
+                    <h2 className="text-base font-bold text-slate-900">Upcoming deadlines</h2>
                     <p className="dg-sub mt-1">Your next work to complete</p>
                   </div>
                   <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800">{data.upcoming_deadlines.length} due</span>
@@ -648,8 +651,8 @@ export default function StudentDashboard() {
                     {sectionItems('deadlines', data.upcoming_deadlines).map((item) => (
                       <li key={item.activity_id} className="flex flex-wrap items-center justify-between gap-3 border-slate-200 py-3 first:pt-0 last:pb-0">
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-white">{item.title}</p>
-                          <p className="mt-1 text-xs text-slate-400">{item.course_title} · {item.activity_type}</p>
+                          <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+                          <p className="mt-1 text-xs text-slate-600">{item.course_title} · {item.activity_type}</p>
                           <p className="mt-1 text-xs font-semibold text-amber-800">Due {formatDeadline(item.deadline)}</p>
                         </div>
                         <button
@@ -671,7 +674,7 @@ export default function StudentDashboard() {
               <section className="dg-card rounded-2xl border-t-4 border-t-blue-500 p-5 sm:p-6">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="text-base font-bold text-white">Recent results</h2>
+                    <h2 className="text-base font-bold text-slate-900">Recent results</h2>
                     <p className="dg-sub mt-1">Latest graded submissions</p>
                   </div>
                   <button
@@ -687,8 +690,8 @@ export default function StudentDashboard() {
                     {sectionItems('recentGrades', data.recent_grades).map((result, index) => (
                       <li key={`${result.activity}-${index}`} className="flex flex-wrap items-center justify-between gap-3 border-slate-200 py-3 first:pt-0 last:pb-0">
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-white">{result.activity}</p>
-                          <p className="mt-1 text-xs text-slate-400">
+                          <p className="text-sm font-semibold text-slate-900">{result.activity}</p>
+                          <p className="mt-1 text-xs text-slate-600">
                             {result.graded_at ? `Graded ${new Date(result.graded_at).toLocaleDateString()}` : 'Recently graded'}
                             {result.feedback ? ` · ${result.feedback}` : ''}
                           </p>

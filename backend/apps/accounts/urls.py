@@ -1,10 +1,15 @@
 from django.urls import path
-from rest_framework_simplejwt.views import TokenRefreshView
-
 from .views import (
     RegisterView,
     LoginView,
+    GoogleLoginView,
+    MicrosoftLoginView,
+    AppleLoginView,
+    ExternalProviderLinkView,
+    SocialLoginNonceView,
     LogoutView,
+    CsrfTokenView,
+    RefreshCookieView,
     MeView,
     MyProfilePhotoView,
     PasswordResetConfirmView,
@@ -15,8 +20,14 @@ from .views import (
 
 urlpatterns = [
     path("register/", RegisterView.as_view(), name="register"),
+    path("csrf/", CsrfTokenView.as_view(), name="csrf-token"),
     path("login/", LoginView.as_view(), name="login"),
-    path("login/refresh/", TokenRefreshView.as_view(), name="login-refresh"),
+    path("google/", GoogleLoginView.as_view(), name="google-login"),
+    path("microsoft/", MicrosoftLoginView.as_view(), name="microsoft-login"),
+    path("apple/", AppleLoginView.as_view(), name="apple-login"),
+    path("social/link/<str:provider>/", ExternalProviderLinkView.as_view(), name="social-link"),
+    path("social/nonce/", SocialLoginNonceView.as_view(), name="social-login-nonce"),
+    path("login/refresh/", RefreshCookieView.as_view(), name="login-refresh"),
     path("logout/", LogoutView.as_view(), name="logout"),
     path("me/", MeView.as_view(), name="me"),
     path("me/profile-photo/", MyProfilePhotoView.as_view(), name="me-profile-photo"),

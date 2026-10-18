@@ -8,6 +8,7 @@
 | Layer | Provided by | Verified how |
 |---|---|---|
 | CPU / wall-clock / file-size / open-files / process limits, output cap, wiped env, throwaway cwd, kill whole process group | `runner.py` | `test_runner.py` (adversarial, run against a non-root runner) |
+| Reaping orphaned child processes | Docker Compose `init: true` | Keeps timed-out or forked child processes from accumulating under the runner |
 | **No network** (`network_mode: none` / internal network) | docker-compose | **Not testable in the dev sandbox — verify on your host** (see below) |
 | Non-root user, read-only root FS, `cap_drop: ALL`, `no-new-privileges` | docker-compose | verify on your host |
 | Memory & pids ceiling (cgroups), so a bomb can't take the host | docker-compose `mem_limit`, `pids_limit` | verify on your host |

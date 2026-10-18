@@ -37,11 +37,16 @@ class AnonymousTests(Base):
             f"/api/progress/can-access/{w.m1.id}/", f"/api/progress/video/{w.l1.id}/",
             f"/api/progress/video/{w.l1.id}/summary/", "/api/dashboard/student/", "/api/dashboard/instructor/",
             "/api/dashboard/admin/", "/api/risk/cohort/", f"/api/risk/student/{w.student_1.id}/course/{w.course_a.id}/",
-            "/api/sequencing/me/", "/api/allocation/recommendations/", "/api/auth/me/",
+            "/api/sequencing/me/", "/api/allocation/recommendations/",
         ]
         for url in urls:
             with self.subTest(url=url):
                 self.assertEqual(self.as_().get(url).status_code, 401)
+        self.assertEqual(self.as_().get("/api/auth/me/").status_code, 204)
+        self.assertEqual(
+            self.as_().patch("/api/auth/me/", {"bio": "anonymous"}, format="json").status_code,
+            401,
+        )
         for url in ("/api/execute/run/", "/api/execute/test/", "/api/submissions/", "/api/enrollments/", "/api/courses/"):
             with self.subTest(post=url):
                 self.assertEqual(self.as_().post(url, {}, format="json").status_code, 401)
@@ -81,6 +86,7 @@ class InstructorOwnershipTests(Base):
         b, w = self.as_(self.w.instructor_b), self.w
         self.assertEqual(b.patch(f"/api/courses/{w.course_a.id}/", {"title": "hijacked"}, format="json").status_code, 403)
         self.assertEqual(b.delete(f"/api/courses/{w.course_a.id}/").status_code, 403)
+        self.assertEqual(b.post(f"/api/courses/{w.course_a.id}/publish/").status_code, 403)
         w.course_a.refresh_from_db()
         self.assertEqual(w.course_a.title, "Course A")
 

@@ -9,6 +9,7 @@ import LessonVideo from '../components/LessonVideo.jsx'
 import { ACCEPT, MAX_UPLOAD_MB, checkUpload } from '../lib/uploadRules.js'
 import { wikipediaSearchUrl } from '../lib/wikipedia.js'
 import DashboardLayout from '../components/DashboardLayout.jsx'
+import LoadingState from '../components/LoadingState.jsx'
 import { api } from '../lib/api.js'
 import { useAuth } from '../context/useAuth.js'
 
@@ -286,7 +287,7 @@ function ActivityCard({ activity, onSubmitted }) {
 
       <div className="mt-4">
         {(activity.activity_type === 'lab' || activity.activity_type === 'exercise') && (
-          <Suspense fallback={<div className="rounded-lg border border-line bg-panel p-4 text-sm text-text-muted">Loading code editor…</div>}>
+          <Suspense fallback={<LoadingState label="Preparing code workspace…" compact />}>
             <CodeActivityEditor key={activity.id} activity={activity} onSubmitted={onSubmitted} />
           </Suspense>
         )}

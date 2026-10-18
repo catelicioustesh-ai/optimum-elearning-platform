@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@azure/msal-browser": "^5.25.1",
     "@codemirror/lang-cpp": "^6.0.3",
     "@codemirror/lang-html": "^6.4.12",
     "@codemirror/lang-java": "^6.0.2",

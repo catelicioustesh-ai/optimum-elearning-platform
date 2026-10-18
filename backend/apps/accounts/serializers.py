@@ -50,7 +50,13 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         password = validated_data.pop("password")
-        user = User(**validated_data, role="student", email_verified=False)
+        user = User(
+            **validated_data,
+            role="student",
+            email_verified=False,
+            is_approved=False,
+            is_active=False,
+        )
         user.set_password(password)
         user.save()
         return user
@@ -61,6 +67,11 @@ class EmailActionSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         return value.strip().lower()
+
+
+class ExternalProviderLoginSerializer(serializers.Serializer):
+    credential = serializers.CharField(max_length=8192, trim_whitespace=True)
+    nonce = serializers.CharField(max_length=128, trim_whitespace=True)
 
 
 class DetailResponseSerializer(serializers.Serializer):
