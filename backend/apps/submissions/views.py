@@ -69,6 +69,8 @@ class SubmissionViewSet(mixins.CreateModelMixin, mixins.ListModelMixin,
 
         if activity.activity_type == ActivityType.QUIZ:
             raise ValidationError("Quizzes are answered in the quiz, not submitted as files.")
+        if activity.activity_type == ActivityType.QUESTIONNAIRE:
+            raise ValidationError("Questionnaires must be submitted through the questionnaire response endpoint.")
         if activity.deadline and timezone.now() > activity.deadline:
             raise ValidationError("The deadline for this activity has passed.")
 
