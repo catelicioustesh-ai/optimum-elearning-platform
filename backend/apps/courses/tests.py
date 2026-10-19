@@ -52,6 +52,33 @@ class CourseBuilderApiTests(APITestCase):
     def setUp(self):
         self.instructor = client_for(self.world.instructor_a)
         self.student = client_for(self.world.student_1)
+        self.admin = client_for(self.world.admin)
+
+    def test_management_course_list_is_scoped_for_instructors_and_complete_for_admins(self):
+        instructor_courses = self.instructor.get("/api/courses/?manage=true")
+        self.assertEqual(instructor_courses.status_code, 200, instructor_courses.data)
+        self.assertEqual(
+            {item["id"] for item in instructor_courses.data},
+            {self.world.course_a.id},
+        )
+
+        admin_courses = self.admin.get("/api/courses/?manage=true")
+        self.assertEqual(admin_courses.status_code, 200, admin_courses.data)
+        self.assertEqual(
+            {item["id"] for item in admin_courses.data},
+            {self.world.course_a.id, self.world.course_b.id},
+        )
+        admin_created = self.admin.post(
+            "/api/courses/",
+            {"title": "Admin-built course"},
+            format="json",
+        )
+        self.assertEqual(admin_created.status_code, 201, admin_created.data)
+        self.assertEqual(admin_created.data["status"], Course.Status.DRAFT)
+        self.assertIn(
+            admin_created.data["id"],
+            {item["id"] for item in self.admin.get("/api/courses/?manage=true").data},
+        )
 
     def test_instructor_can_replace_course_cover_with_multipart_put_for_student_catalog(self):
         course = self.world.course_a
@@ -76,6 +103,31 @@ class CourseBuilderApiTests(APITestCase):
         catalog_course = next(item for item in catalog.data if item["id"] == course.id)
         self.assertEqual(catalog_course["thumbnail_url"], updated.data["thumbnail_url"])
         self.assertIn("new-cover", catalog_course["thumbnail_url"])
+
+    def test_course_creation_defaults_to_draft_and_cannot_bypass_publish_checks(self):
+        created = self.instructor.post(
+            "/api/courses/",
+            {"title": "New course", "description": "Build a curriculum."},
+            format="json",
+        )
+        self.assertEqual(created.status_code, 201, created.data)
+        self.assertEqual(created.data["status"], Course.Status.DRAFT)
+        self.assertNotIn(created.data["id"], {
+            item["id"] for item in self.student.get("/api/courses/").data
+        })
+
+        bypassed = self.instructor.post(
+            "/api/courses/",
+            {"title": "Premature course", "status": Course.Status.PUBLISHED},
+            format="json",
+        )
+        self.assertEqual(bypassed.status_code, 400, bypassed.data)
+        admin_bypassed = self.admin.post(
+            "/api/courses/",
+            {"title": "Admin premature course", "status": Course.Status.PUBLISHED},
+            format="json",
+        )
+        self.assertEqual(admin_bypassed.status_code, 400, admin_bypassed.data)
 
     def test_draft_stays_hidden_until_valid_course_is_published(self):
         draft = self.instructor.post("/api/courses/", {

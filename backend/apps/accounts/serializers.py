@@ -69,6 +69,11 @@ class EmailActionSerializer(serializers.Serializer):
         return value.strip().lower()
 
 
+class ExternalProviderLoginSerializer(serializers.Serializer):
+    credential = serializers.CharField(max_length=8192, trim_whitespace=True)
+    nonce = serializers.CharField(max_length=128, trim_whitespace=True)
+
+
 class DetailResponseSerializer(serializers.Serializer):
     detail = serializers.CharField()
 

@@ -97,7 +97,7 @@ export default function AdminDashboard() {
 
   const quickActions = [
     { label: 'Students', subtitle: 'Monitor learners', href: '/dashboard/instructor/students', icon: Users },
-    { label: 'Courses', subtitle: 'Review catalog', href: '/dashboard/instructor/content', icon: BookOpen },
+    { label: 'Manage courses', subtitle: 'Create, edit, and publish', href: '/dashboard/instructor/content', icon: BookOpen },
     { label: 'Submissions', subtitle: 'Review queue', href: '/dashboard/instructor/submissions', icon: Briefcase },
   ]
 

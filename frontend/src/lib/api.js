@@ -83,6 +83,20 @@ export class ApiError extends Error {
 // Refresh tokens rotate and the old one is blacklisted, so simultaneous 401s
 // must share one refresh request.
 let refreshInFlight = null
+const getRequestsInFlight = new Map()
+
+function getOnce(path, options = {}) {
+  const key = `${path}:${options.redirectOnUnauthorized === false ? 'no-redirect' : 'redirect'}`
+  const existing = getRequestsInFlight.get(key)
+  if (existing) return existing
+
+  const pending = request(path, options).finally(() => {
+    getRequestsInFlight.delete(key)
+  })
+  getRequestsInFlight.set(key, pending)
+  return pending
+}
+
 function refreshAccessToken() {
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
@@ -243,6 +257,24 @@ export const api = {
     return result
   },
 
+  socialLoginNonce: () => request('/auth/social/nonce/', { auth: false }),
+
+  socialLogin: async (provider, credential, nonce) => {
+    const result = await request(`/auth/${provider}/`, {
+      method: 'POST',
+      body: { credential, nonce },
+      auth: false,
+    })
+    if (result?.csrfToken) csrfToken = result.csrfToken
+    return result
+  },
+
+  socialLink: (provider, credential, nonce) =>
+    request(`/auth/social/link/${provider}/`, {
+      method: 'POST',
+      body: { credential, nonce },
+    }),
+
   logout: () =>
     request('/auth/logout/', { method: 'POST', body: {}, auth: false }),
 
@@ -261,9 +293,9 @@ export const api = {
   confirmPasswordReset: (payload) =>
     request('/auth/password-reset/confirm/', { method: 'POST', body: payload, auth: false }),
 
-  me: () => request('/auth/me/', { redirectOnUnauthorized: false }),
+  me: () => getOnce('/auth/me/', { redirectOnUnauthorized: false }),
 
-  get: (path) => request(path),
+  get: (path) => getOnce(path),
   verifyCertificate: (certificateNumber) =>
     request(`/engagement/certificates/${encodeURIComponent(certificateNumber)}/verify/`, { auth: false }),
   getBlob: (path) => request(path, { blob: true }),
@@ -276,7 +308,8 @@ export const api = {
   // File uploads (PDFs, etc.) — must NOT set Content-Type manually; the
   // browser sets it (including the multipart boundary) when the body is
   // a real FormData object. Setting it ourselves breaks the upload.
-  upload: (path, formData) => request(path, { method: 'POST', body: formData, isFormData: true }),
+  upload: (path, formData, { method = 'POST' } = {}) =>
+    request(path, { method, body: formData, isFormData: true }),
 }
 
 clearTokens()

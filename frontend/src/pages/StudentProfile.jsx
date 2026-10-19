@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import { Camera, Check, RotateCw, UserRound } from 'lucide-react'
 import ProfilePhoto from '../components/ProfilePhoto.jsx'
 import StudentPage, { StudentPageMessage } from '../components/StudentPage.jsx'
+import { useAuth } from '../context/useAuth.js'
 import { api } from '../lib/api.js'
 
 export default function StudentProfile() {
+  const { updateAuthProfile } = useAuth()
   const [profile, setProfile] = useState(null)
   const [bio, setBio] = useState('')
   const [leaderboardOptIn, setLeaderboardOptIn] = useState(false)
@@ -49,6 +51,7 @@ export default function StudentProfile() {
     try {
       const updated = await api.patch('/auth/me/', form, { isFormData: true })
       setProfile(updated)
+      updateAuthProfile(updated)
       setPhoto(null)
       setPreview('')
       setNotice('Your profile was saved.')

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Helmet } from 'react-helmet-async'
 import { LayoutDashboard, BookOpen, FileCheck, Users, Upload, Plus, FileText, ChevronUp, ChevronDown, Trash2, Eye, CirclePlus, CalendarDays } from 'lucide-react'
@@ -17,6 +17,7 @@ const navItems = [
 
 export default function InstructorContent() {
   const { auth } = useAuth()
+  const isAdmin = auth?.role === 'admin'
   const [searchParams] = useSearchParams()
   const requestedCourseId = searchParams.get('course')
 
@@ -53,16 +54,19 @@ export default function InstructorContent() {
   const [busy, setBusy] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [videoUrl, setVideoUrl] = useState('')
+  const courseSelectionRequest = useRef(0)
+  const moduleSelectionRequest = useRef(0)
+  const flashTimer = useRef(null)
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([api.get('/dashboard/instructor/'), api.get('/courses/')])
-      .then(([dashboard, allCourses]) => {
+    const requestId = ++courseSelectionRequest.current
+    moduleSelectionRequest.current += 1
+    api.get('/courses/?manage=true')
+      .then((allCourses) => {
         if (cancelled) return
-        const visibleIds = new Set((dashboard.my_courses || []).map((course) => course.id))
-        const instructorCourses = allCourses.filter((course) => visibleIds.has(course.id))
-        setCourses(instructorCourses)
-        const requestedCourse = instructorCourses.find((course) => String(course.id) === requestedCourseId)
+        setCourses(allCourses)
+        const requestedCourse = allCourses.find((course) => String(course.id) === requestedCourseId)
         if (requestedCourse) {
           setCourseId(requestedCourseId)
           setCourseEdit({ title: requestedCourse.title || '', description: requestedCourse.description || '' })
@@ -73,25 +77,26 @@ export default function InstructorContent() {
           setVideoUrl('')
           setAttachments([])
           setLiveSessions([])
+          const moduleRequestId = ++moduleSelectionRequest.current
           Promise.all([
             api.get(`/courses/${requestedCourseId}/`),
             api.get(`/modules/?course=${requestedCourseId}`),
             api.get(`/live-sessions/?course=${requestedCourseId}`),
           ])
             .then(([detail, rows, sessions]) => {
-              if (cancelled) return
+              if (cancelled || requestId !== courseSelectionRequest.current || moduleRequestId !== moduleSelectionRequest.current) return
               setCourses((items) => items.map((item) => item.id === detail.id ? detail : item))
               setCourseEdit({ title: detail.title, description: detail.description || '' })
               setModules(rows)
               setLiveSessions(sessions)
             })
             .catch((err) => {
-              if (!cancelled) setError(err.message)
+              if (!cancelled && requestId === courseSelectionRequest.current) setError(err.message)
             })
         }
       })
       .catch((err) => {
-        if (!cancelled) setError(`Unable to load your courses: ${err.message}`)
+        if (!cancelled) setError(`Unable to load courses: ${err.message}`)
       })
       .finally(() => {
         if (!cancelled) setCoursesLoading(false)
@@ -99,12 +104,20 @@ export default function InstructorContent() {
     return () => { cancelled = true }
   }, [courseListReload, requestedCourseId])
 
+  useEffect(() => () => {
+    courseSelectionRequest.current += 1
+    moduleSelectionRequest.current += 1
+    if (flashTimer.current) clearTimeout(flashTimer.current)
+  }, [])
+
   // Selecting a course/module/lesson is always a direct user action (a
   // <select> onChange or a list item onClick below), never a prop changing
   // out from under this component — so the "reset the downstream selection
   // and fetch its children" logic belongs in these handlers, not in an
   // effect reacting to state this same component just set.
   function handleSelectCourse(id) {
+    const requestId = ++courseSelectionRequest.current
+    moduleSelectionRequest.current += 1
     setCourseId(id)
     setModuleId('')
     setModules([])
@@ -122,22 +135,32 @@ export default function InstructorContent() {
       api.get(`/live-sessions/?course=${id}`),
     ])
       .then(([detail, rows, sessions]) => {
+        if (requestId !== courseSelectionRequest.current) return
         setCourses((items) => items.map((item) => item.id === detail.id ? detail : item))
         setCourseEdit({ title: detail.title, description: detail.description || '' })
         setModules(rows)
         setLiveSessions(sessions)
       })
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        if (requestId === courseSelectionRequest.current) setError(err.message)
+      })
   }
 
   function handleSelectModule(id) {
+    const requestId = ++moduleSelectionRequest.current
     setModuleId(id)
     setLessonId('')
     setLessons([])
     setVideoUrl('')
     setAttachments([])
     if (!id) return
-    api.get(`/lessons/?module=${id}`).then(setLessons).catch((err) => setError(err.message))
+    api.get(`/lessons/?module=${id}`)
+      .then((rows) => {
+        if (requestId === moduleSelectionRequest.current) setLessons(rows)
+      })
+      .catch((err) => {
+        if (requestId === moduleSelectionRequest.current) setError(err.message)
+      })
   }
 
   function handleSelectLesson(lesson) {
@@ -170,7 +193,11 @@ export default function InstructorContent() {
   function flash(message) {
     setStatus(message)
     setError('')
-    setTimeout(() => setStatus(''), 3000)
+    if (flashTimer.current) clearTimeout(flashTimer.current)
+    flashTimer.current = setTimeout(() => {
+      setStatus('')
+      flashTimer.current = null
+    }, 3000)
   }
 
   async function handleAddCourse(e) {
@@ -200,7 +227,7 @@ export default function InstructorContent() {
       setThumbnailFile(null)
       setThumbnailPreview('')
       e.target.reset()
-      flash('Draft course created.')
+      flash('Draft course created. Add modules and lessons, then publish it when it is ready.')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -208,26 +235,31 @@ export default function InstructorContent() {
     }
   }
 
+  async function saveCourseDetails() {
+    let updated
+    if (courseCoverFile) {
+      const formData = new FormData()
+      formData.append('title', courseEdit.title.trim())
+      formData.append('description', courseEdit.description.trim())
+      formData.append('thumbnail', courseCoverFile)
+      updated = await api.put(`/courses/${courseId}/`, formData, { isFormData: true })
+    } else {
+      updated = await api.patch(`/courses/${courseId}/`, {
+        title: courseEdit.title.trim(),
+        description: courseEdit.description.trim(),
+      })
+    }
+    setCourses((items) => items.map((item) => item.id === updated.id ? updated : item))
+    setCourseCoverFile(null)
+    return updated
+  }
+
   async function handleSaveCourse(e) {
     e.preventDefault()
-    if (!courseId) return
+    if (!courseId || !courseEdit.title.trim()) return
     setBusy(true)
     try {
-      let updated
-      if (courseCoverFile) {
-        const formData = new FormData()
-        formData.append('title', courseEdit.title.trim())
-        formData.append('description', courseEdit.description.trim())
-        formData.append('thumbnail', courseCoverFile)
-        updated = await api.put(`/courses/${courseId}/`, formData, { isFormData: true })
-      } else {
-        updated = await api.patch(`/courses/${courseId}/`, {
-          title: courseEdit.title.trim(),
-          description: courseEdit.description.trim(),
-        })
-      }
-      setCourses((items) => items.map((item) => item.id === updated.id ? updated : item))
-      setCourseCoverFile(null)
+      await saveCourseDetails()
       flash('Course details saved.')
     } catch (err) {
       setError(err.message)
@@ -237,12 +269,15 @@ export default function InstructorContent() {
   }
 
   async function setCourseStatus(action) {
-    if (!courseId) return
+    if (!courseId || !courseEdit.title.trim()) return
     setBusy(true)
     try {
+      await saveCourseDetails()
       const updated = await api.post(`/courses/${courseId}/${action}/`)
       setCourses((items) => items.map((item) => item.id === updated.id ? updated : item))
-      flash(action === 'publish' ? 'Course published.' : 'Changes saved as draft.')
+      flash(action === 'publish'
+        ? 'Course published successfully. Students can now find it in the course catalog.'
+        : 'Course saved as a draft. It is hidden from students until published.')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -438,12 +473,12 @@ export default function InstructorContent() {
       const formData = new FormData()
       formData.append('video_url', '')
       formData.append('video_file', newLessonVideoFile)
-      const updated = await api.upload(`/lessons/${lessonId}/`, formData)
+      const updated = await api.upload(`/lessons/${lessonId}/`, formData, { method: 'PATCH' })
       setLessons((items) => items.map((lesson) => lesson.id === updated.id ? updated : lesson))
       setVideoUrl('')
       setNewLessonVideoFile(null)
       e.target.reset()
-      flash('Uploaded video saved.')
+      flash('Video uploaded and saved to this lesson successfully.')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -608,23 +643,25 @@ export default function InstructorContent() {
   }
 
   return (
-    <DashboardLayout navItems={navItems} user={{ name: auth?.email || 'Instructor' }}>
+    <DashboardLayout navItems={navItems} user={{ name: auth?.email || (isAdmin ? 'Admin' : 'Instructor') }}>
       <Helmet><meta name="robots" content="noindex, nofollow" /></Helmet>
 
-      <div className="space-y-6">
-        <div className="rounded-2xl border border-blue-200 bg-linear-to-r from-blue-50 via-white to-sky-50 p-5 shadow-sm">
+      <div className="instructor-workspace space-y-6">
+        <div className="course-workspace-hero rounded-2xl border p-5 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.14em] text-blue-600">Instructor workspace</p>
-              <h2 className="mt-1 text-2xl font-bold text-ink">Course content</h2>
+              <p className="text-sm font-semibold uppercase tracking-[0.14em] text-blue-600">{isAdmin ? 'Admin workspace' : 'Instructor workspace'}</p>
+              <h2 className="mt-1 text-2xl font-bold text-ink">{isAdmin ? 'Course management' : 'Course content'}</h2>
               <p className="mt-1 text-sm text-text-muted">
-                Select one of your courses to manage its curriculum, or create a new course below.
+                {isAdmin
+                  ? 'Manage any course in the catalog, including its curriculum, videos, coding activities, and publishing status.'
+                  : 'Create a draft course, build its modules and lessons, add videos and activities, then publish it for students.'}
               </p>
             </div>
             <button
               type="button"
               onClick={() => document.getElementById('create-course-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-              className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-500"
+              className="course-workspace-primary inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium text-white shadow-sm"
             >
               New course
             </button>
@@ -632,7 +669,7 @@ export default function InstructorContent() {
         </div>
 
         {status && (
-          <div className="rounded-lg border border-mint/40 bg-mint/10 px-4 py-3 text-sm text-mint">{status}</div>
+          <div className="rounded-lg border border-mint/40 bg-mint/10 px-4 py-3 text-sm text-mint" role="status" aria-live="polite">{status}</div>
         )}
         {error && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-line bg-coral-tint px-4 py-3 text-sm text-coral-dim" role="alert">
@@ -645,11 +682,25 @@ export default function InstructorContent() {
 
         {coursesLoading && <p className="rounded-lg border border-line bg-paper px-4 py-3 text-sm text-text-muted" role="status">Loading your courses…</p>}
 
+        <section className="course-workspace-pathway rounded-2xl border p-5" aria-labelledby="course-pathway-heading">
+          <h3 id="course-pathway-heading" className="font-semibold text-ink">Course pathway: draft to published</h3>
+          <ol className="mt-3 grid gap-3 text-sm text-text-muted md:grid-cols-2 xl:grid-cols-5">
+            <li className="course-workspace-step"><strong className="text-ink">1. Create or select</strong><br />New courses start as drafts. {isAdmin ? 'You can manage every course.' : 'You can manage courses you teach.'}</li>
+            <li className="course-workspace-step"><strong className="text-ink">2. Add modules</strong><br />Create the course sections in the order students should follow.</li>
+            <li className="course-workspace-step"><strong className="text-ink">3. Add lessons and videos</strong><br />Add a lesson, then save a secure video link or upload an MP4, WebM, OGG, or MOV file.</li>
+            <li className="course-workspace-step"><strong className="text-ink">4. Add learning activities</strong><br />Select a lesson to add assignments, quizzes, or coding exercises with a language, starter code, and test cases.</li>
+            <li className="course-workspace-step"><strong className="text-ink">5. Save and publish</strong><br />Save course details, then publish. Every course needs a module and every module needs a lesson; each quiz needs a question.</li>
+          </ol>
+          <p className="mt-3 text-xs text-blue-900">
+            Videos and activities are optional. Drafts stay hidden from students; publishing makes the course available in the catalog.
+          </p>
+        </section>
+
         {courses.length > 0 && (
           <div className="rounded-2xl border border-line bg-paper p-6">
             <div className="flex flex-wrap items-end justify-between gap-2">
               <div>
-                <h3 className="font-semibold text-ink">Your courses</h3>
+                <h3 className="font-semibold text-ink">{isAdmin ? 'All courses' : 'Your courses'}</h3>
                 <p className="mt-1 text-sm text-text-muted">Choose a course to manage its details, modules, lessons, videos, and resources.</p>
               </div>
               <span className="text-xs text-text-muted">{courses.length} course{courses.length === 1 ? '' : 's'}</span>
@@ -658,12 +709,12 @@ export default function InstructorContent() {
               {(course) => {
                 const image = mediaUrl(course.thumbnail_url || course.thumbnail)
                 return (
-                  <article key={course.id} className={`overflow-hidden rounded-xl border bg-slate-50 ${String(courseId) === String(course.id) ? 'border-blue-500 ring-2 ring-blue-100' : 'border-line'}`}>
+                  <article key={course.id} className={`course-workspace-card overflow-hidden rounded-xl border bg-slate-50 ${String(courseId) === String(course.id) ? 'is-selected' : 'border-line'}`}>
                     <div className="h-28 w-full overflow-hidden bg-slate-100">
                       {image ? (
                         <img src={image} alt={course.title} className="h-full w-full object-cover" />
                       ) : (
-                        <div className="flex h-full items-center justify-center bg-linear-to-br from-blue-100 to-slate-100 text-sm font-medium text-blue-700">
+                        <div className="course-workspace-cover flex h-full items-center justify-center text-sm font-medium">
                           No cover
                         </div>
                       )}
@@ -675,8 +726,9 @@ export default function InstructorContent() {
                           {course.status === 'published' ? 'Published' : 'Draft'}
                         </span>
                       </div>
+                      {isAdmin && <p className="mt-1 text-xs text-text-muted">Instructor: {course.instructor_name || 'Not listed'}</p>}
                       <p className="mt-1 text-xs text-text-muted">{course.module_count || 0} module{course.module_count === 1 ? '' : 's'}</p>
-                      <button type="button" onClick={() => handleSelectCourse(String(course.id))} disabled={busy} className="mt-3 w-full rounded-md bg-blue-700 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50">
+                      <button type="button" onClick={() => handleSelectCourse(String(course.id))} disabled={busy} className="course-workspace-primary mt-3 w-full rounded-md px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
                         {String(courseId) === String(course.id) ? 'Managing course' : 'Manage course'}
                       </button>
                     </div>
@@ -696,7 +748,7 @@ export default function InstructorContent() {
                 <p className="text-sm text-text-muted" role="status">Loading your courses…</p>
               ) : courses.length === 0 ? (
                 <p className="text-sm text-text-muted">
-                  You don't have any courses yet — create one below to start building your curriculum.
+                  {isAdmin ? 'No courses are available yet — create one below to start building a curriculum.' : "You don't have any courses yet — create one below to start building your curriculum."}
                 </p>
               ) : (
                 <select
@@ -716,6 +768,8 @@ export default function InstructorContent() {
               <div>
                 <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">New course title</label>
                 <input
+                  required
+                  maxLength={200}
                   value={newCourse.title}
                   onChange={(e) => setNewCourse((prev) => ({ ...prev, title: e.target.value }))}
                   placeholder="e.g. Web Development Bootcamp"
@@ -763,7 +817,7 @@ export default function InstructorContent() {
               <div>
                 <h3 className="font-semibold text-ink">Course details</h3>
                 <p className="mt-1 text-xs text-text-muted">
-                  Certificate eligibility is based on completing the required activities in every module.
+                  Save your course details before publishing. Certificate eligibility is based on completing the required activities in every module.
                 </p>
               </div>
               <span className={`rounded-full px-3 py-1 text-xs font-semibold ${courses.find((item) => String(item.id) === String(courseId))?.status === 'published' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}>
@@ -904,6 +958,8 @@ export default function InstructorContent() {
 
               <form onSubmit={handleAddModule} className="mt-4 flex gap-2 border-t border-line pt-4">
                 <input
+                  required
+                  maxLength={200}
                   value={newModuleTitle}
                   onChange={(e) => setNewModuleTitle(e.target.value)}
                   placeholder="New module title, e.g. 'JavaScript Fundamentals'"
@@ -942,6 +998,8 @@ export default function InstructorContent() {
 
                 <form onSubmit={handleAddLesson} className="mt-4 space-y-2 border-t border-line pt-4">
                   <input
+                    required
+                    maxLength={200}
                     value={newLesson.title}
                     onChange={(e) => setNewLesson({ ...newLesson, title: e.target.value })}
                     placeholder="New lesson title"

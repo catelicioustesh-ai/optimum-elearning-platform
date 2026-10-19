@@ -5,6 +5,7 @@ import { AuthProvider } from './context/AuthContext.jsx'
 import { ToastProvider } from './hooks/useToast.js'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import AppErrorBoundary from './components/AppErrorBoundary.jsx'
+import LoadingState from './components/LoadingState.jsx'
 
 const Landing = lazy(() => import('./Landing.jsx'))
 const Login = lazy(() => import('./pages/Login.jsx'))
@@ -66,8 +67,8 @@ function App() {
               <ScrollToTop />
               <Suspense
                 fallback={
-                  <div className="grid min-h-screen place-items-center bg-slate-50 text-sm font-medium text-slate-600" role="status">
-                    Loading Optimum LMS...
+                  <div className="grid min-h-screen place-items-center bg-slate-50 px-5">
+                    <LoadingState label="Opening your learning space…" />
                   </div>
                 }
               >

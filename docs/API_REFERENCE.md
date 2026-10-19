@@ -111,6 +111,25 @@ Errors (`401`):
   error is used rather than disclosing account state.
 - `429` after too many attempts (10/minute per client IP; see `NUM_PROXIES` in the deployment notes).
 
+### Social sign-in and account linking
+
+`GET /api/auth/social/nonce/` issues a short-lived nonce in an HttpOnly cookie.
+The provider's ID token must contain that same nonce. `POST` the token and nonce
+to `/api/auth/google/`, `/api/auth/microsoft/`, or `/api/auth/apple/` to sign in.
+An unlinked provider identity can create a new pending student account only
+when the provider supplies a verified email that is not already in use. A
+matching email never links the provider identity to an existing LMS account.
+Previously linked identities continue to sign in by their stable provider
+subject, including if their email claim later changes.
+
+To link an identity to an existing LMS account, first sign in to that account,
+then `POST /api/auth/social/link/{provider}/` with the same
+`{"credential": "...", "nonce": "..."}` body. This route requires the
+authenticated session, CSRF protection, and a valid provider token and nonce.
+Supported `{provider}` values are `google`, `microsoft`, and `apple`. A provider
+identity already linked to another account, or another identity from that
+provider already linked to this account, is rejected.
+
 ### `POST /api/auth/email/verify/` — Public
 `{ "uid": "<from link>", "token": "<from link>" }` → `200 {"detail": "..."}`; `400` if the link is
 invalid, expired (24 h) or already used. Verification confirms mailbox ownership;
