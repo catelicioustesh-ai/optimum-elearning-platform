@@ -13,7 +13,7 @@ from apps.accounts.permissions import IsInstructorOrAdmin, ReadOnlyOrInstructorA
 from apps.courses.models import Activity, ActivityType, Lesson
 from apps.courses.serializers import ActivitySerializer
 from apps.progress.services import mark_activity_complete
-from .models import Question, Quiz, QuizAttempt
+from .models import Question, Quiz, QuizAttempt, QuestionnaireResponse
 from .serializers import (
     QuizAttemptSerializer,
     QuizSerializer,
@@ -185,6 +185,7 @@ class BuildQuizView(APIView):
                             required=False, allow_null=True
                         ),
                         "is_required": serializers.BooleanField(required=False),
+                        "is_final_assessment": serializers.BooleanField(required=False),
                     },
                 ),
                 "quiz": inline_serializer(
@@ -263,6 +264,128 @@ class BuildQuizView(APIView):
             "quiz": QuizSerializer(quiz).data,
             "questions": QuestionForInstructorSerializer(questions, many=True).data,
         }, status=status.HTTP_201_CREATED)
+
+
+class QuestionnaireResponseView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def _activity(self, request, activity_id, *, allow_course_staff=False):
+        try:
+            activity = Activity.objects.select_related(
+                "lesson__module__course"
+            ).get(pk=activity_id, activity_type=ActivityType.QUESTIONNAIRE)
+        except Activity.DoesNotExist:
+            raise NotFound("Questionnaire not found.")
+        role = role_of(request.user)
+        if role == STUDENT:
+            require_student_access(request.user, activity.lesson.module)
+        elif allow_course_staff and role in (INSTRUCTOR, ADMIN):
+            require_teaches(request.user, activity.lesson.module.course)
+        else:
+            raise PermissionDenied("Only enrolled students and the course teaching staff can access this questionnaire.")
+        return activity
+
+    @extend_schema(
+        responses=inline_serializer(
+            name="QuestionnaireResponse",
+            fields={
+                "answers": serializers.JSONField(),
+                "submitted_at": serializers.DateTimeField(allow_null=True),
+            },
+        )
+    )
+    def get(self, request, activity_id):
+        activity = self._activity(request, activity_id, allow_course_staff=True)
+        responses = QuestionnaireResponse.objects.filter(
+            activity=activity,
+        ).select_related("student")
+        if role_of(request.user) in (INSTRUCTOR, ADMIN):
+            return Response([{
+                "student_id": item.student_id,
+                "student_name": item.student.get_full_name() or item.student.username,
+                "answers": item.answers,
+                "submitted_at": item.submitted_at,
+            } for item in responses])
+        response = responses.filter(
+            student=request.user,
+        ).first()
+        return Response({
+            "answers": response.answers if response else {},
+            "submitted_at": response.submitted_at if response else None,
+        })
+
+    @extend_schema(
+        request=inline_serializer(
+            name="QuestionnaireSubmission",
+            fields={"answers": serializers.DictField(child=serializers.JSONField())},
+        ),
+        responses=inline_serializer(
+            name="QuestionnaireSubmissionResponse",
+            fields={
+                "answers": serializers.JSONField(),
+                "submitted_at": serializers.DateTimeField(),
+            },
+        ),
+    )
+    @transaction.atomic
+    def post(self, request, activity_id):
+        activity = self._activity(request, activity_id)
+        submission = serializers.DictField(child=serializers.JSONField())
+        validated = submission.run_validation(request.data.get("answers"))
+        questions = activity.questionnaire_questions
+        valid_keys = {str(index) for index in range(len(questions))}
+        unknown = set(validated) - valid_keys
+        if unknown:
+            raise ValidationError({"answers": "The response contains an unknown question."})
+
+        normalized = {}
+        for index, question in enumerate(questions):
+            key = str(index)
+            question_type = question["question_type"]
+            options = question["options"]
+            answer = validated.get(key)
+            missing = key not in validated
+
+            if question_type == "text":
+                if missing:
+                    answer = ""
+                if not isinstance(answer, str) or len(answer) > 5000:
+                    raise ValidationError({"answers": f"Question {index + 1} must be text of at most 5000 characters."})
+                if question["required"] and not answer.strip():
+                    raise ValidationError({"answers": f"Question {index + 1} requires an answer."})
+                normalized[key] = answer.strip()
+                continue
+
+            if question_type == "single_choice":
+                if missing and not question["required"]:
+                    continue
+                if isinstance(answer, bool) or not isinstance(answer, int) or not 0 <= answer < len(options):
+                    raise ValidationError({"answers": f"Select a valid option for question {index + 1}."})
+                normalized[key] = answer
+                continue
+
+            if missing and not question["required"]:
+                continue
+            if (
+                not isinstance(answer, list)
+                or any(isinstance(choice, bool) or not isinstance(choice, int) for choice in answer)
+                or len(set(answer)) != len(answer)
+                or any(choice < 0 or choice >= len(options) for choice in answer)
+                or (question["required"] and not answer)
+            ):
+                raise ValidationError({"answers": f"Select valid options for question {index + 1}."})
+            normalized[key] = answer
+
+        response, _ = QuestionnaireResponse.objects.update_or_create(
+            student=request.user,
+            activity=activity,
+            defaults={"answers": normalized},
+        )
+        mark_activity_complete(request.user, activity)
+        return Response({
+            "answers": response.answers,
+            "submitted_at": response.submitted_at,
+        })
 
 
 class QuizAttemptViewSet(viewsets.ReadOnlyModelViewSet):

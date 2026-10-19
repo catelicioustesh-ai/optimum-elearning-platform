@@ -47,3 +47,29 @@ class QuizAttempt(models.Model):
 
     def __str__(self):
         return f"{self.student} — {self.quiz} ({self.percentage}%)"
+
+
+class QuestionnaireResponse(models.Model):
+    student = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="questionnaire_responses",
+    )
+    activity = models.ForeignKey(
+        Activity,
+        on_delete=models.CASCADE,
+        related_name="questionnaire_responses",
+    )
+    answers = models.JSONField(default=dict)
+    submitted_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=("student", "activity"),
+                name="uniq_student_questionnaire_response",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.student} — questionnaire {self.activity.title}"

@@ -192,8 +192,12 @@ app below marked "Instructor/Admin write").
 
 Course visibility is status-aware: students see published courses only;
 instructors see their own courses plus published catalog courses; admins see
-all courses. Omitting `status` when creating a course preserves the legacy
-default of `published`; Course Content creates new courses as `draft`.
+all courses. API-created courses always start as drafts; requesting a published
+status during creation is rejected.
+
+Courses expose optional category, tags, difficulty, estimated duration,
+learning outcomes, prerequisites, and a cover image. The instructor is assigned
+from the authenticated account; pricing/payment processing is not implemented.
 
 **Important**: for `lessons` and `activities`, a student's GET requests are
 additionally filtered so locked-module content never comes back — see
@@ -203,23 +207,26 @@ it's the actual security boundary.
 ### `GET /api/courses/` 🔒 — Any
 List all courses.
 ```json
-[{ "id": 1, "title": "Full-Stack Web Development", "description": "...", "instructor": 2, "instructor_name": "Jane Smith", "module_count": 10, "created_at": "..." }]
+[{ "id": 1, "title": "Full-Stack Web Development", "description": "...", "category": "Software development", "tags": ["JavaScript"], "difficulty": "beginner", "estimated_duration_minutes": 480, "learning_outcomes": ["Build web applications"], "prerequisites": "", "instructor": 2, "instructor_name": "Jane Smith", "module_count": 10, "created_at": "..." }]
 ```
 
 ### `POST /api/courses/` 🔒 — Instructor/Admin
 ```json
-{ "title": "Full-Stack Web Development", "description": "...", "status": "draft" }
+{ "title": "Full-Stack Web Development", "description": "...", "category": "Software development", "tags": ["JavaScript"], "difficulty": "beginner", "estimated_duration_minutes": 480, "learning_outcomes": ["Build web applications"], "prerequisites": "", "status": "draft" }
 ```
 `instructor` is set automatically to whoever's logged in — not accepted
-in the request body. `status` may be `draft` or `published` and is optional.
+in the request body. `status` may be omitted or set to `draft`; direct
+publication is rejected.
 
 ### `POST /api/courses/{id}/save_draft/` 🔒 — Owning Instructor/Admin
 Changes the course status to `draft`; students can no longer see or open it.
 
 ### `POST /api/courses/{id}/publish/` 🔒 — Owning Instructor/Admin
-Publishes only when the course has at least one module, every module has at
-least one lesson, and every quiz activity has at least one question. Returns
-`400` with the missing requirement otherwise.
+Publishes only when title and description are non-empty, the course has at
+least one module, every module has at least one lesson, and at least one quiz
+with at least one question exists. Every quiz activity must also have a
+question. Returns `400` with the missing requirement otherwise. Covers,
+category, difficulty, outcomes, and prerequisites remain optional.
 
 ### `GET /api/courses/{id}/` 🔒 — Any
 Returns the course plus a lightweight list of its modules (no nested
@@ -286,7 +293,11 @@ respect the same course/module permissions.
   "is_required": true, "language": "javascript", "starter_code": "function sum(a, b) {}", "test_cases": [{"input": "2 3", "expected_output": "5", "public": true}]
 }]
 ```
-`activity_type` is one of: `exercise`, `lab`, `quiz`, `assignment`.
+`activity_type` is one of: `exercise`, `lab`, `quiz`, `assignment`,
+`questionnaire`. Questionnaire activities include question definitions
+(`text`, `single_choice`, and `multiple_choice`); student activity responses
+never include coding test cases. Quiz activities may be marked
+`is_final_assessment`.
 The optional `activity_type` query parameter filters the response; an
 unsupported value returns `400`.
 Student lesson and activity responses include `completion_status` with
@@ -546,6 +557,10 @@ is never sent to a student**, only `choices` (the options) and `text`.
 { "activity": 22, "time_limit_minutes": 10, "pass_mark_percentage": 70 }
 ```
 Questions are managed through `POST /api/quiz-questions/` (Instructor/Admin).
+Set `activity.is_final_assessment` when building a quiz to identify the final
+course assessment; it remains a quiz and uses the normal quiz attempt/pass-mark
+rules. The platform does not yet provide a question bank or true/false-specific
+question type.
 
 ### `POST /api/quizzes/build/` 🔒 — Owning Instructor/Admin
 Atomically creates a quiz activity, quiz settings, and its questions in one
@@ -581,6 +596,15 @@ instructors see only attempts in courses they teach; admins can see all.
 Optional `quiz` and `student` filters narrow that visibility.
 
 ---
+
+### `GET|POST /api/questionnaires/{activity_id}/response/` 🔒
+Students can read/update their own response for an enrolled, unlocked
+questionnaire. Submit `{ "answers": { "0": 1, "1": "Free text" } }`; keys are
+question positions, choice values are option indexes, and multiple-choice
+answers are arrays of indexes. Required fields and answer types are checked
+server-side, and a successful response marks the questionnaire activity
+complete. The owning instructor/admin GET returns course responses; other
+instructors receive `403`.
 
 ## Code execution
 
@@ -813,8 +837,10 @@ filtered out (lists) or `404` (detail); acting on a visible-but-forbidden record
 | Instructor | Only courses where `Course.instructor` is them: write content, see enrollments, submissions, quiz attempts, video stats, risk scores. Cannot edit, grade or read another instructor's course. |
 | Admin | Everything. |
 
-`GET /api/modules/` returns titles/order only to students (no lesson content). Lesson PDFs are
-served by `GET /api/lesson-attachments/{id}/download/` with the same checks as the lesson; the
+`GET /api/modules/` returns titles/order only to students (no lesson content). Lesson resources
+(PDF, ZIP, PowerPoint/OpenDocument presentations, or HTTPS links) follow the same
+lesson visibility checks. Uploaded files are served by
+`GET /api/lesson-attachments/{id}/download/`; the
 `lesson-attachments` and `submissions` folders are never exposed under `/media/`.
 
 Regression tests: `apps/accounts/tests_permissions.py` (45 cases).

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Helmet } from 'react-helmet-async'
-import { LayoutDashboard, BookOpen, FileCheck, Users, Upload, Plus, FileText, ChevronUp, ChevronDown, Trash2, Eye, CirclePlus, CalendarDays } from 'lucide-react'
+import { LayoutDashboard, BookOpen, FileCheck, Users, Upload, Plus, FileText, ChevronUp, ChevronDown, Trash2, Eye, CirclePlus, CalendarDays, Pencil, Check, X } from 'lucide-react'
 import LessonVideo from '../components/LessonVideo.jsx'
+import RichTextContent, { RichTextEditor } from '../components/RichTextContent.jsx'
 import DashboardLayout from '../components/DashboardLayout.jsx'
 import ExpandableList from '../components/ExpandableList.jsx'
 import { api, mediaUrl } from '../lib/api.js'
@@ -15,6 +16,19 @@ const navItems = [
   { to: '/dashboard/instructor/students', label: 'Students', icon: Users },
 ]
 
+function courseToEdit(course = {}) {
+  return {
+    title: course.title || '',
+    description: course.description || '',
+    category: course.category || '',
+    tags: Array.isArray(course.tags) ? course.tags.join(', ') : '',
+    difficulty: course.difficulty || 'beginner',
+    estimated_duration_minutes: course.estimated_duration_minutes || '',
+    learning_outcomes: Array.isArray(course.learning_outcomes) ? course.learning_outcomes.join('\n') : '',
+    prerequisites: course.prerequisites || '',
+  }
+}
+
 export default function InstructorContent() {
   const { auth } = useAuth()
   const isAdmin = auth?.role === 'admin'
@@ -26,7 +40,7 @@ export default function InstructorContent() {
   const [courseListReload, setCourseListReload] = useState(0)
   const [courseId, setCourseId] = useState('')
   const [newCourse, setNewCourse] = useState({ title: '', description: '' })
-  const [courseEdit, setCourseEdit] = useState({ title: '', description: '' })
+  const [courseEdit, setCourseEdit] = useState(courseToEdit())
   const [liveSessions, setLiveSessions] = useState([])
   const [newLiveSession, setNewLiveSession] = useState({ title: '', starts_at: '', meeting_url: '' })
   const [thumbnailFile, setThumbnailFile] = useState(null)
@@ -36,6 +50,8 @@ export default function InstructorContent() {
   const [modules, setModules] = useState([])
   const [moduleId, setModuleId] = useState('')
   const [newModuleTitle, setNewModuleTitle] = useState('')
+  const [editingModuleId, setEditingModuleId] = useState('')
+  const [editingModuleTitle, setEditingModuleTitle] = useState('')
 
   const [lessons, setLessons] = useState([])
   const [lessonId, setLessonId] = useState('')
@@ -45,9 +61,12 @@ export default function InstructorContent() {
   const [attachments, setAttachments] = useState([])
   const [pdfTitle, setPdfTitle] = useState('')
   const [pdfFile, setPdfFile] = useState(null)
-  const [activityDraft, setActivityDraft] = useState({ activity_type: 'assignment', title: '', instructions: '', max_score: 100, max_attempts: 1, pass_percentage: 50, is_required: true, deadline: '', language: 'javascript', starter_code: '', test_cases: '[]' })
-  const [quizDraft, setQuizDraft] = useState({ title: '', instructions: '', time_limit_minutes: 30, pass_mark_percentage: 70, max_attempts: 1, is_required: true })
+  const [resourceUrl, setResourceUrl] = useState('')
+  const [activityDraft, setActivityDraft] = useState({ activity_type: 'assignment', title: '', instructions: '', max_score: 100, max_attempts: 1, pass_percentage: 50, is_required: true, deadline: '', language: 'javascript', starter_code: '', test_cases: '[]', questionnaire_questions: [{ text: '', question_type: 'single_choice', options: '', required: true }] })
+  const [quizDraft, setQuizDraft] = useState({ title: '', instructions: '', time_limit_minutes: 30, pass_mark_percentage: 70, max_attempts: 1, is_required: true, is_final_assessment: false })
   const [quizQuestions, setQuizQuestions] = useState([{ text: '', marks: 1, choice_a: '', choice_b: '', correct_choice_index: 0 }])
+  const [questionnaireResponses, setQuestionnaireResponses] = useState([])
+  const [responsesForActivity, setResponsesForActivity] = useState('')
 
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
@@ -69,7 +88,7 @@ export default function InstructorContent() {
         const requestedCourse = allCourses.find((course) => String(course.id) === requestedCourseId)
         if (requestedCourse) {
           setCourseId(requestedCourseId)
-          setCourseEdit({ title: requestedCourse.title || '', description: requestedCourse.description || '' })
+          setCourseEdit(courseToEdit(requestedCourse))
           setModuleId('')
           setModules([])
           setLessonId('')
@@ -86,7 +105,7 @@ export default function InstructorContent() {
             .then(([detail, rows, sessions]) => {
               if (cancelled || requestId !== courseSelectionRequest.current || moduleRequestId !== moduleSelectionRequest.current) return
               setCourses((items) => items.map((item) => item.id === detail.id ? detail : item))
-              setCourseEdit({ title: detail.title, description: detail.description || '' })
+              setCourseEdit(courseToEdit(detail))
               setModules(rows)
               setLiveSessions(sessions)
             })
@@ -123,12 +142,13 @@ export default function InstructorContent() {
     setModules([])
     setLessonId('')
     setLessons([])
+    setEditingModuleId('')
     setVideoUrl('')
     setAttachments([])
     setLiveSessions([])
     if (!id) return
     const course = courses.find((item) => String(item.id) === String(id))
-    setCourseEdit({ title: course?.title || '', description: course?.description || '' })
+    setCourseEdit(courseToEdit(course))
     Promise.all([
       api.get(`/courses/${id}/`),
       api.get(`/modules/?course=${id}`),
@@ -137,7 +157,7 @@ export default function InstructorContent() {
       .then(([detail, rows, sessions]) => {
         if (requestId !== courseSelectionRequest.current) return
         setCourses((items) => items.map((item) => item.id === detail.id ? detail : item))
-        setCourseEdit({ title: detail.title, description: detail.description || '' })
+        setCourseEdit(courseToEdit(detail))
         setModules(rows)
         setLiveSessions(sessions)
       })
@@ -168,7 +188,13 @@ export default function InstructorContent() {
     setVideoUrl(lesson.video_url || '')
     setNewLessonVideoFile(null)
     setAttachments(lesson.attachments || [])
-    setNewLesson((current) => ({ ...current, title: lesson.title, video_url: lesson.video_url || '', tutorial_content: lesson.tutorial_content || '' }))
+    setNewLesson((current) => ({
+      ...current,
+      title: lesson.title,
+      video_url: lesson.video_url || '',
+      learning_objectives: lesson.learning_objectives || '',
+      tutorial_content: lesson.tutorial_content || '',
+    }))
   }
 
   const selectedLesson = lessons.find((l) => String(l.id) === String(lessonId))
@@ -236,20 +262,26 @@ export default function InstructorContent() {
   }
 
   async function saveCourseDetails() {
-    let updated
+    const payload = {
+      title: courseEdit.title.trim(),
+      description: courseEdit.description.trim(),
+      category: courseEdit.category.trim(),
+      tags: courseEdit.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
+      difficulty: courseEdit.difficulty,
+      estimated_duration_minutes: courseEdit.estimated_duration_minutes
+        ? Number(courseEdit.estimated_duration_minutes)
+        : null,
+      learning_outcomes: courseEdit.learning_outcomes.split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
+      prerequisites: courseEdit.prerequisites.trim(),
+    }
+    let updated = await api.patch(`/courses/${courseId}/`, payload)
     if (courseCoverFile) {
       const formData = new FormData()
-      formData.append('title', courseEdit.title.trim())
-      formData.append('description', courseEdit.description.trim())
       formData.append('thumbnail', courseCoverFile)
-      updated = await api.put(`/courses/${courseId}/`, formData, { isFormData: true })
-    } else {
-      updated = await api.patch(`/courses/${courseId}/`, {
-        title: courseEdit.title.trim(),
-        description: courseEdit.description.trim(),
-      })
+      updated = await api.upload(`/courses/${courseId}/`, formData, { method: 'PATCH' })
     }
     setCourses((items) => items.map((item) => item.id === updated.id ? updated : item))
+    setCourseEdit(courseToEdit(updated))
     setCourseCoverFile(null)
     return updated
   }
@@ -414,6 +446,28 @@ export default function InstructorContent() {
     }
   }
 
+  function startEditingModule(module) {
+    setEditingModuleId(String(module.id))
+    setEditingModuleTitle(module.title)
+  }
+
+  async function saveModuleTitle(module) {
+    const title = editingModuleTitle.trim()
+    if (!title) return
+    setBusy(true)
+    try {
+      const updated = await api.patch(`/modules/${module.id}/`, { title })
+      setModules((items) => items.map((item) => item.id === updated.id ? updated : item))
+      setEditingModuleId('')
+      setEditingModuleTitle('')
+      flash('Module title saved.')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleAddLesson(e) {
     e.preventDefault()
     if (!moduleId || !newLesson.title.trim()) return
@@ -488,19 +542,29 @@ export default function InstructorContent() {
 
   async function handleUploadPdf(e) {
     e.preventDefault()
-    if (!lessonId || !pdfFile) return
+    if (!lessonId || (!pdfFile && !resourceUrl.trim())) return
     setBusy(true)
     try {
-      const formData = new FormData()
-      formData.append('lesson', lessonId)
-      formData.append('title', pdfTitle || pdfFile.name)
-      formData.append('file', pdfFile)
-      const created = await api.upload('/lesson-attachments/', formData)
+      let created
+      if (resourceUrl.trim()) {
+        created = await api.post('/lesson-attachments/', {
+          lesson: Number(lessonId),
+          title: pdfTitle.trim() || resourceUrl.trim(),
+          external_url: resourceUrl.trim(),
+        })
+      } else {
+        const formData = new FormData()
+        formData.append('lesson', lessonId)
+        formData.append('title', pdfTitle.trim() || pdfFile.name)
+        formData.append('file', pdfFile)
+        created = await api.upload('/lesson-attachments/', formData)
+      }
       setAttachments([...attachments, created])
       setPdfTitle('')
       setPdfFile(null)
+      setResourceUrl('')
       e.target.reset()
-      flash('PDF uploaded and stored.')
+      flash('Lesson resource added.')
     } catch (err) {
       setError(err.message)
     } finally {
@@ -531,6 +595,25 @@ export default function InstructorContent() {
   async function handleCreateActivity(e) {
     e.preventDefault()
     if (!lessonId || !activityDraft.title.trim()) return
+    const questionnaireQuestions = activityDraft.questionnaire_questions.map((question) => ({
+      text: question.text.trim(),
+      question_type: question.question_type,
+      options: question.question_type === 'text'
+        ? []
+        : question.options.split(/\r?\n/).map((option) => option.trim()).filter(Boolean),
+      required: question.required,
+    }))
+    if (activityDraft.activity_type === 'questionnaire' && questionnaireQuestions.some((question) => (
+      !question.text
+      || (question.question_type !== 'text' && (
+        question.options.length < 2
+        || question.options.some((option) => !option)
+        || new Set(question.options.map((option) => option.toLowerCase())).size !== question.options.length
+      ))
+    ))) {
+      setError('Each questionnaire item needs text. Choice questions need at least two unique options.')
+      return
+    }
     let testCases = null
     if (activityDraft.language !== 'html') {
       try {
@@ -551,9 +634,18 @@ export default function InstructorContent() {
         pass_percentage: Number(activityDraft.pass_percentage),
         deadline: activityDraft.deadline ? new Date(activityDraft.deadline).toISOString() : null,
         test_cases: activityDraft.activity_type === 'exercise' || activityDraft.activity_type === 'lab' ? testCases : null,
+        questionnaire_questions: activityDraft.activity_type === 'questionnaire' ? questionnaireQuestions : [],
       })
       await refreshSelectedLesson()
-      setActivityDraft((value) => ({ ...value, title: '', instructions: '', deadline: '', starter_code: '', test_cases: '[]' }))
+      setActivityDraft((value) => ({
+        ...value,
+        title: '',
+        instructions: '',
+        deadline: '',
+        starter_code: '',
+        test_cases: '[]',
+        questionnaire_questions: [{ text: '', question_type: 'single_choice', options: '', required: true }],
+      }))
       flash('Activity added.')
     } catch (err) {
       setError(err.message)
@@ -586,6 +678,7 @@ export default function InstructorContent() {
           max_score: questions.reduce((sum, question) => sum + question.marks, 0),
           pass_percentage: Number(quizDraft.pass_mark_percentage),
           is_required: quizDraft.is_required,
+          is_final_assessment: quizDraft.is_final_assessment,
         },
         quiz: {
           time_limit_minutes: Number(quizDraft.time_limit_minutes),
@@ -594,7 +687,7 @@ export default function InstructorContent() {
         questions,
       })
       await refreshSelectedLesson()
-      setQuizDraft((value) => ({ ...value, title: '', instructions: '' }))
+      setQuizDraft((value) => ({ ...value, title: '', instructions: '', is_final_assessment: false }))
       setQuizQuestions([{ text: '', marks: 1, choice_a: '', choice_b: '', correct_choice_index: 0 }])
       flash('Quiz and questions added.')
     } catch (err) {
@@ -624,6 +717,20 @@ export default function InstructorContent() {
       await api.del(`/activities/${activity.id}/`)
       await refreshSelectedLesson()
       flash('Activity deleted.')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function loadQuestionnaireResponses(activity) {
+    setBusy(true)
+    setError('')
+    try {
+      const responses = await api.get(`/questionnaires/${activity.id}/response/`)
+      setQuestionnaireResponses(responses)
+      setResponsesForActivity(String(activity.id))
     } catch (err) {
       setError(err.message)
     } finally {
@@ -817,7 +924,7 @@ export default function InstructorContent() {
               <div>
                 <h3 className="font-semibold text-ink">Course details</h3>
                 <p className="mt-1 text-xs text-text-muted">
-                  Save your course details before publishing. Certificate eligibility is based on completing the required activities in every module.
+                  Publishing requires a description, at least one module, a lesson in every module, and a quiz with questions. Certificate eligibility is based on completing every required activity.
                 </p>
               </div>
               <span className={`rounded-full px-3 py-1 text-xs font-semibold ${courses.find((item) => String(item.id) === String(courseId))?.status === 'published' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-900'}`}>
@@ -832,6 +939,34 @@ export default function InstructorContent() {
               <label className="grid gap-1 text-sm font-medium text-ink md:col-span-2">
                 Description
                 <textarea rows={3} value={courseEdit.description} onChange={(event) => setCourseEdit((value) => ({ ...value, description: event.target.value }))} className="rounded-md border border-line bg-paper px-3 py-2" />
+              </label>
+              <label className="grid gap-1 text-sm font-medium text-ink">
+                Category
+                <input maxLength={100} value={courseEdit.category} onChange={(event) => setCourseEdit((value) => ({ ...value, category: event.target.value }))} placeholder="e.g. Software development" className="rounded-md border border-line bg-paper px-3 py-2" />
+              </label>
+              <label className="grid gap-1 text-sm font-medium text-ink">
+                Difficulty
+                <select value={courseEdit.difficulty} onChange={(event) => setCourseEdit((value) => ({ ...value, difficulty: event.target.value }))} className="rounded-md border border-line bg-paper px-3 py-2">
+                  <option value="beginner">Beginner</option>
+                  <option value="intermediate">Intermediate</option>
+                  <option value="advanced">Advanced</option>
+                </select>
+              </label>
+              <label className="grid gap-1 text-sm font-medium text-ink">
+                Estimated duration (minutes)
+                <input type="number" min="1" value={courseEdit.estimated_duration_minutes} onChange={(event) => setCourseEdit((value) => ({ ...value, estimated_duration_minutes: event.target.value }))} className="rounded-md border border-line bg-paper px-3 py-2" />
+              </label>
+              <label className="grid gap-1 text-sm font-medium text-ink">
+                Tags
+                <input maxLength={1000} value={courseEdit.tags} onChange={(event) => setCourseEdit((value) => ({ ...value, tags: event.target.value }))} placeholder="JavaScript, web development, programming" className="rounded-md border border-line bg-paper px-3 py-2" />
+              </label>
+              <label className="grid gap-1 text-sm font-medium text-ink md:col-span-2">
+                Learning outcomes (one per line)
+                <textarea rows={3} value={courseEdit.learning_outcomes} onChange={(event) => setCourseEdit((value) => ({ ...value, learning_outcomes: event.target.value }))} className="rounded-md border border-line bg-paper px-3 py-2" />
+              </label>
+              <label className="grid gap-1 text-sm font-medium text-ink md:col-span-2">
+                Prerequisites
+                <textarea rows={2} value={courseEdit.prerequisites} onChange={(event) => setCourseEdit((value) => ({ ...value, prerequisites: event.target.value }))} placeholder="What learners should know before starting" className="rounded-md border border-line bg-paper px-3 py-2" />
               </label>
               <label className="grid gap-1 text-sm font-medium text-ink md:col-span-2">
                 Replace course cover
@@ -944,10 +1079,22 @@ export default function InstructorContent() {
                   <ExpandableList items={modules} label="modules" listClassName="space-y-2">
                     {(m, index) => (
                       <div key={m.id} className="flex items-center gap-1">
+                  {String(editingModuleId) === String(m.id) ? (
+                    <input autoFocus value={editingModuleTitle} onChange={(event) => setEditingModuleTitle(event.target.value)} aria-label={`Edit ${m.title}`} className="min-w-0 flex-1 rounded-md border border-line px-3 py-2 text-sm" />
+                  ) : (
                     <button type="button" onClick={() => handleSelectModule(String(m.id))} className={`min-w-0 flex-1 rounded-md border px-3 py-2 text-left text-sm ${String(moduleId) === String(m.id) ? 'border-coral bg-coral-tint text-coral-dim' : 'border-line text-ink hover:border-text-dim'}`}>
                       {m.order}. {m.title}
                     </button>
-                    <button type="button" aria-label={`Move ${m.title} up`} title="Move up" disabled={busy || index === 0} onClick={() => moveItem('module', index, -1)} className="rounded border border-line p-2 text-ink disabled:opacity-35"><ChevronUp size={15} /></button>
+                  )}
+                  {String(editingModuleId) === String(m.id) ? (
+                    <>
+                      <button type="button" aria-label="Save module title" disabled={busy || !editingModuleTitle.trim()} onClick={() => saveModuleTitle(m)} className="rounded border border-emerald-200 p-2 text-emerald-700 disabled:opacity-35"><Check size={15} /></button>
+                      <button type="button" aria-label="Cancel module edit" onClick={() => setEditingModuleId('')} className="rounded border border-line p-2 text-ink"><X size={15} /></button>
+                    </>
+                  ) : (
+                    <button type="button" aria-label={`Edit ${m.title}`} title="Edit module" disabled={busy} onClick={() => startEditingModule(m)} className="rounded border border-line p-2 text-ink disabled:opacity-35"><Pencil size={15} /></button>
+                  )}
+                  <button type="button" aria-label={`Move ${m.title} up`} title="Move up" disabled={busy || index === 0} onClick={() => moveItem('module', index, -1)} className="rounded border border-line p-2 text-ink disabled:opacity-35"><ChevronUp size={15} /></button>
                     <button type="button" aria-label={`Move ${m.title} down`} title="Move down" disabled={busy || index === modules.length - 1} onClick={() => moveItem('module', index, 1)} className="rounded border border-line p-2 text-ink disabled:opacity-35"><ChevronDown size={15} /></button>
                     <button type="button" aria-label={`Delete ${m.title}`} title="Delete module" disabled={busy} onClick={() => deleteModule(m)} className="rounded border border-rose-200 p-2 text-rose-700 disabled:opacity-35"><Trash2 size={15} /></button>
                   </div>
@@ -1016,11 +1163,11 @@ export default function InstructorContent() {
                     <input type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime,.mp4,.webm,.ogg,.mov" onChange={(event) => setNewLessonVideoFile(event.target.files?.[0] || null)} className="mt-1 block w-full text-sm" />
                   </label>
                   <input value={newLesson.learning_objectives} onChange={(event) => setNewLesson({ ...newLesson, learning_objectives: event.target.value })} placeholder="Learning objectives — optional" className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink placeholder:text-text-dim" />
-                  <textarea
+                  <RichTextEditor
                     value={newLesson.tutorial_content}
-                    onChange={(e) => setNewLesson({ ...newLesson, tutorial_content: e.target.value })}
-                    placeholder="Tutorial text — optional"
-                    rows={2}
+                    onChange={(tutorial_content) => setNewLesson((value) => ({ ...value, tutorial_content }))}
+                    placeholder="Lesson content — Markdown headings, lists, links, and code are supported"
+                    rows={5}
                     className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink placeholder:text-text-dim"
                   />
                   <button
@@ -1035,7 +1182,7 @@ export default function InstructorContent() {
           </div>
         )}
 
-        {/* Step 4: selected lesson — video link + PDFs */}
+        {/* Step 4: selected lesson — content, video, and resources */}
         {lessonId && (
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="rounded-2xl border border-line bg-paper p-6">
@@ -1044,7 +1191,7 @@ export default function InstructorContent() {
               <form onSubmit={handleSaveLesson} className="mt-4 space-y-2 border-b border-line pb-4">
                 <input required maxLength={200} value={newLesson.title} onChange={(event) => setNewLesson({ ...newLesson, title: event.target.value })} aria-label="Lesson title" className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink" />
                 <input value={newLesson.learning_objectives} onChange={(event) => setNewLesson({ ...newLesson, learning_objectives: event.target.value })} placeholder="Learning objectives" className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink" />
-                <textarea rows={3} value={newLesson.tutorial_content} onChange={(event) => setNewLesson({ ...newLesson, tutorial_content: event.target.value })} placeholder="Tutorial content" className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink" />
+                <RichTextEditor value={newLesson.tutorial_content} onChange={(tutorial_content) => setNewLesson((value) => ({ ...value, tutorial_content }))} placeholder="Lesson content — Markdown headings, lists, links, and code are supported" rows={6} className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink" />
                 <button type="submit" disabled={busy || !newLesson.title.trim()} className="rounded-md border border-line px-3 py-2 text-sm font-semibold text-ink disabled:opacity-50">Save lesson details</button>
               </form>
               <form onSubmit={handleSaveVideoUrl} className="mt-4 flex gap-2">
@@ -1083,37 +1230,60 @@ export default function InstructorContent() {
             </div>
 
             <div className="rounded-2xl border border-line bg-paper p-6">
-              <h3 className="font-semibold text-ink">PDF attachments</h3>
+              <h3 className="font-semibold text-ink">Resources</h3>
               <div className="mt-3 space-y-2">
                 {attachments.map((a) => (
                   <div key={a.id} className="flex items-center gap-2 rounded-md border border-line px-3 py-2">
-                    <button type="button" onClick={() => api.download(a.download_url.replace(/^\/api/, ''), `${a.title}.pdf`).catch((err) => window.alert(err.message))} className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm text-ink hover:text-blue-700">
-                      <FileText size={16} className="shrink-0 text-coral" /> {a.title}
-                    </button>
+                    {a.external_url ? (
+                      <a href={a.external_url} target="_blank" rel="noopener noreferrer" className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm text-ink hover:text-blue-700">
+                        <FileText size={16} className="shrink-0 text-coral" /> {a.title} <span className="text-xs text-text-muted">(external link)</span>
+                      </a>
+                    ) : (
+                      <button type="button" onClick={() => api.download(a.download_url.replace(/^\/api/, ''), a.file_name || a.title).catch((err) => window.alert(err.message))} className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm text-ink hover:text-blue-700">
+                        <FileText size={16} className="shrink-0 text-coral" /> {a.title} <span className="text-xs text-text-muted">({a.file_name?.split('.').pop()?.toUpperCase() || 'FILE'})</span>
+                      </button>
+                    )}
                     <button type="button" aria-label={`Delete ${a.title}`} onClick={() => deleteAttachment(a)} className="rounded p-1.5 text-rose-700 hover:bg-rose-50"><Trash2 size={15} /></button>
                   </div>
                 ))}
-                {attachments.length === 0 && <p className="text-sm text-text-muted">No PDFs attached yet.</p>}
+                {attachments.length === 0 && <p className="text-sm text-text-muted">No resources attached yet.</p>}
               </div>
 
               <form onSubmit={handleUploadPdf} className="mt-4 space-y-2 border-t border-line pt-4">
                 <input
                   value={pdfTitle}
                   onChange={(e) => setPdfTitle(e.target.value)}
-                  placeholder="Display name, e.g. 'Week 3 slides'"
+                  placeholder="Resource title"
                   className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink placeholder:text-text-dim"
                 />
                 <input
                   type="file"
-                  accept="application/pdf"
-                  onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
+                  accept=".pdf,.zip,.ppt,.pptx,.odp,application/pdf,application/zip,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null
+                    setPdfFile(file)
+                    if (file) setResourceUrl('')
+                  }}
                   className="w-full text-sm text-text-muted"
                 />
+                <p className="text-xs text-text-muted">PDF, ZIP, PowerPoint, or OpenDocument presentation · max 50 MB</p>
+                <div className="text-center text-xs text-text-muted">or add a secure external link</div>
+                <input
+                  type="url"
+                  value={resourceUrl}
+                  onChange={(event) => {
+                    setResourceUrl(event.target.value)
+                    if (event.target.value) setPdfFile(null)
+                  }}
+                  placeholder="https://example.com/resource"
+                  className="w-full rounded-md border border-line bg-paper px-3 py-2 text-sm text-ink placeholder:text-text-dim"
+                  disabled={!!pdfFile}
+                />
                 <button
-                  disabled={busy || !pdfFile}
+                  disabled={busy || (!pdfFile && !resourceUrl.trim()) || (pdfFile && !!resourceUrl.trim())}
                   className="flex items-center gap-1 rounded-md bg-coral px-3 py-2 text-sm font-medium text-white hover:bg-coral-dim disabled:opacity-60"
                 >
-                  <Upload size={16} /> Upload PDF
+                  <Upload size={16} /> Add resource
                 </button>
               </form>
             </div>
@@ -1132,38 +1302,116 @@ export default function InstructorContent() {
               {(selectedLesson.activities || []).map((activity) => (
                 <li key={activity.id} className="flex items-center justify-between gap-3 py-3">
                   <div>
-                    <p className="text-sm font-semibold text-ink">{activity.activity_type}: {activity.title}</p>
-                    <p className="text-xs text-text-muted">{activity.max_score} points · pass {activity.pass_percentage}% · {activity.is_required ? 'required' : 'optional'}{activity.quiz_id ? ' · quiz questions ready' : ''}</p>
+                    <p className="text-sm font-semibold text-ink">{activity.is_final_assessment ? 'Final assessment · ' : ''}{activity.activity_type}: {activity.title}</p>
+                    <p className="text-xs text-text-muted">
+                      {activity.activity_type === 'questionnaire'
+                        ? `${activity.questionnaire_questions?.length || 0} questions · ${activity.is_required ? 'required for completion' : 'optional'}`
+                        : `${activity.max_score} points · pass ${activity.pass_percentage}% · ${activity.is_required ? 'required' : 'optional'}${activity.quiz_id ? ' · quiz questions ready' : ''}`}
+                    </p>
                   </div>
-                  <button type="button" disabled={busy} onClick={() => deleteActivity(activity)} aria-label={`Delete ${activity.title}`} className="rounded border border-rose-200 p-2 text-rose-700 disabled:opacity-50"><Trash2 size={15} /></button>
+                  <div className="flex items-center gap-2">
+                    {activity.activity_type === 'questionnaire' && <button type="button" disabled={busy} onClick={() => loadQuestionnaireResponses(activity)} className="rounded border border-line px-2 py-1.5 text-xs font-semibold text-ink disabled:opacity-50">View responses</button>}
+                    <button type="button" disabled={busy} onClick={() => deleteActivity(activity)} aria-label={`Delete ${activity.title}`} className="rounded border border-rose-200 p-2 text-rose-700 disabled:opacity-50"><Trash2 size={15} /></button>
+                  </div>
                 </li>
               ))}
               {!selectedLesson.activities?.length && <li className="py-3 text-sm text-text-muted">No activities yet.</li>}
             </ul>
+            {String(responsesForActivity) && (
+              <div className="mb-5 space-y-3 rounded-lg border border-blue-200 bg-blue-50/40 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <h4 className="font-semibold text-ink">Questionnaire responses</h4>
+                  <button type="button" onClick={() => setResponsesForActivity('')} className="rounded border border-line bg-paper p-1 text-ink" aria-label="Close questionnaire responses"><X size={15} /></button>
+                </div>
+                {questionnaireResponses.length ? questionnaireResponses.map((response) => {
+                  const responseActivity = selectedLesson.activities.find((item) => String(item.id) === String(responsesForActivity))
+                  return (
+                    <article key={response.student_id} className="rounded-md border border-line bg-paper p-3">
+                      <p className="text-sm font-semibold text-ink">{response.student_name}</p>
+                      <p className="mb-3 text-xs text-text-muted">{new Date(response.submitted_at).toLocaleString()}</p>
+                      <dl className="space-y-2">
+                        {(responseActivity?.questionnaire_questions || []).map((question, index) => {
+                          const answer = response.answers[String(index)]
+                          const selected = Array.isArray(answer) ? answer : [answer]
+                          const displayAnswer = question.question_type === 'text'
+                            ? answer || 'No response'
+                            : selected.filter((choice) => Number.isInteger(choice)).map((choice) => question.options[choice]).join(', ') || 'No response'
+                          return <div key={index}><dt className="text-xs font-semibold text-text-muted">{question.text}</dt><dd className="text-sm text-ink">{displayAnswer}</dd></div>
+                        })}
+                      </dl>
+                    </article>
+                  )
+                }) : <p className="text-sm text-text-muted">No responses yet.</p>}
+              </div>
+            )}
             <div className="grid gap-6 xl:grid-cols-2">
               <form onSubmit={handleCreateActivity} className="space-y-3 border-t border-line pt-4">
-                <h4 className="font-semibold text-ink">Assignment, lab, or exercise</h4>
+                <h4 className="font-semibold text-ink">Assignment, lab, exercise, or questionnaire</h4>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="grid gap-1 text-xs font-medium text-text-muted">Type
-                    <select value={activityDraft.activity_type} onChange={(event) => setActivityDraft({ ...activityDraft, activity_type: event.target.value })} className="rounded border border-line bg-paper px-2 py-2 text-sm text-ink"><option value="assignment">Assignment</option><option value="lab">Lab</option><option value="exercise">Coding exercise</option></select>
+                    <select value={activityDraft.activity_type} onChange={(event) => setActivityDraft({ ...activityDraft, activity_type: event.target.value })} className="rounded border border-line bg-paper px-2 py-2 text-sm text-ink"><option value="assignment">Assignment</option><option value="lab">Lab</option><option value="exercise">Coding exercise</option><option value="questionnaire">Questionnaire</option></select>
                   </label>
                   <label className="grid gap-1 text-xs font-medium text-text-muted">Title
                     <input required maxLength={200} value={activityDraft.title} onChange={(event) => setActivityDraft({ ...activityDraft, title: event.target.value })} className="rounded border border-line bg-paper px-2 py-2 text-sm text-ink" />
                   </label>
-                  <label className="grid gap-1 text-xs font-medium text-text-muted">Maximum score
-                    <input type="number" min="1" value={activityDraft.max_score} onChange={(event) => setActivityDraft({ ...activityDraft, max_score: event.target.value })} className="rounded border border-line bg-paper px-2 py-2 text-sm text-ink" />
-                  </label>
-                  <label className="grid gap-1 text-xs font-medium text-text-muted">Pass percentage
-                    <input type="number" min="0" max="100" value={activityDraft.pass_percentage} onChange={(event) => setActivityDraft({ ...activityDraft, pass_percentage: event.target.value })} className="rounded border border-line bg-paper px-2 py-2 text-sm text-ink" />
-                  </label>
-                  <label className="grid gap-1 text-xs font-medium text-text-muted">Attempts
-                    <input type="number" min="1" value={activityDraft.max_attempts} onChange={(event) => setActivityDraft({ ...activityDraft, max_attempts: event.target.value })} className="rounded border border-line bg-paper px-2 py-2 text-sm text-ink" />
-                  </label>
-                  <label className="grid gap-1 text-xs font-medium text-text-muted">Deadline
-                    <input type="datetime-local" value={activityDraft.deadline} onChange={(event) => setActivityDraft({ ...activityDraft, deadline: event.target.value })} className="rounded border border-line bg-paper px-2 py-2 text-sm text-ink" />
-                  </label>
+                  {activityDraft.activity_type !== 'questionnaire' && <>
+                    <label className="grid gap-1 text-xs font-medium text-text-muted">Maximum score
+                      <input type="number" min="1" value={activityDraft.max_score} onChange={(event) => setActivityDraft({ ...activityDraft, max_score: event.target.value })} className="rounded border border-line bg-paper px-2 py-2 text-sm text-ink" />
+                    </label>
+                    <label className="grid gap-1 text-xs font-medium text-text-muted">Pass percentage
+                      <input type="number" min="0" max="100" value={activityDraft.pass_percentage} onChange={(event) => setActivityDraft({ ...activityDraft, pass_percentage: event.target.value })} className="rounded border border-line bg-paper px-2 py-2 text-sm text-ink" />
+                    </label>
+                    <label className="grid gap-1 text-xs font-medium text-text-muted">Attempts
+                      <input type="number" min="1" value={activityDraft.max_attempts} onChange={(event) => setActivityDraft({ ...activityDraft, max_attempts: event.target.value })} className="rounded border border-line bg-paper px-2 py-2 text-sm text-ink" />
+                    </label>
+                    <label className="grid gap-1 text-xs font-medium text-text-muted">Deadline
+                      <input type="datetime-local" value={activityDraft.deadline} onChange={(event) => setActivityDraft({ ...activityDraft, deadline: event.target.value })} className="rounded border border-line bg-paper px-2 py-2 text-sm text-ink" />
+                    </label>
+                  </>}
                 </div>
                 <textarea rows={3} value={activityDraft.instructions} onChange={(event) => setActivityDraft({ ...activityDraft, instructions: event.target.value })} placeholder="Student instructions" className="w-full rounded border border-line bg-paper px-2 py-2 text-sm text-ink" />
+                {activityDraft.activity_type === 'questionnaire' && (
+                  <div className="space-y-3">
+                    <p className="text-xs text-text-muted">Create required or optional text and choice questions. Student responses can be updated after submission.</p>
+                    {activityDraft.questionnaire_questions.map((question, index) => (
+                      <fieldset key={index} className="space-y-2 rounded-md border border-line p-3">
+                        <legend className="px-1 text-xs font-semibold text-text-muted">Question {index + 1}</legend>
+                        <textarea required maxLength={1000} value={question.text} onChange={(event) => setActivityDraft((value) => ({
+                          ...value,
+                          questionnaire_questions: value.questionnaire_questions.map((item, itemIndex) => itemIndex === index ? { ...item, text: event.target.value } : item),
+                        }))} placeholder="Question text" rows={2} className="w-full rounded border border-line bg-paper px-2 py-2 text-sm text-ink" />
+                        <label className="grid gap-1 text-xs font-medium text-text-muted">Response type
+                          <select value={question.question_type} onChange={(event) => setActivityDraft((value) => ({
+                            ...value,
+                            questionnaire_questions: value.questionnaire_questions.map((item, itemIndex) => itemIndex === index ? { ...item, question_type: event.target.value } : item),
+                          }))} className="rounded border border-line bg-paper px-2 py-2 text-sm text-ink">
+                            <option value="text">Text response</option>
+                            <option value="single_choice">Single choice</option>
+                            <option value="multiple_choice">Multiple choice</option>
+                          </select>
+                        </label>
+                        {question.question_type !== 'text' && <textarea required value={question.options} onChange={(event) => setActivityDraft((value) => ({
+                          ...value,
+                          questionnaire_questions: value.questionnaire_questions.map((item, itemIndex) => itemIndex === index ? { ...item, options: event.target.value } : item),
+                        }))} placeholder={'One answer option per line'} rows={3} className="w-full rounded border border-line bg-paper px-2 py-2 text-sm text-ink" />}
+                        <div className="flex items-center justify-between">
+                          <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={question.required} onChange={(event) => setActivityDraft((value) => ({
+                            ...value,
+                            questionnaire_questions: value.questionnaire_questions.map((item, itemIndex) => itemIndex === index ? { ...item, required: event.target.checked } : item),
+                          }))} /> Required response</label>
+                          {activityDraft.questionnaire_questions.length > 1 && <button type="button" onClick={() => setActivityDraft((value) => ({
+                            ...value,
+                            questionnaire_questions: value.questionnaire_questions.filter((_, itemIndex) => itemIndex !== index),
+                          }))} className="text-xs font-semibold text-rose-700">Remove question</button>}
+                        </div>
+                      </fieldset>
+                    ))}
+                    <button type="button" onClick={() => setActivityDraft((value) => ({
+                      ...value,
+                      questionnaire_questions: [...value.questionnaire_questions, { text: '', question_type: 'single_choice', options: '', required: true }],
+                    }))} className="inline-flex items-center gap-1 rounded border border-line px-3 py-2 text-sm font-semibold text-ink"><CirclePlus size={15} /> Add question</button>
+                  </div>
+                )}
                 {(activityDraft.activity_type === 'lab' || activityDraft.activity_type === 'exercise') && <>
                   <label className="grid max-w-xs gap-1 text-xs font-medium text-text-muted">Code language
                     <select value={activityDraft.language} onChange={(event) => setActivityDraft({ ...activityDraft, language: event.target.value })} className="rounded border border-line bg-paper px-2 py-2 text-sm text-ink">
@@ -1221,6 +1469,7 @@ export default function InstructorContent() {
                 ))}
                 <button type="button" onClick={() => setQuizQuestions((items) => [...items, { text: '', marks: 1, choice_a: '', choice_b: '', correct_choice_index: 0 }])} className="inline-flex items-center gap-1 rounded border border-line px-3 py-2 text-sm font-semibold text-ink"><CirclePlus size={15} /> Add question</button>
                 <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={quizDraft.is_required} onChange={(event) => setQuizDraft({ ...quizDraft, is_required: event.target.checked })} /> Required for module completion</label>
+                <label className="flex items-center gap-2 text-sm text-ink"><input type="checkbox" checked={quizDraft.is_final_assessment} onChange={(event) => setQuizDraft({ ...quizDraft, is_final_assessment: event.target.checked })} /> Mark as final course assessment</label>
                 <button type="submit" disabled={busy || !quizDraft.title.trim()} className="block rounded-md bg-blue-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">Create quiz</button>
               </form>
             </div>
@@ -1245,7 +1494,7 @@ export default function InstructorContent() {
                         {lesson.learning_objectives && <p className="mt-1 text-xs text-text-muted">{lesson.learning_objectives}</p>}
                         {lesson.video_file_url && <div className="mt-3"><LessonVideo lessonId={lesson.id} url={lesson.video_file_url} uploadedVideo /></div>}
                         {lesson.video_url && <div className="mt-3"><LessonVideo lessonId={lesson.id} url={lesson.video_url} /></div>}
-                        {lesson.tutorial_content && <p className="mt-3 whitespace-pre-wrap text-sm text-text-muted">{lesson.tutorial_content}</p>}
+                        {lesson.tutorial_content && <RichTextContent content={lesson.tutorial_content} className="mt-3 text-sm text-text-muted" />}
                         {!!lesson.attachments?.length && <p className="mt-3 text-xs text-text-muted">{lesson.attachments.map((item) => item.title).join(' · ')}</p>}
                         {!!lesson.activities?.length && <ul className="mt-3 list-inside list-disc text-sm text-text-muted">{lesson.activities.map((activity) => <li key={activity.id}>{activity.activity_type}: {activity.title}</li>)}</ul>}
                       </div>
