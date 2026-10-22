@@ -20,6 +20,8 @@ export default function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [microsoftEmail, setMicrosoftEmail] = useState('')
+  const [needsMicrosoftEmail, setNeedsMicrosoftEmail] = useState(false)
   const googleButtonRef = useRef(null)
   const { login, establishSession } = useAuth()
   const toast = useToast()
@@ -40,20 +42,26 @@ export default function Login() {
     navigate(destination, { replace: true })
   }, [location.state, navigate, toast])
 
-  const exchangeProviderCredential = useCallback(async (provider, credential, nonce) => {
-    const result = await api.socialLogin(provider, credential, nonce)
+  const exchangeProviderCredential = useCallback(async (provider, credential, nonce, contactEmail) => {
+    const result = await api.socialLogin(provider, credential, nonce, contactEmail)
     finishSignIn(establishSession(result?.user))
   }, [establishSession, finishSignIn])
 
-  const authenticateWithProvider = useCallback(async (provider, acquireCredential, initialNonce) => {
+  const authenticateWithProvider = useCallback(async (provider, acquireCredential, initialNonce, contactEmail) => {
     setError('')
     setLoading(true)
     try {
       const nonce = initialNonce || (await api.socialLoginNonce()).nonce
       const credential = await acquireCredential(nonce)
       if (!credential) throw new Error(`${provider} did not return a sign-in credential. Please try again.`)
-      await exchangeProviderCredential(provider, credential, nonce)
+      await exchangeProviderCredential(provider, credential, nonce, contactEmail)
+      setNeedsMicrosoftEmail(false)
     } catch (err) {
+      if (provider === 'microsoft' && err.code === 'contact_email_required') {
+        setNeedsMicrosoftEmail(true)
+        setError('Microsoft did not share an email address. Enter an email address where we can send a verification link.')
+        return
+      }
       setError(err.message || `${provider} sign-in could not be completed. Please try again.`)
     } finally {
       setLoading(false)
@@ -121,7 +129,7 @@ export default function Login() {
     }
   }, [authenticateWithProvider, googleClientId])
 
-  async function signInWithMicrosoft() {
+  async function signInWithMicrosoft(contactEmail) {
     await authenticateWithProvider('microsoft', async (nonce) => {
       const { PublicClientApplication } = await import('@azure/msal-browser')
       const client = new PublicClientApplication({
@@ -138,21 +146,32 @@ export default function Login() {
         prompt: 'select_account',
       })
       return result.idToken
-    })
+    }, undefined, contactEmail)
+  }
+
+  function submitMicrosoftEmail(event) {
+    event.preventDefault()
+    if (microsoftEmail.trim()) {
+      void signInWithMicrosoft(microsoftEmail.trim())
+    }
   }
 
   async function signInWithApple() {
     await authenticateWithProvider('apple', async (nonce) => {
       await loadAppleSignIn()
+      const state = crypto.randomUUID()
       window.AppleID.auth.init({
         clientId: appleClientId,
         scope: 'name email',
         redirectURI: appleRedirectUri,
-        state: crypto.randomUUID(),
+        state,
         nonce,
         usePopup: true,
       })
       const result = await window.AppleID.auth.signIn()
+      if (result.authorization?.state !== state) {
+        throw new Error('Apple sign-in could not verify the authentication response. Please try again.')
+      }
       return result.authorization?.id_token
     })
   }
@@ -286,7 +305,10 @@ export default function Login() {
             {location.state?.registered && (
               <div className="mb-5 flex gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950" role="status">
                 <Check size={18} className="mt-0.5 shrink-0 text-blue-700" aria-hidden="true" />
-                <span>Registration received. Verify your email, then wait for an administrator to approve your learner account before signing in.</span>
+                <span>
+                  Registration received. Verify your email, then wait for an administrator to approve your
+                  {location.state.accountRole === 'instructor' ? ' instructor' : ' learner'} account before signing in.
+                </span>
               </div>
             )}
 
@@ -367,6 +389,32 @@ export default function Login() {
                 <AppleMark /> Apple
               </button>
             </div>
+            {needsMicrosoftEmail && (
+              <form onSubmit={submitMicrosoftEmail} className="mt-4 space-y-3" aria-busy={loading}>
+                <label htmlFor="microsoft-contact-email" className="block text-sm font-medium text-text-primary">
+                  Contact email for Microsoft sign-in
+                </label>
+                <input
+                  id="microsoft-contact-email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={microsoftEmail}
+                  onChange={(event) => setMicrosoftEmail(event.target.value)}
+                  className="w-full rounded-xl border border-border bg-surface-muted px-3 py-2.5 text-sm text-text-primary outline-none focus:border-primary focus:ring-4 focus:ring-blue-100"
+                />
+                <p className="text-xs text-text-secondary">
+                  We will ask you to verify this address by email before your account can be approved.
+                </p>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex w-full items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary-hover disabled:opacity-60"
+                >
+                  {loading ? 'Connecting…' : 'Continue with Microsoft'}
+                </button>
+              </form>
+            )}
             {(!googleClientId || !microsoftClientId || !appleClientId) && (
               <p className="mt-2 text-center text-[11px] text-text-secondary">
                 Social sign-in methods are enabled when their OAuth client IDs are configured.

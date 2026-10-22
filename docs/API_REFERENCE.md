@@ -62,10 +62,10 @@ surrounding whitespace. Usernames are unique regardless of case. **Passwords are
 ### `POST /api/auth/register/`
 Public. Rate-limited to 10 requests/minute per IP.
 
-**Always creates a `student` account** — `role` is not an accepted field
-here, regardless of what's sent in the body. This is deliberate (see
-`backend/README.md` for why). Instructor/admin accounts are created via
-Django admin.
+Accepts `role` as `student` or `instructor`; if omitted it defaults to
+`student`. Other roles (including `admin`) are rejected. Both public
+registration roles remain inactive until email verification and administrator
+approval. Administrator/staff accounts are provisioned by trusted operators.
 
 Request:
 ```json
@@ -74,17 +74,25 @@ Request:
   "email": "bkimani@example.com",
   "password": "at-least-8-characters",
   "first_name": "Brian",
-  "last_name": "Kimani"
+  "last_name": "Kimani",
+  "role": "instructor"
 }
 ```
 
 Response `201`:
 ```json
-{ "id": 4, "username": "bkimani", "email": "bkimani@example.com", "first_name": "Brian", "last_name": "Kimani" }
+{
+  "id": 4, "username": "bkimani", "email": "bkimani@example.com",
+  "first_name": "Brian", "last_name": "Kimani",
+  "verification_email_sent": true,
+  "detail": "Account created. Check your email for a verification link."
+}
 ```
-New self-registered students are created inactive and unapproved. A verification
+New self-registered users are created inactive and unapproved. A verification
 email is sent; they must verify the address and then wait for an administrator
-to approve the account before they can sign in.
+to approve the account before they can sign in. A delivery failure still leaves
+the account pending and sets `verification_email_sent` to false; use the
+resend-verification endpoint.
 
 ### `POST /api/auth/login/`
 Public. Rate-limited to 10 requests/minute per IP. Logs in with **email**,
@@ -107,8 +115,8 @@ refresh tokens are not returned in the JSON body.
 
 Errors (`401`):
 - Wrong email or password → `{"detail": "Incorrect email or password."}` (identical for unknown emails).
-- An inactive, unapproved new learner cannot sign in. The same neutral credential
-  error is used rather than disclosing account state.
+- A user who has not verified email or is awaiting administrator approval
+  cannot sign in and receives the same neutral credential error.
 - `429` after too many attempts (10/minute per client IP; see `NUM_PROXIES` in the deployment notes).
 
 ### Social sign-in and account linking
@@ -116,11 +124,20 @@ Errors (`401`):
 `GET /api/auth/social/nonce/` issues a short-lived nonce in an HttpOnly cookie.
 The provider's ID token must contain that same nonce. `POST` the token and nonce
 to `/api/auth/google/`, `/api/auth/microsoft/`, or `/api/auth/apple/` to sign in.
-An unlinked provider identity can create a new pending student account only
-when the provider supplies a verified email that is not already in use. A
-matching email never links the provider identity to an existing LMS account.
-Previously linked identities continue to sign in by their stable provider
-subject, including if their email claim later changes.
+An unlinked provider identity creates a pending student account when its
+verified email is not already in use. Microsoft may omit email or provide an
+email claim without an email-verification claim. In that case, first-time
+Microsoft sign-in can supply a contact email; the LMS sends a verification
+link and does not treat the supplied address as verified. The account still
+requires separate administrator approval. A matching email never links the
+provider identity to an existing LMS account. Previously linked identities
+continue to sign in by their stable provider subject, including if their email
+claim later changes.
+
+If Microsoft omits both an email and an existing linked identity, the frontend
+retries the provider flow with a `contact_email` field after asking the user for
+an address. The API treats it as unverified and sends a verification link; it
+is never proof of email ownership by itself.
 
 To link an identity to an existing LMS account, first sign in to that account,
 then `POST /api/auth/social/link/{provider}/` with the same
@@ -135,7 +152,7 @@ provider already linked to this account, is rejected.
 invalid, expired (24 h) or already used. Verification confirms mailbox ownership;
 the account remains inactive until an administrator approves it.
 
-### `POST /api/auth/email/resend-verification/` — Public (5/hour)
+### `POST /api/auth/email/resend-verification/` — Public (5/hour, 5-minute address cooldown)
 `{ "email": "..." }` → always `200` with the same message whether or not the account exists.
 
 ### `POST /api/auth/password-reset/` — Public (5/hour)
@@ -193,7 +210,10 @@ app below marked "Instructor/Admin write").
 Course visibility is status-aware: students see published courses only;
 instructors see their own courses plus published catalog courses; admins see
 all courses. Omitting `status` when creating a course preserves the legacy
-default of `published`; Course Content creates new courses as `draft`.
+default behavior for the model only when records are created outside the API.
+The API always creates courses as `draft`; Course Content also sends `draft`.
+Use the publish action after adding the required curriculum to make a course
+visible to students.
 
 **Important**: for `lessons` and `activities`, a student's GET requests are
 additionally filtered so locked-module content never comes back — see
@@ -211,7 +231,10 @@ List all courses.
 { "title": "Full-Stack Web Development", "description": "...", "status": "draft" }
 ```
 `instructor` is set automatically to whoever's logged in — not accepted
-in the request body. `status` may be `draft` or `published` and is optional.
+in the request body. `status` is optional and, if provided, must be `draft`.
+The API rejects `published` on creation with `400`; use
+`POST /api/courses/{id}/publish/` after the course meets publication
+requirements.
 
 ### `POST /api/courses/{id}/save_draft/` 🔒 — Owning Instructor/Admin
 Changes the course status to `draft`; students can no longer see or open it.
@@ -708,6 +731,32 @@ Approves a verified pending learner and activates the account. Returns the
 learner profile and an empty `enrolled_courses` array. Returns `400` if the
 learner has not verified their email, and `404` if the learner is not pending
 approval.
+
+### `GET /api/dashboard/admin/accounts/` 🔒 — Admin only
+Returns a paginated list (25 per page by default; `page_size` capped at 100)
+of learner and instructor accounts. Optional query parameters: `search` (email,
+username, first name, last name), `role` (`student` or `instructor`),
+`email_verified` (`true` or `false`), and `status`
+(`pending_email_verification`, `pending_admin_approval`, `suspended`, or
+`active`).
+
+### `GET /api/dashboard/admin/accounts/{id}/` 🔒 — Admin only
+Returns the account details, explicit email verification method, verification
+time, verifier (when applicable), separate account status, and recent
+verification/approval audit events.
+
+### `POST /api/dashboard/admin/accounts/{id}/verify-email/` 🔒 — Admin only
+Administratively verifies an eligible learner or instructor email. Records
+`email_verification_method=admin_verified`, the acting administrator, timestamp,
+and an audit event. This is distinct from an email challenge and does not
+approve or activate the account. Repeating the operation returns `409`.
+
+### `POST /api/dashboard/admin/accounts/{id}/approve/` 🔒 — Admin only
+Approves and activates a verified pending learner or instructor registration.
+Email verification remains a separate requirement; the endpoint returns `400`
+for an unverified address, `404` for a missing/non-learner/non-instructor
+account, and `409` if the account is already approved. Successful approvals
+are recorded in the account audit history.
 
 ---
 

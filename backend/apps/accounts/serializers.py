@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError, transaction
 from hashlib import sha256
 from rest_framework import serializers
 
@@ -9,18 +10,21 @@ User = get_user_model()
 
 class RegisterSerializer(serializers.ModelSerializer):
     """
-    Public self-registration. Deliberately does NOT expose `role` —
-    anyone POSTing here becomes a student, full stop. Instructor and
-    admin accounts are created through Django admin (/admin/) by
-    someone who already has admin access, not through this open
-    endpoint. (Earlier testing caught this: without this restriction,
-    anyone could register with role=admin in the request body.)
+    Public registration permits learner or instructor requests only.
+    Both roles remain inactive until email verification and admin approval;
+    privileged roles are never accepted from this endpoint.
     """
     password = serializers.CharField(write_only=True, min_length=8, trim_whitespace=False)
+    role = serializers.ChoiceField(
+        choices=("student", "instructor"),
+        required=False,
+        default="student",
+        write_only=True,
+    )
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "first_name", "last_name", "password"]
+        fields = ["id", "username", "email", "first_name", "last_name", "password", "role"]
 
     def validate_email(self, value):
         email = value.strip().lower()
@@ -50,16 +54,27 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         password = validated_data.pop("password")
-        user = User(
-            **validated_data,
-            role="student",
-            email_verified=False,
-            is_approved=False,
-            is_active=False,
-        )
-        user.set_password(password)
-        user.save()
-        return user
+        role = validated_data.pop("role", "student")
+        try:
+            with transaction.atomic():
+                return User.objects.create_user(
+                    **validated_data,
+                    password=password,
+                    role=role,
+                    email_verified=False,
+                    is_approved=False,
+                    is_active=False,
+                )
+        except IntegrityError as exc:
+            if User.objects.filter(email__iexact=validated_data["email"]).exists():
+                raise serializers.ValidationError(
+                    {"email": "An account with this email already exists."}
+                ) from exc
+            if User.objects.filter(username__iexact=validated_data["username"]).exists():
+                raise serializers.ValidationError(
+                    {"username": "That username is already taken."}
+                ) from exc
+            raise
 
 
 class EmailActionSerializer(serializers.Serializer):
@@ -72,6 +87,10 @@ class EmailActionSerializer(serializers.Serializer):
 class ExternalProviderLoginSerializer(serializers.Serializer):
     credential = serializers.CharField(max_length=8192, trim_whitespace=True)
     nonce = serializers.CharField(max_length=128, trim_whitespace=True)
+    contact_email = serializers.EmailField(required=False, allow_blank=False)
+
+    def validate_contact_email(self, value):
+        return value.strip().lower()
 
 
 class DetailResponseSerializer(serializers.Serializer):

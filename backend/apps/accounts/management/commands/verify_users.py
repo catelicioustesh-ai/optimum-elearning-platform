@@ -13,6 +13,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
+from apps.accounts.models import AccountAuditEvent, EmailVerificationMethod
 
 
 class Command(BaseCommand):
@@ -44,5 +46,21 @@ class Command(BaseCommand):
                 raise CommandError("; ".join(exc.messages))
             users[0].set_password(pw)
             users[0].save()
-        updated = User.objects.filter(pk__in=[u.pk for u in users], email_verified=False).update(email_verified=True)
+        pending = [user for user in users if not user.email_verified]
+        verified_at = timezone.now()
+        User.objects.filter(pk__in=[user.pk for user in pending]).update(
+            email_verified=True,
+            email_verification_method=EmailVerificationMethod.OPERATOR,
+            email_verified_at=verified_at,
+            email_verified_by=None,
+        )
+        AccountAuditEvent.objects.bulk_create([
+            AccountAuditEvent(
+                actor=None,
+                target=user,
+                action=AccountAuditEvent.Action.EMAIL_OPERATOR_OVERRIDE,
+            )
+            for user in pending
+        ])
+        updated = len(pending)
         self.stdout.write(self.style.SUCCESS(f"{len(users)} account(s) matched, {updated} newly verified."))

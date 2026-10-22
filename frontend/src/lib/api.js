@@ -259,10 +259,14 @@ export const api = {
 
   socialLoginNonce: () => request('/auth/social/nonce/', { auth: false }),
 
-  socialLogin: async (provider, credential, nonce) => {
+  socialLogin: async (provider, credential, nonce, contactEmail) => {
     const result = await request(`/auth/${provider}/`, {
       method: 'POST',
-      body: { credential, nonce },
+      body: {
+        credential,
+        nonce,
+        ...(contactEmail ? { contact_email: contactEmail } : {}),
+      },
       auth: false,
     })
     if (result?.csrfToken) csrfToken = result.csrfToken

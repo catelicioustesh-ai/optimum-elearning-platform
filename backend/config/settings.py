@@ -25,6 +25,9 @@ SECRET_KEY = os.environ.get(
     "DJANGO_SECRET_KEY",
     "dev-only-change-this-in-production",
 )
+EMAIL_VERIFICATION_RESEND_COOLDOWN = int(
+    os.environ.get("EMAIL_VERIFICATION_RESEND_COOLDOWN", "300")
+)
 
 DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "").strip()
@@ -277,6 +280,7 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "auth": "10/minute",
         "password_reset": "5/hour",
+        "email_resend": "5/hour",
         "code_run": "30/minute",
         "upload": "30/hour",
         "video_progress": "120/minute",

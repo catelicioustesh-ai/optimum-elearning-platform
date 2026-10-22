@@ -5,7 +5,7 @@ import PasswordChecklist from '../components/PasswordChecklist.jsx'
 import { checkPassword } from '../lib/passwordRules.js'
 import { Helmet } from 'react-helmet-async'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowRight, Check, ChevronDown, Mail, ShieldCheck, Sparkles, User } from 'lucide-react'
+import { ArrowRight, Check, Mail, Sparkles, User } from 'lucide-react'
 import { api } from '../lib/api.js'
 import AuthBrand from '../components/AuthBrand.jsx'
 
@@ -13,11 +13,11 @@ const SITE_URL = window.location.origin
 
 export default function Register() {
   const [form, setForm] = useState({
-    role: 'student',
     username: '',
     email: '',
     first_name: '',
     last_name: '',
+    role: 'student',
     password: '',
     confirmPassword: '',
   })
@@ -32,10 +32,6 @@ export default function Register() {
   async function handleSubmit(event) {
     event.preventDefault()
     setError('')
-    if (form.role !== 'student') {
-      setError(`${roleLabel(form.role)} accounts are created by an administrator. Please contact your administrator for access.`)
-      return
-    }
     if (!checkPassword(form.password).valid) {
       setError('Your password does not meet all the requirements listed below the password box.')
       return
@@ -46,14 +42,22 @@ export default function Register() {
     }
     setLoading(true)
     try {
-      await api.register({
+      const result = await api.register({
         username: form.username,
         email: form.email,
         first_name: form.first_name,
         last_name: form.last_name,
+        role: form.role,
         password: form.password,
       })
-      navigate('/login', { state: { registered: true } })
+      navigate('/verify-email', {
+        state: {
+          registered: true,
+          email: form.email.trim().toLowerCase(),
+          accountRole: form.role,
+          verificationEmailSent: result.verification_email_sent,
+        },
+      })
     } catch (err) {
       setError(err.message || 'Unable to create your account.')
     } finally {
@@ -62,7 +66,7 @@ export default function Register() {
   }
 
   return (
-    <div className="min-h-screen bg-surface-muted text-text-primary" data-role="student">
+    <div className="min-h-screen bg-surface-muted text-text-primary" data-role={form.role}>
       <Helmet>
         <title>Create account — Optimum ERP LMS</title>
         <link rel="canonical" href={`${SITE_URL}/register`} />
@@ -79,7 +83,7 @@ export default function Register() {
                 Start learning
               </div>
               <p className="mt-6 text-3xl font-black leading-tight tracking-tighter text-white">
-                Build skills one verified step at a time.
+                Learn or teach with a verified account.
               </p>
               <div className="mt-8 space-y-4 text-sm text-white">
                 {['Start with the first module', 'Practice in real coding labs', 'See feedback as soon as you submit'].map((item) => (
@@ -94,8 +98,8 @@ export default function Register() {
             </div>
 
             <div className="auth-feature mt-10 rounded-2xl p-4 text-sm">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white">Why students join</div>
-              <p className="mt-2 leading-6 text-white">Structured learning paths, hands-on labs, and progress tracking designed for real momentum.</p>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white">A place to grow</div>
+              <p className="mt-2 leading-6 text-white">Join the platform as a learner or instructor.</p>
             </div>
           </div>
 
@@ -111,38 +115,11 @@ export default function Register() {
               </div>
 
               <form className="space-y-4" onSubmit={handleSubmit}>
-                <div className="flex items-start gap-3 rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm text-blue-950">
-                  <ShieldCheck size={18} className="mt-0.5 shrink-0 text-blue-700" aria-hidden="true" />
-                  <p>New learner accounts are reviewed by an administrator. Verify your email while you wait for approval.</p>
-                </div>
                 {error && (
                   <div className="auth-danger rounded-xl px-4 py-3 text-sm">
                     {error}
                   </div>
                 )}
-
-                <div>
-                  <label htmlFor="role" className="mb-1.5 block text-sm font-medium text-text-primary">
-                    Create account as
-                  </label>
-                  <div className="relative">
-                    <select
-                      id="role"
-                      name="role"
-                      value={form.role}
-                      onChange={updateField}
-                      className="w-full appearance-none rounded-xl border border-border bg-surface-muted px-3 py-2.5 pr-10 text-sm text-text-primary outline-none transition focus:border-primary focus:bg-surface focus:ring-4 focus:ring-blue-100"
-                    >
-                      <option value="student">Student</option>
-                      <option value="instructor">Instructor</option>
-                      <option value="admin">Administrator</option>
-                    </select>
-                    <ChevronDown size={18} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-secondary" />
-                  </div>
-                  {form.role !== 'student' && (
-                    <p className="mt-1.5 text-xs text-text-secondary">Staff accounts are created by an administrator.</p>
-                  )}
-                </div>
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="First name" name="first_name" value={form.first_name} onChange={updateField} icon={User} />
@@ -151,6 +128,19 @@ export default function Register() {
 
                 <Field label="Username" name="username" value={form.username} onChange={updateField} icon={User} required />
                 <Field label="Email" name="email" type="email" value={form.email} onChange={updateField} icon={Mail} required />
+                <div>
+                  <label htmlFor="role" className="mb-1.5 block text-sm font-medium text-text-primary">I want to</label>
+                  <select
+                    id="role"
+                    name="role"
+                    value={form.role}
+                    onChange={updateField}
+                    className="w-full rounded-xl border border-border bg-surface-muted px-3 py-2.5 text-sm text-text-primary outline-none focus:border-primary focus:bg-surface focus:ring-4 focus:ring-blue-100"
+                  >
+                    <option value="student">Learn as a student</option>
+                    <option value="instructor">Teach as an instructor</option>
+                  </select>
+                </div>
                 <div>
                   <PasswordInput id="password" label="Password" labelClassName="mb-0 block text-sm font-medium text-text-primary" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} autoComplete="new-password" describedBy="pw-rules" />
                   <PasswordChecklist id="pw-rules" password={form.password} />
@@ -164,7 +154,7 @@ export default function Register() {
 
                 <button
                   type="submit"
-                  disabled={loading || form.role !== 'student'}
+                  disabled={loading}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {loading ? 'Creating account…' : 'Create account'}
@@ -184,10 +174,6 @@ export default function Register() {
       </div>
     </div>
   )
-}
-
-function roleLabel(role) {
-  return { student: 'Student', instructor: 'Instructor', admin: 'Administrator' }[role] || 'Staff'
 }
 
 function Field({ label, name, value, onChange, icon: Icon, type = 'text', required = false, minLength }) {

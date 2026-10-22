@@ -11,6 +11,7 @@ import {
   ExternalLink,
   Gauge,
   LayoutDashboard,
+  UserCheck,
   Users,
 } from 'lucide-react'
 
@@ -29,6 +30,7 @@ const navItems = [
   { to: '/dashboard/admin', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/dashboard/instructor', label: 'Courses & content', icon: BookOpen },
   { to: '/dashboard/instructor/students', label: 'Students', icon: Users },
+  { to: '/dashboard/admin/accounts', label: 'Account verification', icon: UserCheck },
 ]
 
 const PRIORITY_TONE = { high: 'r', medium: 'y', low: 'default' }
@@ -45,6 +47,10 @@ export default function AdminDashboard() {
   const [approvingLearnerId, setApprovingLearnerId] = useState(null)
 
   async function approveLearner(learner) {
+    const name = learner.full_name || learner.username
+    if (!window.confirm(`Approve ${name} and activate this learner account? Email verification must already be complete.`)) {
+      return
+    }
     setApprovingLearnerId(learner.id)
     try {
       const approvedLearner = await api.post(`/dashboard/admin/learner-approvals/${learner.id}/approve/`, {})
@@ -58,7 +64,7 @@ export default function AdminDashboard() {
           registered_students: [...current.registered_students, approvedLearner],
         }
       })
-      toast(`${learner.full_name || learner.username} is approved and can now sign in.`, 'success')
+      toast(`${name} is approved and can now sign in.`, 'success')
     } catch (err) {
       toast(err.message || 'The learner could not be approved. Please try again.', 'error')
     } finally {

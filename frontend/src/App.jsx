@@ -32,6 +32,7 @@ const InstructorContent = lazy(() => import('./pages/InstructorContent.jsx'))
 const InstructorSubmissions = lazy(() => import('./pages/InstructorSubmissions.jsx'))
 const InstructorStudents = lazy(() => import('./pages/InstructorStudents.jsx'))
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard.jsx'))
+const AdminAccounts = lazy(() => import('./pages/AdminAccounts.jsx'))
 
 function NotFound() {
   return (
@@ -251,6 +252,14 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/admin/accounts"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminAccounts />
                 </ProtectedRoute>
               }
             />

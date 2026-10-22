@@ -48,7 +48,7 @@ export default function Landing() {
 
           <div className="flex items-center gap-3 text-sm font-medium text-slate-600">
             <Link to="/register" className="hidden rounded-full px-4 py-2 transition hover:bg-slate-100 hover:text-slate-900 sm:inline-flex">
-              Create learner account
+              Create an account
             </Link>
             <Link
               to="/login"
@@ -86,7 +86,7 @@ export default function Landing() {
                   <ArrowRight size={17} />
                 </Link>
                 <Link to="/register" className="text-sm font-semibold text-slate-700 transition hover:text-slate-900">
-                  New to Optimum? Create a learner account
+                  New to Optimum? Register as a learner or instructor
                 </Link>
               </div>
 
