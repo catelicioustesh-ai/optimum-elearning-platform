@@ -6,10 +6,28 @@ server-enforced module progression.
 
 ```
 optimum-erp-lms/
-├── backend/          Django + DRF API (see backend/README.md)
-├── frontend/          React + Vite + Tailwind (see frontend/README.md)
-└── DATABASE_SETUP.md  SQL Server setup and migration guidance
+├── backend/          Django + DRF API, domain apps, and integrated risk engine
+├── frontend/         React + Vite + Tailwind web app
+├── sandbox/          Isolated code execution service
+├── risk-engine/      Risk model development pipeline and training assets
+├── docs/             API reference, architecture, and frontend handoff
+└── DATABASE_SETUP.md SQL Server setup and migration guidance
 ```
+
+## Platform features
+
+- Student and instructor registration, email verification, and admin approval.
+- Email/password login, with optional Google, Microsoft, and Apple sign-in
+  when provider credentials and origins are configured.
+- Role-specific student, instructor, and admin workspaces. Admin account
+  review includes email verification, approval, suspension, and reactivation.
+- Courses, lessons, quizzes, submissions, grading, progress, and
+  server-enforced module unlocking.
+- Student community discussions, instructor dashboards, allocation
+  recommendations, and early-warning risk insights.
+- Isolated code execution for Python, JavaScript, C, C++, and Java; HTML
+  activities are preview-only. Code execution requires the separate sandbox
+  service and is subject to its resource limits.
 
 ## Quick start (local development)
 
@@ -125,11 +143,17 @@ The backend uses Microsoft SQL Server in every environment. Install ODBC Driver 
 - Module locking (a student can't access content or submit work for a
   module they haven't unlocked) is enforced **server-side**, verified by
   testing direct API access — see `backend/README.md` for what was tested.
-- Public registration always creates a `student` account; instructor/admin
-  accounts are created through Django admin by an existing admin.
+- Public registration supports learner and instructor roles. New accounts
+  must verify their email and receive administrator approval before sign-in.
+  Admin/staff accounts are provisioned through Django admin by a trusted
+  administrator.
 - Login/register are rate-limited (10/minute) against brute-force attempts.
 - HTTPS, HSTS, and secure cookies auto-enable in production
   (`DJANGO_DEBUG=False`) — see `backend/config/settings.py`.
+
+## Project credit
+
+Project credit: **Brian Otieno Obonyo** and **attachees sep-dec 2026 cohort**
 
 ## Further reading
 

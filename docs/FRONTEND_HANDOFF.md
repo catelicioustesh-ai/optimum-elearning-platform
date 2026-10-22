@@ -75,9 +75,10 @@ Open the Vite address printed by the frontend command (normally
 `http://localhost:5173` or `http://127.0.0.1:5173`). Both addresses proxy API
 requests to Django at `http://127.0.0.1:8000/api/`; the admin is available at
 `/admin/` through the same frontend origin. Development email is printed in
-the backend terminal. The `createsuperuser` account has the platform admin
-role; use Django admin to create instructor accounts. Public registration
-creates student accounts only.
+the backend terminal. The `createsuperuser` account has the platform admin role. Learners and
+instructors can register at `/register`; they must verify email and receive
+administrator approval before sign-in. Admin/staff accounts are provisioned
+through Django admin.
 
 If the frontend changes API payload handling or shared API-client code, rerun
 the local checks from `frontend/`:
@@ -111,12 +112,12 @@ own local secrets and database credentials.
 4. `POST /auth/logout/` clears the authentication cookies. `GET /auth/me/`
    returns the current user.
 
-Roles are `student`, `instructor`, and `admin`. Public registration always
-creates an inactive, unapproved student. The student must verify their email
-before an administrator can approve the account. Instructor/admin accounts are
-provisioned through Django admin. Route by the role in the login profile;
-backend permissions are authoritative, so expect `401`, `403`, or `404` even
-if the UI has already hidden a control.
+Roles are `student`, `instructor`, and `admin`. Public registration accepts
+student or instructor and creates an inactive, unapproved account. The user
+must verify their email before an administrator can approve it. Admin/staff
+accounts are provisioned through Django admin. Route by the role in the login
+profile; backend permissions are authoritative, so expect `401`, `403`, or
+`404` even if the UI has already hidden a control.
 ## API route inventory
 
 Paths are relative to `/api`. `{id}` is a numeric resource ID unless noted.
@@ -127,7 +128,7 @@ to courses that instructor owns.
 
 | Method | Path | Access |
 |---|---|---|
-| POST | `/auth/register/` | Public; creates a student |
+| POST | `/auth/register/` | Public; creates a learner or instructor pending verification and approval |
 | POST | `/auth/login/` | Public |
 | POST | `/auth/login/refresh/` | Public; refresh cookie |
 | POST | `/auth/logout/` | Public; clears session cookies |
@@ -214,6 +215,11 @@ on the sandbox service and can return `503` when that service is unavailable.
 | GET | `/dashboard/admin/` | 🔒; admin |
 | GET | `/dashboard/admin/learner-approvals/` | 🔒; admin |
 | POST | `/dashboard/admin/learner-approvals/{id}/approve/` | 🔒; admin; verified learners only |
+| GET | `/dashboard/admin/accounts/` | 🔒; admin; learner/instructor account review |
+| GET | `/dashboard/admin/accounts/{id}/` | 🔒; admin; account details and audit history |
+| POST | `/dashboard/admin/accounts/{id}/verify-email/` | 🔒; admin |
+| POST | `/dashboard/admin/accounts/{id}/approve/` | 🔒; admin; verified account |
+| POST | `/dashboard/admin/accounts/{id}/status/` | 🔒; admin; suspend/reactivate approved account |
 | GET | `/engagement/me/` | 🔒; student |
 | GET | `/engagement/notifications/` | 🔒; caller's notifications |
 | PATCH | `/engagement/notifications/{id}/read/` | 🔒; recipient |

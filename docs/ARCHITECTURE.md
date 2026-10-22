@@ -72,6 +72,7 @@ backend/apps/
 ├── enrollment/    Student ↔ Course
 ├── progress/      Module-locking logic (services.py) + ActivityCompletion
 ├── engagement/    Study-day streaks, achievement awards, notifications, certificates
+├── community/     Course discussions and student bookmarks
 ├── submissions/   Lab/assignment submissions, attempt limits, grading
 ├── quizzes/       Quiz, Question, auto-grading
 ├── execution/     Authenticated proxy to the isolated sandbox service — no models
@@ -143,12 +144,10 @@ engagement does not introduce a competing completion rule.
 - **Permission classes** (`apps/accounts/permissions.py`) are shared
   across every app — `ReadOnlyOrInstructorAdmin` is the most common
   pattern: anyone authenticated can read, only instructor/admin can write.
-- **Public registration always creates a student** — role escalation is
-  only possible through Django admin, by someone who already has admin
-  access. This was a real bug caught during testing (see
-  `backend/README.md`), not a hypothetical.
-- **New students remain inactive until email verification and administrator
-  approval.** Existing accounts remain approved by default.
+- **Public registration accepts students and instructors**, but rejects
+  privileged roles such as `admin`. New registrations remain inactive until
+  email verification and administrator approval. Admin/staff accounts are
+  provisioned through Django admin by a trusted administrator.
 
 ## Frontend structure
 

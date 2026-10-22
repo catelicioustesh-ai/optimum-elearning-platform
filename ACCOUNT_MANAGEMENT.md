@@ -55,7 +55,10 @@ steps: **Verify email** records mailbox verification (including whether an
 administrator performed it), and **Approve** enables the account. The admin
 account-review page at `/dashboard/admin/accounts` lists both roles, with
 search, status filters, verification history, email verification and approval
-actions.
+actions. Administrators can also suspend or reactivate approved accounts;
+these changes disable or restore sign-in and are recorded in the account
+audit history. Suspended accounts can be found with the **Suspended** status
+filter.
 
 Google, Microsoft and Apple social sign-in are available when configured in
 both backend and frontend environments. Set the matching client IDs in

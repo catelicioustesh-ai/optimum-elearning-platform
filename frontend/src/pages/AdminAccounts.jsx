@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
 import {
   BookOpen,
+  Ban,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -123,6 +124,29 @@ export default function AdminAccounts() {
       if (selected?.id === account.id) await showAccount(account.id)
     } catch (err) {
       toast(err.message || 'Unable to approve this account.', 'error')
+    } finally {
+      setActionId(null)
+    }
+  }
+
+  async function setAccountActive(account, isActive) {
+    const name = account.full_name || account.username
+    const action = isActive ? 'reactivate' : 'suspend'
+    const confirmation = isActive
+      ? `Reactivate ${name}'s account? They will be able to sign in again.`
+      : `Suspend ${name}'s account? They will no longer be able to sign in.`
+    if (!window.confirm(confirmation)) return
+
+    setActionId(account.id)
+    try {
+      const updated = await api.post(`/dashboard/admin/accounts/${account.id}/status/`, {
+        is_active: isActive,
+      })
+      toast(`${name}'s account was ${isActive ? 'reactivated' : 'suspended'}.`, 'success')
+      setReloadKey((current) => current + 1)
+      if (selected?.id === account.id) setSelected(updated)
+    } catch (err) {
+      toast(err.message || `Unable to ${action} this account.`, 'error')
     } finally {
       setActionId(null)
     }
@@ -257,6 +281,24 @@ export default function AdminAccounts() {
                               {actionId === account.id ? 'Approving…' : 'Approve'}
                             </button>
                           )}
+                          {account.is_approved && (
+                            <button
+                              type="button"
+                              disabled={actionId !== null}
+                              onClick={() => void setAccountActive(account, !account.is_active)}
+                              aria-label={`${account.is_active ? 'Suspend' : 'Reactivate'} ${account.role} ${account.full_name || account.username}`}
+                              className={`inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                                account.is_active
+                                  ? 'bg-red-600 text-white hover:bg-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600'
+                                  : 'bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600'
+                              }`}
+                            >
+                              {account.is_active ? <Ban size={14} aria-hidden="true" /> : <UserCheck size={14} aria-hidden="true" />}
+                              {actionId === account.id
+                                ? (account.is_active ? 'Suspending…' : 'Reactivating…')
+                                : (account.is_active ? 'Suspend' : 'Reactivate')}
+                            </button>
+                          )}
                           </div>
                         </td>
                       </tr>
@@ -309,6 +351,34 @@ export default function AdminAccounts() {
                   <button type="button" disabled={actionId !== null} onClick={() => void approveAccount(selected)} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground hover:bg-primary-hover disabled:opacity-50">
                     <UserCheck size={16} /> Approve {selected.role} registration
                   </button>
+                )}
+                {selected.email_verified && selected.is_approved && (
+                  <section className="space-y-3 rounded-xl border border-border bg-surface-muted p-4" aria-labelledby="account-access-heading">
+                    <div>
+                      <h3 id="account-access-heading" className="text-sm font-semibold text-text-primary">Account access</h3>
+                      <p className="mt-1 text-xs text-text-secondary">
+                        {selected.is_active
+                          ? 'This account can currently sign in.'
+                          : 'This account is suspended and cannot sign in.'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={actionId !== null}
+                      onClick={() => void setAccountActive(selected, !selected.is_active)}
+                      aria-label={`${selected.is_active ? 'Suspend' : 'Reactivate'} ${selected.role} ${selected.full_name || selected.username}`}
+                      className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                        selected.is_active
+                          ? 'bg-red-600 text-white hover:bg-red-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-600'
+                          : 'bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600'
+                      }`}
+                    >
+                      {selected.is_active ? <Ban size={16} aria-hidden="true" /> : <UserCheck size={16} aria-hidden="true" />}
+                      {actionId === selected.id
+                        ? (selected.is_active ? 'Suspending…' : 'Reactivating…')
+                        : (selected.is_active ? 'Suspend account' : 'Reactivate account')}
+                    </button>
+                  </section>
                 )}
                 <div>
                   <h3 className="text-sm font-semibold text-text-primary">Verification and approval history</h3>

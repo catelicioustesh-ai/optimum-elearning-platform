@@ -2,9 +2,10 @@
 
 Standalone ML pipeline that scores a student's likelihood of falling
 behind in the next 2 weeks, from their trailing weekly activity —
-implements the "Student Performance Intelligence Engine" spec. Built and
-tested independently of the Django backend; see `INTEGRATION.md` for how
-to wire it in.
+implements the "Student Performance Intelligence Engine" spec. The pipeline
+is integrated into the Django application: runtime scoring lives in
+`backend/apps/risk/`, using the model package in `backend/risk_engine/`.
+See `INTEGRATION.md` for the feature contract and model limitations.
 
 ## What it does
 

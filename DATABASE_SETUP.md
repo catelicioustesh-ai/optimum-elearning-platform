@@ -2,6 +2,15 @@
 
 Microsoft SQL Server is the only supported database for development and production. Django migrations are provider-neutral and use the custom `config.mssql` backend.
 
+> **Current configuration limitation:** `backend/config/settings.py` currently
+> forces `Trusted_Connection=yes` and leaves the database username, password,
+> and port blank. Although the example environment files and deployment
+> guides list SQL-auth settings, the current connection does not consume those
+> values. Native Windows development needs a trusted SQL Server identity.
+> Docker/Linux and SQL-auth production deployments are not ready until the
+> Django database configuration is updated to support the intended
+> authentication mode.
+
 ## Local setup
 
 1. Install SQL Server or use an existing reachable SQL Server instance.

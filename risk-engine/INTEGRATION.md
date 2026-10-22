@@ -1,5 +1,13 @@
 # Integrating into Optimum LMS's Django backend
 
+**Integration status:** the backend integration described in sections 1–4
+below is implemented. Weekly snapshots are stored as
+`apps.dashboards.PerformanceSnapshot` and populated by
+`python manage.py compute_snapshots`; scoring is provided by `apps.risk` at
+`GET /api/risk/cohort/` and
+`GET /api/risk/student/<student_id>/course/<course_id>/`. The examples below
+document the data and service contracts; they are not outstanding setup steps.
+
 This package is deliberately backend-agnostic — it's plain Python, not a
 web service. The cleanest integration is **import it directly into Django**
 rather than running it as a separate microservice, since you already have

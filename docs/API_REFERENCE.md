@@ -758,6 +758,19 @@ for an unverified address, `404` for a missing/non-learner/non-instructor
 account, and `409` if the account is already approved. Successful approvals
 are recorded in the account audit history.
 
+### `POST /api/dashboard/admin/accounts/{id}/status/` 🔒 — Admin only
+Set the active state of an approved learner or instructor account:
+
+```json
+{ "is_active": false }
+```
+
+Use `false` to suspend and `true` to reactivate. The account must have a
+verified email and already be approved; pending accounts return `400`.
+Requesting the current state returns `409`. Success returns the updated
+account record and records `account_suspended` or `account_reactivated` in
+the account audit history.
+
 ---
 
 ## Adaptive sequencing and instructor risk
