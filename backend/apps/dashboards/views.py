@@ -632,6 +632,50 @@ class AdminApproveAccountView(APIView):
         return Response(admin_account_data(account))
 
 
+class AdminAccountStatusSerializer(serializers.Serializer):
+    is_active = serializers.BooleanField()
+
+
+class AdminAccountStatusView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    def post(self, request, account_id):
+        serializer = AdminAccountStatusSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        is_active = serializer.validated_data["is_active"]
+
+        with transaction.atomic():
+            account = get_object_or_404(
+                User.objects.select_for_update(),
+                pk=account_id,
+                role__in=("student", "instructor"),
+            )
+            if not account.email_verified or not account.is_approved:
+                return Response(
+                    {"detail": "Only approved accounts with verified email can be suspended or reactivated."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if account.is_active == is_active:
+                return Response(
+                    {"detail": "This account already has the requested status."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            account.is_active = is_active
+            account.save(update_fields=["is_active"])
+            AccountAuditEvent.objects.create(
+                actor=request.user,
+                target=account,
+                action=(
+                    AccountAuditEvent.Action.ACCOUNT_REACTIVATED
+                    if is_active
+                    else AccountAuditEvent.Action.ACCOUNT_SUSPENDED
+                ),
+            )
+
+        return Response(admin_account_data(account))
+
+
 class ApproveLearnerView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsAdmin]
 

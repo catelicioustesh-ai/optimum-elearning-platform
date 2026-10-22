@@ -6,6 +6,7 @@ from .views import (
     AdminApproveAccountView,
     AdminAccountDetailView,
     AdminAccountListView,
+    AdminAccountStatusView,
     AdminVerifyAccountEmailView,
     PendingLearnerApprovalsView,
     InstructorDashboardView,
@@ -22,4 +23,5 @@ urlpatterns = [
     path("admin/accounts/<int:account_id>/", AdminAccountDetailView.as_view(), name="dashboard-admin-account-detail"),
     path("admin/accounts/<int:account_id>/approve/", AdminApproveAccountView.as_view(), name="dashboard-admin-account-approve"),
     path("admin/accounts/<int:account_id>/verify-email/", AdminVerifyAccountEmailView.as_view(), name="dashboard-admin-account-verify-email"),
+    path("admin/accounts/<int:account_id>/status/", AdminAccountStatusView.as_view(), name="dashboard-admin-account-status"),
 ]

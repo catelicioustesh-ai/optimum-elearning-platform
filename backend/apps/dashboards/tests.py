@@ -391,6 +391,79 @@ class AdminDashboardStudentListTests(TestCase):
         self.assertEqual(detail.data["email_verification_method"], "admin_verified")
         self.assertEqual(detail.data["verification_history"][0]["actor"], admin.email)
 
+    def test_admin_can_suspend_and_reactivate_a_learner_with_audit_history(self):
+        admin = User.objects.create_user(
+            username="status-admin",
+            email="status-admin@example.com",
+            password="test-password",
+            role="admin",
+        )
+        learner = User.objects.create_user(
+            username="status-learner",
+            email="status-learner@example.com",
+            password="test-password",
+            role="student",
+            email_verified=True,
+            is_approved=True,
+            is_active=True,
+        )
+        client = APIClient()
+        client.force_authenticate(user=admin)
+        endpoint = f"/api/dashboard/admin/accounts/{learner.id}/status/"
+
+        suspended = client.post(endpoint, {"is_active": False}, format="json")
+        self.assertEqual(suspended.status_code, 200, suspended.data)
+        self.assertEqual(suspended.data["status"], "suspended")
+        learner.refresh_from_db()
+        self.assertFalse(learner.is_active)
+        self.assertTrue(learner.is_approved)
+        self.assertTrue(learner.email_verified)
+        self.assertEqual(
+            AccountAuditEvent.objects.get(target=learner).action,
+            AccountAuditEvent.Action.ACCOUNT_SUSPENDED,
+        )
+
+        reactivated = client.post(endpoint, {"is_active": True}, format="json")
+        self.assertEqual(reactivated.status_code, 200, reactivated.data)
+        self.assertEqual(reactivated.data["status"], "active")
+        learner.refresh_from_db()
+        self.assertTrue(learner.is_active)
+        self.assertEqual(
+            list(learner.account_audit_events.values_list("action", flat=True)),
+            [
+                AccountAuditEvent.Action.ACCOUNT_REACTIVATED,
+                AccountAuditEvent.Action.ACCOUNT_SUSPENDED,
+            ],
+        )
+
+    def test_account_status_action_rejects_pending_accounts_and_invalid_payloads(self):
+        admin = User.objects.create_user(
+            username="status-validation-admin",
+            email="status-validation-admin@example.com",
+            password="test-password",
+            role="admin",
+        )
+        pending = User.objects.create_user(
+            username="status-pending-learner",
+            email="status-pending-learner@example.com",
+            password="test-password",
+            role="student",
+            is_approved=False,
+            is_active=False,
+        )
+        client = APIClient()
+        client.force_authenticate(user=admin)
+        endpoint = f"/api/dashboard/admin/accounts/{pending.id}/status/"
+
+        missing_status = client.post(endpoint, {}, format="json")
+        self.assertEqual(missing_status.status_code, 400)
+
+        pending_approval = client.post(endpoint, {"is_active": True}, format="json")
+        self.assertEqual(pending_approval.status_code, 400)
+        pending.refresh_from_db()
+        self.assertFalse(pending.is_active)
+        self.assertFalse(AccountAuditEvent.objects.filter(target=pending).exists())
+
     def test_non_admin_cannot_access_account_management_actions(self):
         learner = User.objects.create_user(
             username="account-viewer",
@@ -429,6 +502,14 @@ class AdminDashboardStudentListTests(TestCase):
                     client.post(
                         f"/api/dashboard/admin/accounts/{target.id}/approve/",
                         {},
+                        format="json",
+                    ).status_code,
+                    403,
+                )
+                self.assertEqual(
+                    client.post(
+                        f"/api/dashboard/admin/accounts/{target.id}/status/",
+                        {"is_active": False},
                         format="json",
                     ).status_code,
                     403,

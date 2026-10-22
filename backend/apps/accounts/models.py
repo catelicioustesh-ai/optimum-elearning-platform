@@ -94,6 +94,8 @@ class AccountAuditEvent(models.Model):
         EMAIL_OPERATOR_OVERRIDE = "email_operator_override", "Email operator override"
         LEARNER_APPROVED = "learner_approved", "Learner approved"
         INSTRUCTOR_APPROVED = "instructor_approved", "Instructor approved"
+        ACCOUNT_SUSPENDED = "account_suspended", "Account suspended"
+        ACCOUNT_REACTIVATED = "account_reactivated", "Account reactivated"
 
     actor = models.ForeignKey(
         User,
