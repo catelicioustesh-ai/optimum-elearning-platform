@@ -2,7 +2,8 @@
 
 Django + Django REST Framework, organized into domain apps: `accounts`,
 `courses`, `enrollment`, `progress`, `submissions`, `quizzes`, `execution`,
-`dashboards`, `engagement`, `risk`, `sequencing`, and `allocation`.
+`dashboards`, `engagement`, `community`, `risk`, `sequencing`, and
+`allocation`.
 
 ## Setup
 
@@ -47,14 +48,27 @@ instructor/admin accounts — see security note below) is at
 
 ## Database
 
-Microsoft SQL Server is the only supported database. Install ODBC Driver 18 and configure `MSSQL_DB_NAME`, `MSSQL_DB_USER`, `MSSQL_DB_PASSWORD`, `MSSQL_DB_HOST`, and `MSSQL_DB_PORT`, then run `python manage.py migrate`. See the root [DATABASE_SETUP.md](../DATABASE_SETUP.md) for certificate, Docker, and existing-data migration guidance.
+Microsoft SQL Server is the only supported runtime database. Install ODBC
+Driver 18. **Configuration limitation:** the current
+`backend/config/settings.py` connection uses `Trusted_Connection=yes` and sets
+the database user, password, and port to empty values. The SQL-auth values
+shown in `.env.example` and the setup guides are not currently used to build
+the database connection. Native Windows development therefore requires a
+trusted SQL Server identity; Docker/Linux and SQL-auth deployments need the
+connection settings fixed before following those deployment instructions.
+See the root [DATABASE_SETUP.md](../DATABASE_SETUP.md) for the documented
+setup and migration guidance.
 
 ## What's implemented and verified
 
 Every endpoint below was tested against a running server, not just written:
 
-- **Auth**: register (student-only, see security note), login (JWT, role
+- **Auth**: register (learner or instructor; accounts require email
+  verification and administrator approval), login (JWT, role
   embedded in token), token refresh, `/me/`
+- **Social sign-in**: Google, Microsoft, and Apple ID-token flows with
+  provider verification and nonce checks; requires provider credentials and
+  matching provider-console origins/redirect URIs to work live.
 - **Courses**: full CRUD for Course → Module → Lesson → Activity,
   instructor-only writes, verified a student gets 403 trying to write
 - **Enrollment**: students self-enroll and may unenroll from their own courses;
@@ -72,6 +86,15 @@ Every endpoint below was tested against a running server, not just written:
 - **Dashboards**: all three (student/instructor/admin) return real
   aggregated data from a real multi-step scenario, and cross-role access
   is blocked (student → admin dashboard = 403)
+- **Admin account review**: admins can search and filter learner/instructor
+  accounts, verify email, approve registrations, and suspend/reactivate
+  approved accounts. Each admin action is recorded in account audit history.
+- **Community and allocation**: course discussions are scoped to course
+  membership/ownership; admin allocation recommendations summarize instructor
+  load and grading backlog.
+- **Early-warning risk**: instructor/admin risk endpoints use the integrated
+  model and weekly performance snapshots. The model is trained on synthetic
+  labels; treat predictions as prompts for review, not authoritative outcomes.
 
 ## Operational follow-up
 
@@ -87,20 +110,22 @@ Every endpoint below was tested against a running server, not just written:
 - Production requires real `DJANGO_SECRET_KEY`, host, and CORS values; startup fails closed when they are missing.
 - Production requires SQL Server connection values and HTTPS email-link configuration.
 - Refresh tokens rotate and are blacklisted after use; clients should call `/api/auth/logout/` before clearing a session.
-- Public signup creates students only. Administrators can create instructor and admin accounts at `/admin/`, where the platform role is explicitly selectable.
+- Public signup supports learner and instructor accounts. They remain unable
+  to sign in until their email is verified and an administrator approves them.
+- Administrators can provision admin/staff accounts at `/admin/`, where the
+  platform role is explicitly selectable.
 - The first account created with `createsuperuser` is automatically assigned the `admin` platform role.
 
-## Important security fix made during testing
+## Registration role security
 
 The original `RegisterSerializer` accepted a `role` field in the request
 body — meaning anyone could `POST /api/auth/register/` with
 `"role": "admin"` and get an admin account. **This was caught and fixed**:
-public registration now always creates a `student` account regardless of
-what's sent. Instructor and admin accounts must be created through
-`/admin/` by someone who already has admin access. If you ever add a
-"create instructor" flow to the product later, make sure it's gated behind
-an existing admin's session — don't reopen this field on the public
-endpoint.
+public registration now allows learner and instructor roles but rejects
+privileged roles such as `admin`. Those registrations stay inactive until
+email verification and administrator approval are complete. Admin/staff
+accounts are provisioned through `/admin/` by an existing administrator.
+Never allow public registration to assign a privileged role.
 
 ## Role-based permission pattern
 
