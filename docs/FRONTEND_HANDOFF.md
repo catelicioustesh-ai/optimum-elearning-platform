@@ -154,7 +154,7 @@ to courses that instructor owns.
 | GET | `/lessons/{id}/video/` | 🔒; authenticated video stream; supports byte ranges |
 | GET, POST | `/activities/` | 🔒; POST instructor/admin |
 | GET, PUT, PATCH, DELETE | `/activities/{id}/` | 🔒; writes owning instructor/admin |
-| GET, POST | `/lesson-attachments/` | 🔒; PDF attachments; POST instructor/admin |
+| GET, POST | `/lesson-attachments/` | 🔒; PDF/ZIP/PowerPoint/OpenDocument files or HTTPS links; POST instructor/admin |
 | GET, PUT, PATCH, DELETE | `/lesson-attachments/{id}/` | 🔒; writes owning instructor/admin |
 | GET | `/lesson-attachments/{id}/download/` | 🔒; authenticated file download |
 | GET, POST | `/enrollments/` | 🔒; POST student self-enrollment |
@@ -166,6 +166,17 @@ grades, quiz attempts, and progress records.
 Student lesson/activity reads are filtered by enrollment and module unlocking.
 Locked content is deliberately not made available by calling a detail URL
 directly. Student module lists may still show locked module titles and order.
+
+Course authoring stores lesson text as Markdown (rendered without accepting
+raw HTML), supports HTTPS YouTube/Vimeo/direct-video links and uploaded videos,
+and serves resource files through the authenticated download endpoint. Course
+publication requires a non-empty title and description, at least one module,
+at least one lesson in every module, and at least one quiz with questions;
+every quiz activity must have questions. Authors can create text/single-choice/
+multiple-choice questionnaires and review student responses; quizzes can be
+designated as the final course assessment. There is no payment processing,
+question bank, true/false-specific question type, or module visibility/
+scheduling workflow yet.
 
 ### Progress, submissions, quizzes, and code execution
 
@@ -183,6 +194,7 @@ directly. Student module lists may still show locked module titles and order.
 | GET, PUT, PATCH, DELETE | `/quizzes/{id}/` | 🔒; writes owning instructor/admin |
 | POST | `/quizzes/build/` | 🔒; owning instructor/admin; creates a quiz and questions |
 | POST | `/quizzes/{quiz_id}/submit/` | 🔒; student; auto-graded |
+| GET, POST | `/questionnaires/{activity_id}/response/` | 🔒; student response or owning instructor/admin review |
 | GET, POST | `/quiz-questions/` | 🔒; instructor/admin only |
 | GET, PUT, PATCH, DELETE | `/quiz-questions/{id}/` | 🔒; owning instructor/admin |
 | GET | `/quiz-attempts/` and `/quiz-attempts/{id}/` | 🔒; read-only, role-scoped |

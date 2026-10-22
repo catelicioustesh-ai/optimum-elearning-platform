@@ -121,7 +121,13 @@ export default function CourseCatalog() {
               <h3 className="font-bold text-slate-900">{course.title}</h3>
               <span className="dg-pill shrink-0">{course.module_count} module{course.module_count === 1 ? '' : 's'}</span>
             </div>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium text-slate-600">
+              {course.category && <span>{course.category}</span>}
+              {course.difficulty && <span className="capitalize">{course.difficulty}</span>}
+              {course.estimated_duration_minutes && <span>{Math.floor(course.estimated_duration_minutes / 60)}h {course.estimated_duration_minutes % 60}m</span>}
+            </div>
             <p className="mt-2 line-clamp-3 flex-1 text-sm leading-6 text-slate-600">{course.description || 'Course overview and learning materials.'}</p>
+            {!!course.tags?.length && <p className="mt-2 text-xs text-slate-500">{course.tags.join(' · ')}</p>}
             <p className="mt-3 text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
               {course.instructor_name || 'Optimum LMS instructor'}
             </p>
