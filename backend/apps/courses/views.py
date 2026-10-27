@@ -93,6 +93,12 @@ class CourseViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         qs = super().get_queryset()
         role = role_of(self.request.user)
+        if self.request.query_params.get("manage") == "true":
+            if role == ADMIN:
+                return qs
+            if role == INSTRUCTOR:
+                return qs.filter(instructor=self.request.user)
+            return qs.none()
         if role == STUDENT:
             return qs.filter(status=Course.Status.PUBLISHED)
         if role != "admin":
@@ -103,10 +109,12 @@ class CourseViewSet(viewsets.ModelViewSet):
         return CourseDetailSerializer if self.action == "retrieve" else CourseSerializer
 
     def perform_create(self, serializer):
-        status_value = self.request.data.get("status", Course.Status.PUBLISHED)
-        if status_value not in Course.Status.values:
-            raise ValidationError({"status": "Use 'draft' or 'published'."})
-        serializer.save(instructor=self.request.user, status=status_value)
+        status_value = self.request.data.get("status", Course.Status.DRAFT)
+        if status_value != Course.Status.DRAFT:
+            raise ValidationError({
+                "status": "New courses start as drafts. Add course content, then use the publish action."
+            })
+        serializer.save(instructor=self.request.user, status=Course.Status.DRAFT)
 
     def perform_update(self, serializer):
         require_teaches(self.request.user, serializer.instance)
@@ -125,22 +133,31 @@ class CourseViewSet(viewsets.ModelViewSet):
         return Response(CourseSerializer(course, context=self.get_serializer_context()).data)
 
     @action(detail=True, methods=["post"])
+    @transaction.atomic
     def publish(self, request, pk=None):
-        course = self.get_object()
+        course = Course.objects.select_for_update().get(pk=self.get_object().pk)
         require_teaches(request.user, course)
+        if not course.title.strip() or not course.description.strip():
+            raise ValidationError({"course": "Add a course title and description before publishing."})
         modules = list(course.modules.prefetch_related("lessons__activities__quiz__questions").order_by("order"))
         if not modules:
             raise ValidationError({"course": "Add at least one module before publishing."})
         empty_modules = [module.title for module in modules if not module.lessons.all()]
         if empty_modules:
             raise ValidationError({"modules": "Every module needs at least one lesson before publishing."})
-        incomplete_quizzes = [
-            activity.title
+        quiz_activities = [
+            activity
             for module in modules
             for lesson in module.lessons.all()
             for activity in lesson.activities.all()
             if activity.activity_type == "quiz"
-            and (not hasattr(activity, "quiz") or not activity.quiz.questions.exists())
+        ]
+        if not quiz_activities:
+            raise ValidationError({"quizzes": "Add at least one quiz with a question before publishing."})
+        incomplete_quizzes = [
+            activity.title
+            for activity in quiz_activities
+            if not hasattr(activity, "quiz") or not activity.quiz.questions.exists()
         ]
         if incomplete_quizzes:
             raise ValidationError({"quizzes": "Add at least one question to each quiz before publishing: " + ", ".join(incomplete_quizzes)})
@@ -372,14 +389,14 @@ class ActivityViewSet(viewsets.ModelViewSet):
 
 class LessonAttachmentViewSet(viewsets.ModelViewSet):
     """
-    PDFs/handouts attached to a lesson (same visibility as the lesson).
+    Downloadable files and external links attached to a lesson (same visibility as the lesson).
     Files are downloaded via GET /lesson-attachments/<id>/download/ — an
     authenticated endpoint — never via a public /media/ URL.
     """
     queryset = LessonAttachment.objects.select_related("lesson__module__course", "uploaded_by")
     serializer_class = LessonAttachmentSerializer
     permission_classes = [ReadOnlyOrInstructorAdmin]
-    parser_classes = [MultiPartParser, FormParser]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -407,8 +424,12 @@ class LessonAttachmentViewSet(viewsets.ModelViewSet):
         attachment = self.get_object()  # goes through get_queryset -> enrollment + locking
         if not attachment.file:
             raise NotFound()
-        response = FileResponse(attachment.file.open("rb"), as_attachment=False,
-                                filename=attachment.file.name.rsplit("/", 1)[-1],
-                                content_type="application/pdf")
+        content_type = mimetypes.guess_type(attachment.file.name)[0] or "application/octet-stream"
+        response = FileResponse(
+            attachment.file.open("rb"),
+            as_attachment=True,
+            filename=attachment.file.name.rsplit("/", 1)[-1],
+            content_type=content_type,
+        )
         response["X-Content-Type-Options"] = "nosniff"
         return response

@@ -353,12 +353,10 @@ export function Hero({ day, title, children, side }) {
 export function Skeleton({ height = 120 }) {
   return (
     <div
+      className="lms-skeleton"
       style={{
         height,
         borderRadius: 12,
-        background: 'linear-gradient(90deg, var(--line), color-mix(in srgb, var(--line) 40%, var(--card)), var(--line))',
-        backgroundSize: '200% 100%',
-        animation: 'dg-skel 1.3s ease-in-out infinite',
       }}
     />
   )

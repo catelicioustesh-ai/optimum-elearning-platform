@@ -5,13 +5,18 @@ Matches brief sections 13, 14, 15 field-for-field.
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.db import transaction
+from django.db.models import Q
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from rest_framework import permissions, serializers
+from rest_framework import permissions, serializers, status
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import extend_schema, inline_serializer
 
 from apps.accounts.access import ADMIN, role_of
+from apps.accounts.models import AccountAuditEvent, EmailVerificationMethod
 from apps.accounts.permissions import IsInstructorOrAdmin, IsAdmin
 from apps.courses.models import Activity, Course, Lesson, Module
 from apps.enrollment.models import Enrollment
@@ -19,6 +24,46 @@ from apps.progress.services import is_module_complete, is_module_unlocked
 from apps.submissions.models import Submission, SubmissionStatus
 
 User = get_user_model()
+
+
+class AdminAccountPagination(PageNumberPagination):
+    page_size = 25
+    page_size_query_param = "page_size"
+    max_page_size = 100
+
+
+def admin_account_status(user):
+    if not user.email_verified:
+        return "pending_email_verification"
+    if not user.is_approved:
+        return "pending_admin_approval"
+    if not user.is_active:
+        return "suspended"
+    return "active"
+
+
+def admin_account_data(user):
+    return {
+        "id": user.pk,
+        "username": user.username,
+        "email": user.email,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "full_name": user.get_full_name(),
+        "role": user.role,
+        "email_verified": user.email_verified,
+        "email_verification_method": user.email_verification_method or None,
+        "email_verified_at": user.email_verified_at,
+        "email_verified_by": (
+            user.email_verified_by.get_full_name() or user.email_verified_by.email
+            if user.email_verified_by
+            else None
+        ),
+        "is_approved": user.is_approved,
+        "is_active": user.is_active,
+        "status": admin_account_status(user),
+        "date_joined": user.date_joined,
+    }
 
 
 class StudentDashboardView(APIView):
@@ -322,6 +367,7 @@ class AdminDashboardView(APIView):
                 "total_courses": serializers.IntegerField(),
                 "active_enrollments": serializers.IntegerField(),
                 "pending_submissions": serializers.IntegerField(),
+                "pending_learner_approval_count": serializers.IntegerField(),
                 "registered_students": inline_serializer(
                     name="AdminRegisteredStudent",
                     many=True,
@@ -338,13 +384,27 @@ class AdminDashboardView(APIView):
                                 "title": serializers.CharField(),
                             },
                         ),
+                        "pending_learner_approvals": inline_serializer(
+                            name="AdminPendingLearnerApproval",
+                            many=True,
+                            fields={
+                                "id": serializers.IntegerField(),
+                                "username": serializers.CharField(),
+                                "full_name": serializers.CharField(),
+                                "email": serializers.EmailField(),
+                                "email_verified": serializers.BooleanField(),
+                                "date_joined": serializers.DateTimeField(),
+                            },
+                        ),
                     },
                 ),
             },
         )
     )
     def get(self, request):
-        students = User.objects.filter(role="student").order_by("username")
+        students = User.objects.filter(
+            role="student", is_approved=True, is_active=True
+        ).order_by("username")
         registered_students = []
         for student in students:
             enrolled_courses = list(
@@ -363,6 +423,10 @@ class AdminDashboardView(APIView):
                 ],
             })
 
+        pending_students = User.objects.filter(
+            role="student", is_approved=False
+        ).order_by("date_joined")
+
         return Response({
             "total_students": students.count(),
             "total_instructors": User.objects.filter(role="instructor").count(),
@@ -370,4 +434,295 @@ class AdminDashboardView(APIView):
             "active_enrollments": Enrollment.objects.count(),
             "pending_submissions": Submission.objects.filter(status=SubmissionStatus.SUBMITTED).count(),
             "registered_students": registered_students,
+            "pending_learner_approvals": [
+                {
+                    "id": student.id,
+                    "username": student.username,
+                    "full_name": student.get_full_name(),
+                    "email": student.email,
+                    "email_verified": student.email_verified,
+                    "date_joined": student.date_joined,
+                }
+                for student in pending_students
+            ],
+            "pending_learner_approval_count": pending_students.count(),
+        })
+
+
+class PendingLearnerApprovalsView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    @extend_schema(
+        responses=inline_serializer(
+            name="PendingLearnerApproval",
+            many=True,
+            fields={
+                "id": serializers.IntegerField(),
+                "username": serializers.CharField(),
+                "full_name": serializers.CharField(),
+                "email": serializers.EmailField(),
+                "email_verified": serializers.BooleanField(),
+                "date_joined": serializers.DateTimeField(),
+            },
+        )
+    )
+    def get(self, request):
+        pending_students = User.objects.filter(
+            role="student", is_approved=False
+        ).order_by("date_joined")
+        return Response([
+            {
+                "id": student.id,
+                "username": student.username,
+                "full_name": student.get_full_name(),
+                "email": student.email,
+                "email_verified": student.email_verified,
+                "date_joined": student.date_joined,
+            }
+            for student in pending_students
+        ])
+
+
+class AdminAccountListView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    def get(self, request):
+        accounts = User.objects.filter(role__in=("student", "instructor")).select_related(
+            "email_verified_by"
+        )
+
+        role = request.query_params.get("role", "").strip()
+        if role:
+            if role not in ("student", "instructor"):
+                raise serializers.ValidationError({"role": "Choose student or instructor."})
+            accounts = accounts.filter(role=role)
+
+        verified = request.query_params.get("email_verified", "").strip().lower()
+        if verified:
+            if verified not in ("true", "false"):
+                raise serializers.ValidationError(
+                    {"email_verified": "Choose true or false."}
+                )
+            accounts = accounts.filter(email_verified=(verified == "true"))
+
+        account_status = request.query_params.get("status", "").strip()
+        status_filters = {
+            "pending_email_verification": Q(email_verified=False),
+            "pending_admin_approval": Q(email_verified=True, is_approved=False),
+            "suspended": Q(is_approved=True, is_active=False),
+            "active": Q(email_verified=True, is_approved=True, is_active=True),
+        }
+        if account_status:
+            if account_status not in status_filters:
+                raise serializers.ValidationError(
+                    {"status": "Choose a supported account status."}
+                )
+            accounts = accounts.filter(status_filters[account_status])
+
+        search = request.query_params.get("search", "").strip()
+        if search:
+            accounts = accounts.filter(
+                Q(email__icontains=search)
+                | Q(username__icontains=search)
+                | Q(first_name__icontains=search)
+                | Q(last_name__icontains=search)
+            )
+
+        accounts = accounts.order_by("date_joined", "pk")
+        paginator = AdminAccountPagination()
+        page = paginator.paginate_queryset(accounts, request, view=self)
+        return paginator.get_paginated_response([admin_account_data(user) for user in page])
+
+
+class AdminAccountDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    def get(self, request, account_id):
+        account = get_object_or_404(
+            User.objects.select_related("email_verified_by"),
+            pk=account_id,
+            role__in=("student", "instructor"),
+        )
+        data = admin_account_data(account)
+        data["verification_history"] = [
+            {
+                "action": event.action,
+                "actor": (
+                    event.actor.get_full_name() or event.actor.email
+                    if event.actor
+                    else None
+                ),
+                "created_at": event.created_at,
+            }
+            for event in account.account_audit_events.select_related("actor")[:25]
+        ]
+        return Response(data)
+
+
+class AdminVerifyAccountEmailView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    def post(self, request, account_id):
+        with transaction.atomic():
+            account = get_object_or_404(
+                User.objects.select_for_update(),
+                pk=account_id,
+                role__in=("student", "instructor"),
+            )
+            if account.email_verified:
+                return Response(
+                    {"detail": "This account's email is already verified."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            account.email_verified = True
+            account.email_verification_method = EmailVerificationMethod.ADMIN
+            account.email_verified_at = timezone.now()
+            account.email_verified_by = request.user
+            account.save(update_fields=[
+                "email_verified",
+                "email_verification_method",
+                "email_verified_at",
+                "email_verified_by",
+            ])
+            AccountAuditEvent.objects.create(
+                actor=request.user,
+                target=account,
+                action=AccountAuditEvent.Action.EMAIL_ADMIN_VERIFIED,
+            )
+
+        return Response(admin_account_data(account))
+
+
+class AdminApproveAccountView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    def post(self, request, account_id):
+        with transaction.atomic():
+            account = get_object_or_404(
+                User.objects.select_for_update(),
+                pk=account_id,
+                role__in=("student", "instructor"),
+            )
+            if account.is_approved:
+                return Response(
+                    {"detail": "This account has already been approved."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            if not account.email_verified:
+                return Response(
+                    {"detail": "This account must have a verified email before approval."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            account.is_approved = True
+            account.is_active = True
+            account.save(update_fields=["is_approved", "is_active"])
+            action = (
+                AccountAuditEvent.Action.LEARNER_APPROVED
+                if account.role == "student"
+                else AccountAuditEvent.Action.INSTRUCTOR_APPROVED
+            )
+            AccountAuditEvent.objects.create(
+                actor=request.user,
+                target=account,
+                action=action,
+            )
+
+        return Response(admin_account_data(account))
+
+
+class AdminAccountStatusSerializer(serializers.Serializer):
+    is_active = serializers.BooleanField()
+
+
+class AdminAccountStatusView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    def post(self, request, account_id):
+        serializer = AdminAccountStatusSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        is_active = serializer.validated_data["is_active"]
+
+        with transaction.atomic():
+            account = get_object_or_404(
+                User.objects.select_for_update(),
+                pk=account_id,
+                role__in=("student", "instructor"),
+            )
+            if not account.email_verified or not account.is_approved:
+                return Response(
+                    {"detail": "Only approved accounts with verified email can be suspended or reactivated."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if account.is_active == is_active:
+                return Response(
+                    {"detail": "This account already has the requested status."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            account.is_active = is_active
+            account.save(update_fields=["is_active"])
+            AccountAuditEvent.objects.create(
+                actor=request.user,
+                target=account,
+                action=(
+                    AccountAuditEvent.Action.ACCOUNT_REACTIVATED
+                    if is_active
+                    else AccountAuditEvent.Action.ACCOUNT_SUSPENDED
+                ),
+            )
+
+        return Response(admin_account_data(account))
+
+
+class ApproveLearnerView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsAdmin]
+
+    @extend_schema(
+        responses=inline_serializer(
+            name="ApprovedLearner",
+            fields={
+                "id": serializers.IntegerField(),
+                "username": serializers.CharField(),
+                "full_name": serializers.CharField(),
+                "email": serializers.EmailField(),
+                "enrolled_courses": inline_serializer(
+                    name="ApprovedLearnerCourse",
+                    many=True,
+                    fields={
+                        "id": serializers.IntegerField(),
+                        "title": serializers.CharField(),
+                    },
+                ),
+            },
+        )
+    )
+    def post(self, request, learner_id):
+        with transaction.atomic():
+            learner = get_object_or_404(
+                User.objects.select_for_update(),
+                pk=learner_id,
+                role="student",
+                is_approved=False,
+            )
+            if not learner.email_verified:
+                return Response(
+                    {"detail": "This learner must verify their email before approval."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            learner.is_approved = True
+            learner.is_active = True
+            learner.save(update_fields=["is_approved", "is_active"])
+            AccountAuditEvent.objects.create(
+                actor=request.user,
+                target=learner,
+                action=AccountAuditEvent.Action.LEARNER_APPROVED,
+            )
+        return Response({
+            "id": learner.id,
+            "username": learner.username,
+            "full_name": learner.get_full_name(),
+            "email": learner.email,
+            "enrolled_courses": [],
         })

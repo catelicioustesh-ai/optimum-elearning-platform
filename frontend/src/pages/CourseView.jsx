@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Helmet } from 'react-helmet-async'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { LayoutDashboard, BookOpen, GraduationCap, Lock, CircleCheckBig, Circle, ChevronRight, CalendarDays, ExternalLink } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout.jsx'
 import ExpandableList from '../components/ExpandableList.jsx'
@@ -22,10 +22,13 @@ const STATUS_STYLE = {
 
 export default function CourseView() {
   const { courseId } = useParams()
+  const [searchParams] = useSearchParams()
+  const requestedModuleId = searchParams.get('module')
   const { auth } = useAuth()
 
   const [course, setCourse] = useState(null)
   const [progress, setProgress] = useState([])
+  const [loadedCourseId, setLoadedCourseId] = useState(null)
   const [expandedModuleId, setExpandedModuleId] = useState(null)
   const [lessonsByModule, setLessonsByModule] = useState({})
   const [enrollment, setEnrollment] = useState(null)
@@ -46,6 +49,9 @@ export default function CourseView() {
         if (cancelled) return
         setCourse(courseData)
         setProgress(progressData)
+        setLoadedCourseId(String(courseId))
+        setExpandedModuleId(null)
+        setLessonsByModule({})
         setEnrollment(enrollments[0] || null)
         setLiveSessions(sessions)
       })
@@ -57,6 +63,40 @@ export default function CourseView() {
       })
     return () => { cancelled = true }
   }, [courseId])
+
+  useEffect(() => {
+    if (loadedCourseId !== String(courseId) || !requestedModuleId || !progress.length) return undefined
+    const requestedModule = progress.find((module) => String(module.module_id) === requestedModuleId)
+    if (!requestedModule || requestedModule.status === 'locked') return undefined
+
+    const moduleId = requestedModule.module_id
+    let cancelled = false
+    let frame
+    const lessonsRequest = lessonsByModule[moduleId]
+      ? Promise.resolve(lessonsByModule[moduleId])
+      : api.get(`/lessons/?module=${moduleId}`)
+    lessonsRequest
+      .then((lessons) => {
+        if (cancelled) return
+        if (!lessonsByModule[moduleId]) {
+          setLessonsByModule((current) => ({ ...current, [moduleId]: lessons }))
+        }
+        setExpandedModuleId(moduleId)
+        frame = window.requestAnimationFrame(() => {
+          document.getElementById(`module-${moduleId}`)?.scrollIntoView({
+            behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+            block: 'start',
+          })
+        })
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message)
+      })
+    return () => {
+      cancelled = true
+      if (frame) window.cancelAnimationFrame(frame)
+    }
+  }, [courseId, loadedCourseId, lessonsByModule, progress, requestedModuleId])
 
   async function toggleModule(moduleId, status) {
     if (status === 'locked') return
@@ -148,7 +188,7 @@ export default function CourseView() {
             const Icon = style.icon
             const isExpanded = expandedModuleId === m.module_id
             return (
-              <div key={m.module_id} className="overflow-hidden rounded-2xl border border-line bg-paper">
+              <div id={`module-${m.module_id}`} key={m.module_id} className="scroll-mt-6 overflow-hidden rounded-2xl border border-line bg-paper">
                 <button
                   type="button"
                   onClick={() => toggleModule(m.module_id, m.status)}

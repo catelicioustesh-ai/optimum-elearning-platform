@@ -54,7 +54,7 @@ export default function InstructorStudents() {
         {error && <div className="rounded-lg border border-line bg-coral-tint px-4 py-3 text-sm text-coral-dim">{error}</div>}
 
         {!auth || auth.role !== 'admin' ? (
-          <div className="rounded-2xl border border-line bg-paper p-6">
+          <div className="dg-card rounded-2xl border border-line bg-paper p-6">
             <label className="mb-1.5 block text-sm font-medium text-ink">Course</label>
             <select
               value={courseId}
@@ -66,7 +66,7 @@ export default function InstructorStudents() {
             </select>
           </div>
         ) : (
-          <div className="rounded-2xl border border-line bg-paper p-6">
+          <div className="dg-card rounded-2xl border border-line bg-paper p-6">
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium text-ink">All registered students</p>
@@ -94,7 +94,7 @@ export default function InstructorStudents() {
         )}
 
         {courseId && (
-          <div className="rounded-2xl border border-line bg-paper p-5">
+          <div className="dg-card rounded-2xl border border-line bg-paper p-5">
             {enrollments.length ? (
               <ExpandableList items={enrollments} label="students" listClassName="divide-y divide-line">
                 {(enrollment) => (

@@ -1,7 +1,9 @@
 from io import BytesIO
+from tempfile import TemporaryDirectory
+from zipfile import ZipFile
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 from PIL import Image
@@ -52,6 +54,33 @@ class CourseBuilderApiTests(APITestCase):
     def setUp(self):
         self.instructor = client_for(self.world.instructor_a)
         self.student = client_for(self.world.student_1)
+        self.admin = client_for(self.world.admin)
+
+    def test_management_course_list_is_scoped_for_instructors_and_complete_for_admins(self):
+        instructor_courses = self.instructor.get("/api/courses/?manage=true")
+        self.assertEqual(instructor_courses.status_code, 200, instructor_courses.data)
+        self.assertEqual(
+            {item["id"] for item in instructor_courses.data},
+            {self.world.course_a.id},
+        )
+
+        admin_courses = self.admin.get("/api/courses/?manage=true")
+        self.assertEqual(admin_courses.status_code, 200, admin_courses.data)
+        self.assertEqual(
+            {item["id"] for item in admin_courses.data},
+            {self.world.course_a.id, self.world.course_b.id},
+        )
+        admin_created = self.admin.post(
+            "/api/courses/",
+            {"title": "Admin-built course"},
+            format="json",
+        )
+        self.assertEqual(admin_created.status_code, 201, admin_created.data)
+        self.assertEqual(admin_created.data["status"], Course.Status.DRAFT)
+        self.assertIn(
+            admin_created.data["id"],
+            {item["id"] for item in self.admin.get("/api/courses/?manage=true").data},
+        )
 
     def test_instructor_can_replace_course_cover_with_multipart_put_for_student_catalog(self):
         course = self.world.course_a
@@ -77,6 +106,143 @@ class CourseBuilderApiTests(APITestCase):
         self.assertEqual(catalog_course["thumbnail_url"], updated.data["thumbnail_url"])
         self.assertIn("new-cover", catalog_course["thumbnail_url"])
 
+    def test_instructor_can_manage_course_catalog_metadata(self):
+        course = self.world.course_a
+        response = self.instructor.patch(
+            f"/api/courses/{course.id}/",
+            {
+                "category": "Software development",
+                "tags": ["JavaScript", "Web"],
+                "difficulty": "intermediate",
+                "estimated_duration_minutes": 480,
+                "learning_outcomes": ["Build browser applications", "Use asynchronous JavaScript"],
+                "prerequisites": "Basic computer skills",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["category"], "Software development")
+        self.assertEqual(response.data["tags"], ["JavaScript", "Web"])
+        self.assertEqual(response.data["difficulty"], "intermediate")
+        self.assertEqual(response.data["estimated_duration_minutes"], 480)
+        self.assertEqual(len(response.data["learning_outcomes"]), 2)
+        self.assertEqual(response.data["prerequisites"], "Basic computer skills")
+        self.assertEqual(
+            self.instructor.patch(
+                f"/api/courses/{course.id}/",
+                {"tags": "not-a-list"},
+                format="json",
+            ).status_code,
+            400,
+        )
+
+    def test_lesson_resource_supports_https_links_and_rejects_insecure_links(self):
+        lesson_id = self.world.l1.id
+        response = self.instructor.post(
+            "/api/lesson-attachments/",
+            {
+                "lesson": lesson_id,
+                "title": "Reference guide",
+                "external_url": "https://example.com/guide",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["external_url"], "https://example.com/guide")
+        self.assertIsNone(response.data["download_url"])
+        self.assertEqual(
+            self.instructor.post(
+                "/api/lesson-attachments/",
+                {
+                    "lesson": lesson_id,
+                    "title": "Insecure reference",
+                    "external_url": "http://example.com/guide",
+                },
+                format="json",
+            ).status_code,
+            400,
+        )
+
+    def test_lesson_resources_accept_valid_pdf_and_zip_uploads(self):
+        with TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            pdf = self.instructor.post(
+                "/api/lesson-attachments/",
+                {
+                    "lesson": self.world.l1.id,
+                    "title": "Course handout",
+                    "file": SimpleUploadedFile(
+                        "handout.pdf",
+                        b"%PDF-1.7\nvalid test document",
+                        content_type="application/pdf",
+                    ),
+                },
+                format="multipart",
+            )
+            self.assertEqual(pdf.status_code, 201, pdf.data)
+            self.assertEqual(pdf.data["file_name"], "handout.pdf")
+            self.assertTrue(pdf.data["download_url"])
+
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr("materials/readme.txt", "Course materials")
+            uploaded_zip = self.instructor.post(
+                "/api/lesson-attachments/",
+                {
+                    "lesson": self.world.l1.id,
+                    "title": "Starter files",
+                    "file": SimpleUploadedFile(
+                        "starter.zip",
+                        archive.getvalue(),
+                        content_type="application/zip",
+                    ),
+                },
+                format="multipart",
+            )
+            self.assertEqual(uploaded_zip.status_code, 201, uploaded_zip.data)
+            self.assertEqual(uploaded_zip.data["file_name"], "starter.zip")
+
+            invalid_zip = self.instructor.post(
+                "/api/lesson-attachments/",
+                {
+                    "lesson": self.world.l1.id,
+                    "title": "Invalid archive",
+                    "file": SimpleUploadedFile(
+                        "invalid.zip",
+                        b"not a zip archive",
+                        content_type="application/zip",
+                    ),
+                },
+                format="multipart",
+            )
+            self.assertEqual(invalid_zip.status_code, 400, invalid_zip.data)
+
+    def test_course_creation_defaults_to_draft_and_cannot_bypass_publish_checks(self):
+        created = self.instructor.post(
+            "/api/courses/",
+            {"title": "New course", "description": "Build a curriculum."},
+            format="json",
+        )
+        self.assertEqual(created.status_code, 201, created.data)
+        self.assertEqual(created.data["status"], Course.Status.DRAFT)
+        self.assertNotIn(created.data["id"], {
+            item["id"] for item in self.student.get("/api/courses/").data
+        })
+
+        bypassed = self.instructor.post(
+            "/api/courses/",
+            {"title": "Premature course", "status": Course.Status.PUBLISHED},
+            format="json",
+        )
+        self.assertEqual(bypassed.status_code, 400, bypassed.data)
+        admin_bypassed = self.admin.post(
+            "/api/courses/",
+            {"title": "Admin premature course", "status": Course.Status.PUBLISHED},
+            format="json",
+        )
+        self.assertEqual(admin_bypassed.status_code, 400, admin_bypassed.data)
+
     def test_draft_stays_hidden_until_valid_course_is_published(self):
         draft = self.instructor.post("/api/courses/", {
             "title": "Python Foundations", "description": "Build practical Python skills.", "status": "draft",
@@ -98,6 +264,37 @@ class CourseBuilderApiTests(APITestCase):
         }, format="json")
         self.assertEqual(lesson.status_code, 201, lesson.data)
 
+        missing_quiz = self.instructor.post(f"/api/courses/{course_id}/publish/")
+        self.assertEqual(missing_quiz.status_code, 400, missing_quiz.data)
+        self.assertIn("quiz", str(missing_quiz.data).lower())
+
+        activity = self.instructor.post("/api/activities/", {
+            "lesson": lesson.data["id"],
+            "activity_type": "quiz",
+            "title": "Module assessment",
+            "max_score": 1,
+            "max_attempts": 2,
+            "pass_percentage": 70,
+            "is_required": True,
+        }, format="json")
+        self.assertEqual(activity.status_code, 201, activity.data)
+        quiz = self.instructor.post("/api/quizzes/", {
+            "activity": activity.data["id"],
+            "time_limit_minutes": 15,
+            "pass_mark_percentage": 70,
+        }, format="json")
+        self.assertEqual(quiz.status_code, 201, quiz.data)
+        missing_question = self.instructor.post(f"/api/courses/{course_id}/publish/")
+        self.assertEqual(missing_question.status_code, 400, missing_question.data)
+
+        question = self.instructor.post("/api/quiz-questions/", {
+            "quiz": quiz.data["id"],
+            "text": "Which statement declares a constant?",
+            "marks": 1,
+            "choices": [{"text": "const value = 1"}, {"text": "value := 1"}],
+            "correct_choice_index": 0,
+        }, format="json")
+        self.assertEqual(question.status_code, 201, question.data)
         published = self.instructor.post(f"/api/courses/{course_id}/publish/")
         self.assertEqual(published.status_code, 200, published.data)
         self.assertEqual(published.data["status"], Course.Status.PUBLISHED)

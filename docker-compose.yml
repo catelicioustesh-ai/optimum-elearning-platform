@@ -8,7 +8,9 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-    ports: ["8080:80"]
+    # Keep the plain-HTTP development endpoint off the LAN; production must
+    # put a TLS-terminating reverse proxy in front of this port.
+    ports: ["127.0.0.1:8080:80"]
     volumes:
       - media:/media:ro
     depends_on: [backend]
@@ -29,6 +31,7 @@ services:
 
   sandbox:
     build: ./sandbox
+    init: true
     environment:
       SANDBOX_TOKEN: ${SANDBOX_TOKEN:?set SANDBOX_TOKEN in your shell or a compose .env file}
     networks: [runner_net]                  # internal-only network: no route to the internet or the DB

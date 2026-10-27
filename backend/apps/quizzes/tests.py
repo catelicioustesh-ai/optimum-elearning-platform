@@ -91,16 +91,25 @@ class QuizBuilderApiTests(TestCase):
 		}
 
 	def test_build_creates_quiz_activity_and_question(self):
-		response = self.instructor.post("/api/quizzes/build/", self.payload(self.world.l1.id), format="json")
+		payload = self.payload(self.world.l1.id)
+		payload["activity"]["is_final_assessment"] = True
+		response = self.instructor.post("/api/quizzes/build/", payload, format="json")
 
 		self.assertEqual(response.status_code, 201, response.data)
 		self.assertEqual(response.data["activity"]["activity_type"], "quiz")
+		self.assertTrue(response.data["activity"]["is_final_assessment"])
 		self.assertEqual(response.data["activity"]["quiz_id"], response.data["quiz"]["id"])
 		self.assertEqual(len(response.data["questions"]), 1)
 		self.assertEqual(response.data["questions"][0]["correct_choice_index"], 0)
 		student_view = self.student.get(f"/api/quizzes/{response.data['quiz']['id']}/")
 		self.assertEqual(student_view.status_code, 200)
 		self.assertNotIn("correct_choice_index", student_view.data["questions"][0])
+		duplicate_final = self.payload(self.world.l1.id)
+		duplicate_final["activity"]["title"] = "Second final"
+		duplicate_final["activity"]["is_final_assessment"] = True
+		rejected = self.instructor.post("/api/quizzes/build/", duplicate_final, format="json")
+		self.assertEqual(rejected.status_code, 400, rejected.data)
+		self.assertFalse(self.world.l1.activities.filter(title="Second final").exists())
 
 	def test_invalid_question_rolls_back_activity_and_quiz(self):
 		payload = self.payload(self.world.l1.id)
@@ -120,3 +129,83 @@ class QuizBuilderApiTests(TestCase):
 			self.student.post("/api/quizzes/build/", self.payload(self.world.l1.id), format="json").status_code,
 			403,
 		)
+
+
+class QuestionnaireApiTests(TestCase):
+	def setUp(self):
+		self.world = World()
+		self.instructor = APIClient()
+		self.instructor.force_authenticate(user=self.world.instructor_a)
+		self.foreign_instructor = APIClient()
+		self.foreign_instructor.force_authenticate(user=self.world.instructor_b)
+		self.student = APIClient()
+		self.student.force_authenticate(user=self.world.student_1)
+		created = self.instructor.post("/api/activities/", {
+			"lesson": self.world.l1.id,
+			"activity_type": "questionnaire",
+			"title": "Course feedback",
+			"is_required": True,
+			"questionnaire_questions": [
+				{
+					"text": "How would you rate this lesson?",
+					"question_type": "single_choice",
+					"options": ["Excellent", "Good", "Needs work"],
+					"required": True,
+				},
+				{
+					"text": "What should we improve?",
+					"question_type": "text",
+					"options": [],
+					"required": False,
+				},
+			],
+		}, format="json")
+		self.assertEqual(created.status_code, 201, created.data)
+		self.activity_id = created.data["id"]
+
+	def test_students_can_submit_update_and_instructors_can_review_responses(self):
+		activity = self.student.get(f"/api/activities/{self.activity_id}/")
+		self.assertEqual(activity.status_code, 200, activity.data)
+		self.assertEqual(len(activity.data["questionnaire_questions"]), 2)
+
+		invalid = self.student.post(
+			f"/api/questionnaires/{self.activity_id}/response/",
+			{"answers": {"0": 99}},
+			format="json",
+		)
+		self.assertEqual(invalid.status_code, 400, invalid.data)
+
+		submitted = self.student.post(
+			f"/api/questionnaires/{self.activity_id}/response/",
+			{"answers": {"0": 1}},
+			format="json",
+		)
+		self.assertEqual(submitted.status_code, 200, submitted.data)
+		self.assertEqual(submitted.data["answers"], {"0": 1, "1": ""})
+		self.assertEqual(
+			self.student.get(f"/api/activities/{self.activity_id}/").data["completion_status"],
+			"completed",
+		)
+
+		updated = self.student.post(
+			f"/api/questionnaires/{self.activity_id}/response/",
+			{"answers": {"0": 2, "1": "More worked examples"}},
+			format="json",
+		)
+		self.assertEqual(updated.status_code, 200, updated.data)
+		responses = self.instructor.get(f"/api/questionnaires/{self.activity_id}/response/")
+		self.assertEqual(responses.status_code, 200, responses.data)
+		self.assertEqual(responses.data[0]["answers"]["1"], "More worked examples")
+		self.assertEqual(
+			self.foreign_instructor.get(f"/api/questionnaires/{self.activity_id}/response/").status_code,
+			403,
+		)
+
+	def test_questionnaire_must_have_valid_response_questions(self):
+		response = self.instructor.post("/api/activities/", {
+			"lesson": self.world.l1.id,
+			"activity_type": "questionnaire",
+			"title": "Empty survey",
+			"questionnaire_questions": [],
+		}, format="json")
+		self.assertEqual(response.status_code, 400, response.data)

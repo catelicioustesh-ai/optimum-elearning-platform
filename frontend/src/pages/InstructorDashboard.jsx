@@ -35,11 +35,9 @@ export default function InstructorDashboard() {
   const navigate = useNavigate()
   const { auth } = useAuth()
   const toast = useToast()
-  const [me, setMe] = useState(null)
   const [data, setData] = useState(null)
   const [risk, setRisk] = useState(null)
   const [error, setError] = useState('')
-  const [profileError, setProfileError] = useState('')
   const [riskError, setRiskError] = useState('')
   const [loading, setLoading] = useState(true)
   const [grading, setGrading] = useState(null)
@@ -53,15 +51,8 @@ export default function InstructorDashboard() {
   const [certificateReload, setCertificateReload] = useState(0)
 
   function fetchAll() {
-    Promise.all([
-      api.get('/dashboard/instructor/'),
-      api.me().then((data) => ({ data })).catch((profileRequestError) => ({ error: profileRequestError })),
-    ])
-      .then(([dash, profileResult]) => {
-        setData(dash)
-        setMe(profileResult.data || null)
-        setProfileError(profileResult.error?.message || '')
-      })
+    api.get('/dashboard/instructor/')
+      .then(setData)
       .catch((err) => {
         setData(null)
         setError(err.message || 'Unable to load instructor data.')
@@ -116,7 +107,10 @@ export default function InstructorDashboard() {
     return () => { cancelled = true }
   }, [selectedCertificateCourse, certificateReload])
 
-  const displayName = me ? (`${me.first_name} ${me.last_name}`.trim() || me.username) : (auth?.email || 'there')
+  const displayName = `${auth?.first_name || ''} ${auth?.last_name || ''}`.trim()
+    || auth?.username
+    || auth?.email
+    || 'there'
 
   const riskCounts = useMemo(() => {
     if (!risk?.scored) return null
@@ -135,7 +129,7 @@ export default function InstructorDashboard() {
       setGrading(null)
       load()
     } catch (err) {
-      toast(`Couldn't grade this submission: ${err.message}`)
+      toast(`Couldn't grade this submission: ${err.message}`, 'error')
     }
   }
 
@@ -180,18 +174,13 @@ export default function InstructorDashboard() {
         <meta name="robots" content="noindex, nofollow" />
       </Helmet>
 
-      <div className="space-y-6" data-role="instructor">
+      <div className="instructor-dashboard space-y-6" data-role="instructor">
         {loading && <Skeleton height={220} />}
         {error && <ErrorState message={`Couldn't load your dashboard: ${error}`} onRetry={load} />}
-        {profileError && data && (
-          <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
-            Profile details are unavailable, so the account email is being shown instead. {profileError}
-          </p>
-        )}
 
         {data && (
           <>
-            <div className="dg-hero">
+            <div className="dg-hero instructor-dashboard-hero">
               <i className="dg-orb dg-o1" />
               <i className="dg-orb dg-o2" />
               <div className="dg-grow">
@@ -215,7 +204,7 @@ export default function InstructorDashboard() {
               </div>
             </div>
 
-            <div className="dg-grid">
+            <div className="dg-grid instructor-dashboard-kpis">
               <div className="dg-card dg-kpi dg-c3">
                 <span className="dg-ic"><BookOpen /></span>
                 <div className="dg-l">My courses</div>
@@ -242,8 +231,32 @@ export default function InstructorDashboard() {
               </div>
             </div>
 
+            <Card span={12} className="instructor-grading-card">
+              <div id="grading-queue" />
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3>Grading queue</h3>
+                  <div className="dg-sub">Oldest first · {data.pending_submissions.length} waiting for review</div>
+                </div>
+                <button type="button" className="dg-btn dg-ghost" onClick={() => navigate('/dashboard/instructor/submissions')}>
+                  View submissions
+                </button>
+              </div>
+              {data.pending_submissions.length === 0 && <EmptyState message="Nothing waiting for review." />}
+              {data.pending_submissions.map((s) => (
+                <div key={s.submission_id} className="dg-row">
+                  <Avatar name={s.student} />
+                  <div className="dg-g">
+                    <b>{s.student}</b>
+                    <small>{s.activity} · {s.course} · submitted {new Date(s.submitted_at).toLocaleDateString()}</small>
+                  </div>
+                  <button className="dg-gb" onClick={() => setGrading(s)}>Grade</button>
+                </div>
+              ))}
+            </Card>
+
             <div className="dg-grid">
-              <Card span={4}>
+              <Card span={4} className="instructor-risk-summary">
                 <h3>Cohort risk breakdown</h3>
                 <div className="dg-sub">Early Warning Risk Classifier</div>
                 {riskError && <ErrorState message={riskError} onRetry={load} />}
@@ -270,7 +283,7 @@ export default function InstructorDashboard() {
                 ))}
               </Card>
 
-              <div className="dg-card dg-c8" id="risk-table">
+              <div className="dg-card dg-c8 instructor-risk-list" id="risk-table">
                 <h3>Early warning — who needs a check-in</h3>
                 <div className="dg-sub">Experimental signal trained on synthetic data; use as a review aid, not a decision — highest risk first</div>
                 {riskError && <ErrorState message={riskError} onRetry={load} />}
@@ -300,7 +313,7 @@ export default function InstructorDashboard() {
               </div>
             </div>
 
-            <Card span={12}>
+            <Card span={12} className="instructor-falling-list">
               <h3>Students falling behind</h3>
               <div className="dg-sub">No completed activity in the last 7 days — a simpler, immediate signal alongside the risk model above</div>
               {data.students_falling_behind.length === 0 && <EmptyState message="Nobody — everyone's been active this week." />}
@@ -316,24 +329,7 @@ export default function InstructorDashboard() {
               ))}
             </Card>
 
-            <Card span={12} className="" style={{}}>
-              <div id="grading-queue" />
-              <h3>Grading queue</h3>
-              <div className="dg-sub">Oldest first</div>
-              {data.pending_submissions.length === 0 && <EmptyState message="Nothing waiting for review." />}
-              {data.pending_submissions.map((s) => (
-                <div key={s.submission_id} className="dg-row">
-                  <Avatar name={s.student} />
-                  <div className="dg-g">
-                    <b>{s.student}</b>
-                    <small>{s.activity} · {s.course} · submitted {new Date(s.submitted_at).toLocaleDateString()}</small>
-                  </div>
-                  <button className="dg-gb" onClick={() => setGrading(s)}>Grade</button>
-                </div>
-              ))}
-            </Card>
-
-            <section className="dg-card rounded-2xl p-5 sm:p-6" aria-labelledby="certificate-management-heading">
+            <section className="dg-card instructor-certificate-card rounded-2xl p-5 sm:p-6" aria-labelledby="certificate-management-heading">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <h2 id="certificate-management-heading" className="text-base font-bold text-white">Certificates</h2>

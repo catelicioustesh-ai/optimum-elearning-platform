@@ -1,65 +1,65 @@
-import { useState, useCallback } from 'react'
-import { api, getTokens, setTokens, clearTokens, decodeToken } from '../lib/api.js'
+import { useState, useCallback, useEffect } from 'react'
+import { api, clearTokens } from '../lib/api.js'
 import { AuthContext } from './auth-context.js'
 
-export function AuthProvider({ children }) {
-  const [auth, setAuth] = useState(() => {
-    const tokens = getTokens()
-    if (tokens?.access === 'mock-jwt-token' || tokens?.refresh === 'mock-jwt-refresh') {
-      clearTokens()
-      return null
-    }
-    if (!tokens?.access && !tokens?.refresh) return null
-    // The access token only lives 15 minutes; the refresh token lives 7 days.
-    // If only the access token has expired, keep the session: the first API
-    // call refreshes it transparently. Only a dead refresh token means "logged out".
-    const now = Date.now()
-    const live = [tokens.access, tokens.refresh]
-      .map((t) => (t ? decodeToken(t) : null))
-      .filter((p) => p && p.exp * 1000 > now)
-    if (!live.length) {
-      clearTokens()
-      return null
-    }
-    return { role: live[0].role, email: live[0].email }
-  })
+function toAuthUser(user) {
+  if (!user) return null
+  return {
+    id: user.id,
+    role: user.role,
+    email: user.email,
+    first_name: user.first_name,
+    last_name: user.last_name,
+    username: user.username,
+    bio: user.bio,
+    profile_photo: user.profile_photo,
+    leaderboard_opt_in: user.leaderboard_opt_in,
+  }
+}
 
-  const login = useCallback(async (email, password, expectedRole) => {
-    const tokens = await api.login(email, password)
-    const payload = decodeToken(tokens.access)
-    if (!payload?.role) throw new Error('The server returned an invalid sign-in session. Please try again.')
-    if (expectedRole && payload.role !== expectedRole) {
-      const roleName = { student: 'student', instructor: 'instructor', admin: 'administrator' }[payload.role] || 'assigned'
-      throw new Error(`This account is registered as ${roleName}. Choose that account type and try again.`)
-    }
-    setTokens(tokens)
-    const session = { role: payload.role, email: payload.email }
+export function AuthProvider({ children }) {
+  const [auth, setAuth] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    api.me()
+      .then((user) => {
+        if (active) setAuth(toAuthUser(user))
+      })
+      .catch(() => {
+        if (active) setAuth(null)
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => { active = false }
+  }, [])
+
+  const establishSession = useCallback((user) => {
+    if (!user?.role) throw new Error('The server returned an invalid sign-in session. Please try again.')
+    const session = toAuthUser(user)
     setAuth(session)
     return session
   }, [])
 
-  const logout = useCallback(async () => {
-    const tokens = getTokens()
-    try {
-      if (tokens?.refresh) {
-        try {
-          await api.logout(tokens.refresh)
-        } catch {
-          // Ignore backend logout failures and still clear the client session.
-        }
-      }
-    } finally {
-      clearTokens()
-      setAuth(null)
+  const login = useCallback(async (email, password) => {
+    const result = await api.login(email, password)
+    return establishSession(result?.user)
+  }, [establishSession])
 
-      if (typeof window !== 'undefined' && window.location.pathname !== '/login') {
-        window.location.assign('/login')
-      }
-    }
+  const updateAuthProfile = useCallback((profile) => {
+    setAuth((current) => current ? { ...current, ...profile } : current)
+  }, [])
+
+  const logout = useCallback(async () => {
+    await api.logout()
+    clearTokens()
+    setAuth(null)
   }, [])
 
   return (
-    <AuthContext.Provider value={{ auth, login, logout }}>
+    <AuthContext.Provider value={{ auth, login, establishSession, logout, loading, updateAuthProfile }}>
       {children}
     </AuthContext.Provider>
   )

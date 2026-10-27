@@ -6,9 +6,12 @@ import {
   ArrowRight,
   BookOpen,
   Briefcase,
+  Check,
+  Clock3,
   ExternalLink,
   Gauge,
   LayoutDashboard,
+  UserCheck,
   Users,
 } from 'lucide-react'
 
@@ -21,23 +24,53 @@ import {
   Card, Donut, DonutLegend, Pill, Skeleton, ErrorState, EmptyState,
 } from '../components/charts.jsx'
 import { HeroTitle, CountUp } from '../components/fx.jsx'
+import { useToast } from '../hooks/useToast.js'
 
 const navItems = [
   { to: '/dashboard/admin', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/dashboard/instructor', label: 'Courses & content', icon: BookOpen },
   { to: '/dashboard/instructor/students', label: 'Students', icon: Users },
+  { to: '/dashboard/admin/accounts', label: 'Account verification', icon: UserCheck },
 ]
 
 const PRIORITY_TONE = { high: 'r', medium: 'y', low: 'default' }
 
 export default function AdminDashboard() {
   const { auth } = useAuth()
+  const toast = useToast()
   const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [plan, setPlan] = useState(null)
   const [error, setError] = useState('')
   const [planError, setPlanError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [approvingLearnerId, setApprovingLearnerId] = useState(null)
+
+  async function approveLearner(learner) {
+    const name = learner.full_name || learner.username
+    if (!window.confirm(`Approve ${name} and activate this learner account? Email verification must already be complete.`)) {
+      return
+    }
+    setApprovingLearnerId(learner.id)
+    try {
+      const approvedLearner = await api.post(`/dashboard/admin/learner-approvals/${learner.id}/approve/`, {})
+      setData((current) => {
+        if (!current) return current
+        return {
+          ...current,
+          total_students: current.total_students + 1,
+          pending_learner_approval_count: Math.max(0, current.pending_learner_approval_count - 1),
+          pending_learner_approvals: current.pending_learner_approvals.filter((item) => item.id !== learner.id),
+          registered_students: [...current.registered_students, approvedLearner],
+        }
+      })
+      toast(`${name} is approved and can now sign in.`, 'success')
+    } catch (err) {
+      toast(err.message || 'The learner could not be approved. Please try again.', 'error')
+    } finally {
+      setApprovingLearnerId(null)
+    }
+  }
 
   function fetchAll() {
     api
@@ -70,7 +103,7 @@ export default function AdminDashboard() {
 
   const quickActions = [
     { label: 'Students', subtitle: 'Monitor learners', href: '/dashboard/instructor/students', icon: Users },
-    { label: 'Courses', subtitle: 'Review catalog', href: '/dashboard/instructor/content', icon: BookOpen },
+    { label: 'Manage courses', subtitle: 'Create, edit, and publish', href: '/dashboard/instructor/content', icon: BookOpen },
     { label: 'Submissions', subtitle: 'Review queue', href: '/dashboard/instructor/submissions', icon: Briefcase },
   ]
 
@@ -189,7 +222,7 @@ export default function AdminDashboard() {
               <div className="dg-ch">
                 <div>
                   <h3>Registered students</h3>
-                  <div className="dg-sub">Every learner on the platform, even if they are not enrolled in a course yet.</div>
+                  <div className="dg-sub">Approved learners on the platform, including those who are not enrolled yet.</div>
                 </div>
                 <Users size={18} style={{ color: 'var(--acc)' }} />
               </div>
@@ -209,6 +242,52 @@ export default function AdminDashboard() {
                   </div>
                 ))}
                 {(data.registered_students || []).length === 0 && <EmptyState message="No registered students yet." />}
+              </div>
+            </div>
+
+            <div className="dg-card dg-c12">
+              <div className="dg-ch">
+                <div>
+                  <h3>Pending learner approvals</h3>
+                  <div className="dg-sub">Review new learner registrations before granting platform access.</div>
+                </div>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800">
+                  <Clock3 size={14} aria-hidden="true" />
+                  {data.pending_learner_approval_count || 0} pending
+                </span>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {(data.pending_learner_approvals || []).map((learner) => (
+                  <div key={learner.id} className="flex flex-col gap-3 rounded-xl border border-line bg-panel px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-ink">{learner.full_name || learner.username}</div>
+                      <div className="mt-0.5 text-sm text-text-muted">{learner.email}</div>
+                      <div className="mt-1 text-xs text-text-dim">
+                        {learner.email_verified ? 'Email verified' : 'Email verification pending'}
+                        {' · '}
+                        Registered {new Date(learner.date_joined).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => approveLearner(learner)}
+                      disabled={approvingLearnerId !== null || !learner.email_verified}
+                      title={!learner.email_verified ? 'The learner must verify their email before approval.' : undefined}
+                      className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground transition hover:bg-primary-hover disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {approvingLearnerId === learner.id
+                        ? <span className="login-spinner" aria-hidden="true" />
+                        : <Check size={16} aria-hidden="true" />}
+                      {approvingLearnerId === learner.id
+                        ? 'Approving…'
+                        : learner.email_verified ? 'Approve learner' : 'Awaiting verification'}
+                    </button>
+                  </div>
+                ))}
+                {(data.pending_learner_approvals || []).length === 0 && (
+                  <EmptyState message="There are no learner registrations waiting for approval." />
+                )}
               </div>
             </div>
 

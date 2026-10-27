@@ -1,6 +1,6 @@
 # API Reference — Optimum ERP LMS
 
-Base URL: `http://localhost:8000/api` (local) — swap for your real domain
+Base URL: `http://127.0.0.1:8000/api` (local) — swap for your real domain
 in production, always over HTTPS.
 
 Every field name below is taken directly from the serializers in the
@@ -21,7 +21,7 @@ behavioral details that are not expressed by an OpenAPI schema.
 
 ## Conventions used throughout this doc
 
-- 🔒 = requires `Authorization: Bearer <access_token>` header
+- Authenticated endpoints use HttpOnly authentication cookies; send CSRF tokens for state-changing requests.
 - Role column shows who can call it: **Any** (any logged-in user),
   **Student**, **Instructor**, **Admin**, or a combination
 - Request/response bodies are JSON unless noted
@@ -31,13 +31,12 @@ behavioral details that are not expressed by an OpenAPI schema.
 
 ## Authentication
 
-JWT-based. **Access tokens last 15 minutes, refresh tokens last 7 days**
-(`config/settings.py` → `SIMPLE_JWT`). Refresh tokens **rotate**: each call to
-`/auth/login/refresh/` returns a new refresh token and blacklists the old one, so
-concurrent refreshes must be serialised (the frontend does this — see `refreshAccessToken()`
-in `frontend/src/lib/api.js`). The access token's payload embeds `role` and `email` for
-UI routing only; **the server always re-reads the role from the database**, so a stale
-token can never grant access.
+Authentication uses short-lived JWTs stored in HttpOnly cookies; JavaScript
+does not read or persist the tokens. The frontend includes cookies on API
+requests and sends the CSRF token for state-changing requests. A refresh request
+rotates the refresh cookie; the frontend serializes refresh attempts in
+`frontend/src/lib/api.js`. Login returns the user profile (including `role`) and
+a CSRF token. The server checks permissions against the authenticated user.
 
 ### One-time email links
 
@@ -63,10 +62,10 @@ surrounding whitespace. Usernames are unique regardless of case. **Passwords are
 ### `POST /api/auth/register/`
 Public. Rate-limited to 10 requests/minute per IP.
 
-**Always creates a `student` account** — `role` is not an accepted field
-here, regardless of what's sent in the body. This is deliberate (see
-`backend/README.md` for why). Instructor/admin accounts are created via
-Django admin.
+Accepts `role` as `student` or `instructor`; if omitted it defaults to
+`student`. Other roles (including `admin`) are rejected. Both public
+registration roles remain inactive until email verification and administrator
+approval. Administrator/staff accounts are provisioned by trusted operators.
 
 Request:
 ```json
@@ -75,14 +74,25 @@ Request:
   "email": "bkimani@example.com",
   "password": "at-least-8-characters",
   "first_name": "Brian",
-  "last_name": "Kimani"
+  "last_name": "Kimani",
+  "role": "instructor"
 }
 ```
 
 Response `201`:
 ```json
-{ "id": 4, "username": "bkimani", "email": "bkimani@example.com", "first_name": "Brian", "last_name": "Kimani" }
+{
+  "id": 4, "username": "bkimani", "email": "bkimani@example.com",
+  "first_name": "Brian", "last_name": "Kimani",
+  "verification_email_sent": true,
+  "detail": "Account created. Check your email for a verification link."
+}
 ```
+New self-registered users are created inactive and unapproved. A verification
+email is sent; they must verify the address and then wait for an administrator
+to approve the account before they can sign in. A delivery failure still leaves
+the account pending and sets `verification_email_sent` to false; use the
+resend-verification endpoint.
 
 ### `POST /api/auth/login/`
 Public. Rate-limited to 10 requests/minute per IP. Logs in with **email**,
@@ -95,21 +105,54 @@ Request:
 
 Response `200`:
 ```json
-{ "access": "<jwt>", "refresh": "<jwt>" }
+{
+  "user": { "id": 4, "email": "bkimani@example.com", "role": "student" },
+  "csrfToken": "<csrf-token>"
+}
 ```
-Decode the `access` token client-side to read `role` and `email` — see
-`frontend/src/lib/api.js` → `decodeToken()`.
+The response also sets the HttpOnly access and refresh cookies. The access and
+refresh tokens are not returned in the JSON body.
 
 Errors (`401`):
 - Wrong email or password → `{"detail": "Incorrect email or password."}` (identical for unknown emails).
-- Unverified email addresses may still authenticate when the credentials are correct and the account is active. Email verification confirms mailbox ownership but is not a login requirement.
+- A user who has not verified email or is awaiting administrator approval
+  cannot sign in and receives the same neutral credential error.
 - `429` after too many attempts (10/minute per client IP; see `NUM_PROXIES` in the deployment notes).
+
+### Social sign-in and account linking
+
+`GET /api/auth/social/nonce/` issues a short-lived nonce in an HttpOnly cookie.
+The provider's ID token must contain that same nonce. `POST` the token and nonce
+to `/api/auth/google/`, `/api/auth/microsoft/`, or `/api/auth/apple/` to sign in.
+An unlinked provider identity creates a pending student account when its
+verified email is not already in use. Microsoft may omit email or provide an
+email claim without an email-verification claim. In that case, first-time
+Microsoft sign-in can supply a contact email; the LMS sends a verification
+link and does not treat the supplied address as verified. The account still
+requires separate administrator approval. A matching email never links the
+provider identity to an existing LMS account. Previously linked identities
+continue to sign in by their stable provider subject, including if their email
+claim later changes.
+
+If Microsoft omits both an email and an existing linked identity, the frontend
+retries the provider flow with a `contact_email` field after asking the user for
+an address. The API treats it as unverified and sends a verification link; it
+is never proof of email ownership by itself.
+
+To link an identity to an existing LMS account, first sign in to that account,
+then `POST /api/auth/social/link/{provider}/` with the same
+`{"credential": "...", "nonce": "..."}` body. This route requires the
+authenticated session, CSRF protection, and a valid provider token and nonce.
+Supported `{provider}` values are `google`, `microsoft`, and `apple`. A provider
+identity already linked to another account, or another identity from that
+provider already linked to this account, is rejected.
 
 ### `POST /api/auth/email/verify/` — Public
 `{ "uid": "<from link>", "token": "<from link>" }` → `200 {"detail": "..."}`; `400` if the link is
-invalid, expired (24 h) or already used.
+invalid, expired (24 h) or already used. Verification confirms mailbox ownership;
+the account remains inactive until an administrator approves it.
 
-### `POST /api/auth/email/resend-verification/` — Public (5/hour)
+### `POST /api/auth/email/resend-verification/` — Public (5/hour, 5-minute address cooldown)
 `{ "email": "..." }` → always `200` with the same message whether or not the account exists.
 
 ### `POST /api/auth/password-reset/` — Public (5/hour)
@@ -126,16 +169,13 @@ invalid/expired/used link or a password that breaks the rules above (a rejected 
 does **not** consume the link).
 
 ### `POST /api/auth/login/refresh/`
-Public. Exchange a refresh token for a new access token.
-
-Request: `{ "refresh": "<refresh_token>" }`
-With refresh rotation enabled, response: `{ "access": "<new_access_token>", "refresh": "<new_refresh_token>" }`.
-Persist both returned tokens; the submitted refresh token is blacklisted.
+Public. Uses the HttpOnly refresh cookie and CSRF token; no token is supplied in
+the JSON body. On success, returns `200 {"detail": "Session refreshed."}` and
+sets the rotated authentication cookies.
 
 ### `POST /api/auth/logout/` 🔒 — Any
-Revokes the submitted refresh token. Send `{ "refresh": "<refresh_token>" }`
-with the access-token bearer header, then clear the local session. A successful
-logout returns an empty response.
+Revokes the refresh cookie, clears the authentication cookies, and returns
+`204 No Content`.
 
 ### `GET /api/auth/me/` and `PATCH /api/auth/me/` 🔒 — Any
 Returns the logged-in user. A partial update may change `bio`,
@@ -153,7 +193,7 @@ Response:
 ```
 
 Profile photos are limited to 5 MB and private to the authenticated account.
-Fetch the returned `profile_photo` API path with the bearer token; profile image
+Fetch the returned `profile_photo` API path with the authenticated session cookies; profile image
 files are not served from public media URLs.
 
 ### `GET /api/auth/me/profile-photo/` 🔒 — Owner
@@ -170,7 +210,10 @@ app below marked "Instructor/Admin write").
 Course visibility is status-aware: students see published courses only;
 instructors see their own courses plus published catalog courses; admins see
 all courses. Omitting `status` when creating a course preserves the legacy
-default of `published`; Course Content creates new courses as `draft`.
+default behavior for the model only when records are created outside the API.
+The API always creates courses as `draft`; Course Content also sends `draft`.
+Use the publish action after adding the required curriculum to make a course
+visible to students.
 
 **Important**: for `lessons` and `activities`, a student's GET requests are
 additionally filtered so locked-module content never comes back — see
@@ -188,7 +231,10 @@ List all courses.
 { "title": "Full-Stack Web Development", "description": "...", "status": "draft" }
 ```
 `instructor` is set automatically to whoever's logged in — not accepted
-in the request body. `status` may be `draft` or `published` and is optional.
+in the request body. `status` is optional and, if provided, must be `draft`.
+The API rejects `published` on creation with `400`; use
+`POST /api/courses/{id}/publish/` after the course meets publication
+requirements.
 
 ### `POST /api/courses/{id}/save_draft/` 🔒 — Owning Instructor/Admin
 Changes the course status to `draft`; students can no longer see or open it.
@@ -665,9 +711,65 @@ days. See `backend/README.md` for the scaling caveat on this query.
 ```json
 {
   "total_students": 128, "total_instructors": 6, "total_courses": 4,
-  "active_enrollments": 340, "pending_submissions": 22
+  "active_enrollments": 340, "pending_submissions": 22,
+  "pending_learner_approval_count": 1,
+  "pending_learner_approvals": [
+    {
+      "id": 15, "username": "bkimani", "full_name": "Brian Kimani",
+      "email": "bkimani@example.com", "email_verified": true,
+      "date_joined": "..."
+    }
+  ]
 }
 ```
+
+### `GET /api/dashboard/admin/learner-approvals/` 🔒 — Admin only
+Returns the same pending learner records as the dashboard queue.
+
+### `POST /api/dashboard/admin/learner-approvals/{id}/approve/` 🔒 — Admin only
+Approves a verified pending learner and activates the account. Returns the
+learner profile and an empty `enrolled_courses` array. Returns `400` if the
+learner has not verified their email, and `404` if the learner is not pending
+approval.
+
+### `GET /api/dashboard/admin/accounts/` 🔒 — Admin only
+Returns a paginated list (25 per page by default; `page_size` capped at 100)
+of learner and instructor accounts. Optional query parameters: `search` (email,
+username, first name, last name), `role` (`student` or `instructor`),
+`email_verified` (`true` or `false`), and `status`
+(`pending_email_verification`, `pending_admin_approval`, `suspended`, or
+`active`).
+
+### `GET /api/dashboard/admin/accounts/{id}/` 🔒 — Admin only
+Returns the account details, explicit email verification method, verification
+time, verifier (when applicable), separate account status, and recent
+verification/approval audit events.
+
+### `POST /api/dashboard/admin/accounts/{id}/verify-email/` 🔒 — Admin only
+Administratively verifies an eligible learner or instructor email. Records
+`email_verification_method=admin_verified`, the acting administrator, timestamp,
+and an audit event. This is distinct from an email challenge and does not
+approve or activate the account. Repeating the operation returns `409`.
+
+### `POST /api/dashboard/admin/accounts/{id}/approve/` 🔒 — Admin only
+Approves and activates a verified pending learner or instructor registration.
+Email verification remains a separate requirement; the endpoint returns `400`
+for an unverified address, `404` for a missing/non-learner/non-instructor
+account, and `409` if the account is already approved. Successful approvals
+are recorded in the account audit history.
+
+### `POST /api/dashboard/admin/accounts/{id}/status/` 🔒 — Admin only
+Set the active state of an approved learner or instructor account:
+
+```json
+{ "is_active": false }
+```
+
+Use `false` to suspend and `true` to reactivate. The account must have a
+verified email and already be approved; pending accounts return `400`.
+Requesting the current state returns `409`. Success returns the updated
+account record and records `account_suspended` or `account_reactivated` in
+the account audit history.
 
 ---
 

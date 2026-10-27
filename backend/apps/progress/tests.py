@@ -48,6 +48,8 @@ class LearningLoopTests(APITestCase):
                                         "max_score": 100, "max_attempts": 2, "pass_percentage": 50, "is_required": True}, format="json")
         self.assertEqual(r.status_code, 201, r.data)
         self.act = r.data["id"]
+        published = t.post(f"/api/courses/{self.course_id}/publish/")
+        self.assertEqual(published.status_code, 200, published.data)
 
     def module_statuses(self):
         return {m["module_id"]: m["status"] for m in self.learner.get(f"/api/progress/course/{self.course_id}/").data}

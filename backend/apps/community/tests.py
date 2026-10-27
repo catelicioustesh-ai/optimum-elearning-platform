@@ -1,7 +1,7 @@
 from django.test import TestCase
 
 from apps.accounts.testing import World, client_for
-from .models import DiscussionThread, StudentBookmark
+from .models import DiscussionReply, DiscussionThread, StudentBookmark
 
 
 class StudentCommunityApiTests(TestCase):
@@ -31,7 +31,114 @@ class StudentCommunityApiTests(TestCase):
 
         self.assertEqual(reply_response.status_code, 201)
         self.assertEqual(reply_response.data["body"], "Start with the first module.")
+        self.assertEqual(reply_response.data["author_id"], self.world.student_1.id)
+        self.assertEqual(thread_response.data["author_id"], self.world.student_1.id)
         self.assertEqual(DiscussionThread.objects.get(pk=thread_id).replies.count(), 1)
+
+    def test_author_can_delete_own_discussion_and_reply(self):
+        thread = DiscussionThread.objects.create(
+            course=self.world.course_a,
+            author=self.world.student_1,
+            title="My thread",
+            body="Please remove this.",
+        )
+        reply = DiscussionReply.objects.create(
+            thread=thread,
+            author=self.world.student_1,
+            body="My reply",
+        )
+        reply_response = self.student.delete(
+            f"/api/community/discussions/{thread.id}/replies/{reply.id}/"
+        )
+        thread_response = self.student.delete(
+            f"/api/community/discussions/{thread.id}/"
+        )
+
+        self.assertEqual(reply_response.status_code, 204)
+        self.assertEqual(thread_response.status_code, 204)
+        self.assertFalse(DiscussionThread.objects.filter(pk=thread.id).exists())
+        self.assertFalse(DiscussionReply.objects.filter(pk=reply.id).exists())
+
+    def test_other_student_cannot_delete_discussion_or_reply(self):
+        thread = DiscussionThread.objects.create(
+            course=self.world.course_a,
+            author=self.world.student_1,
+            title="Another student's thread",
+            body="Keep this.",
+        )
+        reply = DiscussionReply.objects.create(
+            thread=thread,
+            author=self.world.student_1,
+            body="Keep this reply.",
+        )
+        reply_response = self.other_student.delete(
+            f"/api/community/discussions/{thread.id}/replies/{reply.id}/"
+        )
+        thread_response = self.other_student.delete(
+            f"/api/community/discussions/{thread.id}/"
+        )
+
+        self.assertEqual(reply_response.status_code, 404)
+        self.assertEqual(thread_response.status_code, 404)
+        self.assertTrue(DiscussionReply.objects.filter(pk=reply.id).exists())
+        self.assertTrue(DiscussionThread.objects.filter(pk=thread.id).exists())
+
+    def test_discussion_author_cannot_delete_another_students_reply(self):
+        thread = DiscussionThread.objects.create(
+            course=self.world.course_a,
+            author=self.world.student_1,
+            title="My discussion",
+            body="A learner is replying.",
+        )
+        reply = DiscussionReply.objects.create(
+            thread=thread,
+            author=self.world.outsider,
+            body="Another learner's reply.",
+        )
+
+        response = self.student.delete(
+            f"/api/community/discussions/{thread.id}/replies/{reply.id}/"
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(DiscussionReply.objects.filter(pk=reply.id).exists())
+
+    def test_course_instructor_can_moderate_discussion_and_reply(self):
+        thread = DiscussionThread.objects.create(
+            course=self.world.course_a,
+            author=self.world.student_1,
+            title="Learner thread",
+            body="Needs moderation.",
+        )
+        reply = DiscussionReply.objects.create(
+            thread=thread,
+            author=self.world.student_1,
+            body="Learner reply",
+        )
+        instructor = client_for(self.world.instructor_a)
+        reply_response = instructor.delete(
+            f"/api/community/discussions/{thread.id}/replies/{reply.id}/"
+        )
+        thread_response = instructor.delete(
+            f"/api/community/discussions/{thread.id}/"
+        )
+
+        self.assertEqual(reply_response.status_code, 204)
+        self.assertEqual(thread_response.status_code, 204)
+
+    def test_admin_can_moderate_discussions(self):
+        thread = DiscussionThread.objects.create(
+            course=self.world.course_b,
+            author=self.world.instructor_b,
+            title="Course discussion",
+            body="Needs platform moderation.",
+        )
+        admin = client_for(self.world.admin)
+
+        response = admin.delete(f"/api/community/discussions/{thread.id}/")
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(DiscussionThread.objects.filter(pk=thread.id).exists())
 
     def test_student_cannot_post_to_or_read_a_non_enrolled_course_discussion(self):
         post_response = self.student.post(

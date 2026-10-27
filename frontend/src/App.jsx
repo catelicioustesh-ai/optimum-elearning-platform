@@ -1,10 +1,11 @@
-import { lazy, Suspense } from 'react'
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
+import { lazy, Suspense, useEffect } from 'react'
+import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom'
 import { HelmetProvider } from 'react-helmet-async'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { ToastProvider } from './hooks/useToast.js'
 import ProtectedRoute from './components/ProtectedRoute.jsx'
 import AppErrorBoundary from './components/AppErrorBoundary.jsx'
+import LoadingState from './components/LoadingState.jsx'
 
 const Landing = lazy(() => import('./Landing.jsx'))
 const Login = lazy(() => import('./pages/Login.jsx'))
@@ -31,6 +32,7 @@ const InstructorContent = lazy(() => import('./pages/InstructorContent.jsx'))
 const InstructorSubmissions = lazy(() => import('./pages/InstructorSubmissions.jsx'))
 const InstructorStudents = lazy(() => import('./pages/InstructorStudents.jsx'))
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard.jsx'))
+const AdminAccounts = lazy(() => import('./pages/AdminAccounts.jsx'))
 
 function NotFound() {
   return (
@@ -44,6 +46,18 @@ function NotFound() {
   )
 }
 
+function ScrollToTop() {
+  const { pathname, hash } = useLocation()
+
+  useEffect(() => {
+    if (hash) return
+    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'
+    window.scrollTo({ top: 0, behavior })
+  }, [pathname, hash])
+
+  return null
+}
+
 function App() {
   return (
     <HelmetProvider>
@@ -51,10 +65,11 @@ function App() {
         <ToastProvider>
           <AppErrorBoundary>
             <BrowserRouter>
+              <ScrollToTop />
               <Suspense
                 fallback={
-                  <div className="grid min-h-screen place-items-center bg-slate-50 text-sm font-medium text-slate-600" role="status">
-                    Loading Optimum LMS...
+                  <div className="grid min-h-screen place-items-center bg-slate-50 px-5">
+                    <LoadingState label="Opening your learning space…" />
                   </div>
                 }
               >
@@ -222,6 +237,14 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/dashboard/instructor/community"
+              element={
+                <ProtectedRoute allowedRoles={['instructor', 'admin']}>
+                  <StudentCommunity />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Admin */}
             <Route
@@ -229,6 +252,22 @@ function App() {
               element={
                 <ProtectedRoute allowedRoles={['admin']}>
                   <AdminDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/admin/accounts"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <AdminAccounts />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/admin/community"
+              element={
+                <ProtectedRoute allowedRoles={['admin']}>
+                  <StudentCommunity />
                 </ProtectedRoute>
               }
             />

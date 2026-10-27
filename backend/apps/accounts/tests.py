@@ -19,11 +19,13 @@ from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from rest_framework import status
+from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.throttling import ScopedRateThrottle
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 
 from .services import email_verification_token, password_reset_token
+from .models import AccountAuditEvent, ExternalIdentity
 
 User = get_user_model()
 
@@ -68,26 +70,96 @@ class RegistrationAndLoginTests(AuthBase):
         self.assertTrue(hasattr(settings, "EMAIL_BACKEND"))
         self.assertFalse(hasattr(settings, "MAILERS"))
 
-    def test_registration_sends_verification_but_allows_login_before_verification(self):
+    def test_registration_requires_admin_approval_and_email_verification(self):
         response = self.register(" Learner@Example.com ")
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertTrue(response.data["verification_email_sent"])
+        self.assertNotIn("password", response.data)
         user = User.objects.get(username="learner")
         self.assertEqual(user.email, "learner@example.com")  # trimmed + lower-cased
         self.assertFalse(user.email_verified)
+        self.assertFalse(user.is_approved)
+        self.assertFalse(user.is_active)
+        self.assertTrue(user.check_password(GOOD_PASSWORD))
         self.assertEqual(len(mail.outbox), 1)
 
-        login_before_verification = self.login(user.email)
-        self.assertEqual(login_before_verification.status_code, status.HTTP_200_OK)
-        self.assertIn("access", login_before_verification.data)
+        blocked_login = self.login(user.email)
+        self.assertEqual(blocked_login.status_code, status.HTTP_401_UNAUTHORIZED)
 
         uid, token, path = link_from_email(mail.outbox[0])
         self.assertEqual(path, "/verify-email")
         verified = self.client.post(reverse("email-verify"), {"uid": uid, "token": token}, format="json")
         self.assertEqual(verified.status_code, status.HTTP_200_OK, verified.data)
+        user.refresh_from_db()
+        self.assertTrue(user.email_verified)
+        self.assertEqual(user.email_verification_method, "self_verified")
+        self.assertIsNotNone(user.email_verified_at)
+        self.assertIsNone(user.email_verified_by_id)
+        self.assertFalse(user.is_active)
 
+        admin = self.make_user("admin@example.com", "admin", role="admin")
+        self.client.force_authenticate(user=admin)
+        approved = self.client.post(
+            reverse("dashboard-learner-approve", kwargs={"learner_id": user.id}),
+            {},
+            format="json",
+        )
+        self.assertEqual(approved.status_code, status.HTTP_200_OK, approved.data)
+        self.assertTrue(AccountAuditEvent.objects.filter(
+            actor=admin,
+            target=user,
+            action=AccountAuditEvent.Action.LEARNER_APPROVED,
+        ).exists())
+        self.client.force_authenticate(user=None)
         login = self.login(user.email)
         self.assertEqual(login.status_code, status.HTTP_200_OK)
-        self.assertIn("access", login.data)
+        self.assertIn("user", login.data)
+        user.refresh_from_db()
+        self.assertTrue(user.is_approved)
+        self.assertTrue(user.is_active)
+
+    def test_cookie_authentication_requires_csrf_for_state_changes(self):
+        client = APIClient(enforce_csrf_checks=True)
+        csrf_response = client.get(reverse("csrf-token"))
+        csrf_token = csrf_response.data["csrfToken"]
+        login_response = client.post(
+            reverse("login"),
+            {"email": "verified@example.com", "password": GOOD_PASSWORD},
+            format="json",
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+        self.assertEqual(login_response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        self.make_user()
+        login_response = client.post(
+            reverse("login"),
+            {"email": "verified@example.com", "password": GOOD_PASSWORD},
+            format="json",
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+        self.assertEqual(login_response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("access", login_response.data)
+        self.assertNotIn("refresh", login_response.data)
+
+        blocked = client.patch(reverse("me"), {"first_name": "Changed"}, format="json")
+        self.assertEqual(blocked.status_code, status.HTTP_403_FORBIDDEN)
+        allowed = client.patch(
+            reverse("me"),
+            {"first_name": "Changed"},
+            format="json",
+            HTTP_X_CSRFTOKEN=login_response.data["csrfToken"],
+        )
+        self.assertEqual(allowed.status_code, status.HTTP_200_OK)
+        blocked_logout = client.post(reverse("logout"), {}, format="json")
+        self.assertEqual(blocked_logout.status_code, status.HTTP_403_FORBIDDEN)
+        logout = client.post(
+            reverse("logout"),
+            {},
+            format="json",
+            HTTP_X_CSRFTOKEN=login_response.data["csrfToken"],
+        )
+        self.assertEqual(logout.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(logout.cookies["access_token"]["max-age"], 0)
 
     def test_invalid_registration_email_is_rejected(self):
         for email in ("abc", "abc@", "@gmail.com", "abc@gmail"):
@@ -102,6 +174,54 @@ class RegistrationAndLoginTests(AuthBase):
         self.assertFalse(user.email_verified)
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn("xxgvhv@gmail.com", mail.outbox[0].to)
+
+    def test_public_registration_rejects_privileged_role_assignment(self):
+        response = self.client.post(reverse("register"), {
+            "username": "public-admin",
+            "email": "public-admin@example.com",
+            "first_name": "Public",
+            "last_name": "Admin",
+            "password": GOOD_PASSWORD,
+            "role": "admin",
+            "is_staff": True,
+            "is_superuser": True,
+        }, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.data)
+        self.assertFalse(User.objects.filter(email="public-admin@example.com").exists())
+
+    def test_instructor_can_self_register_but_remains_unverified_and_unapproved(self):
+        response = self.client.post(reverse("register"), {
+            "username": "new-instructor",
+            "email": "new-instructor@example.com",
+            "first_name": "New",
+            "last_name": "Instructor",
+            "password": GOOD_PASSWORD,
+            "role": "instructor",
+        }, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertNotIn("role", response.data)
+        self.assertTrue(response.data["verification_email_sent"])
+        user = User.objects.get(email="new-instructor@example.com")
+        self.assertEqual(user.role, "instructor")
+        self.assertFalse(user.email_verified)
+        self.assertFalse(user.is_approved)
+        self.assertFalse(user.is_active)
+        self.assertTrue(user.check_password(GOOD_PASSWORD))
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_registration_reports_email_delivery_failure_without_returning_password(self):
+        with patch("apps.accounts.views.send_verification_email", return_value=0):
+            response = self.register("delivery-failure@example.com", "delivery-failure")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(response.data["verification_email_sent"])
+        self.assertIn("could not be sent", response.data["detail"])
+        self.assertNotIn("password", response.data)
+        user = User.objects.get(email="delivery-failure@example.com")
+        self.assertFalse(user.email_verified)
+        self.assertFalse(user.is_active)
 
     def test_login_ignores_email_case_and_surrounding_spaces(self):
         self.make_user("ann@example.com", "ann")
@@ -130,11 +250,12 @@ class RegistrationAndLoginTests(AuthBase):
         self.assertEqual(self.login("verified@example.com", " " + GOOD_PASSWORD).status_code, 200)
         self.assertEqual(self.login("verified@example.com", GOOD_PASSWORD.replace("-", " ", 1)).status_code, 401)
 
-    def test_unverified_user_with_right_password_can_login(self):
+    def test_unverified_user_with_right_password_cannot_login(self):
         self.make_user("new@example.com", "newbie", verified=False)
         resp = self.login("new@example.com")
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
-        self.assertIn("access", resp.data)
+        self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
+        self.assertNotIn("access_token", resp.cookies)
+        self.assertEqual(resp.data["detail"], "Incorrect email or password.")
 
     def test_wrong_password_never_reveals_whether_account_is_unverified(self):
         self.make_user("new@example.com", "newbie", verified=False)
@@ -169,6 +290,327 @@ class RegistrationAndLoginTests(AuthBase):
                 for _ in range(12)
             ]
         self.assertIn(status.HTTP_429_TOO_MANY_REQUESTS, codes)
+
+
+class ExternalProviderLoginTests(AuthBase):
+    def provider_login(self, provider, claims):
+        nonce = self.client.get(reverse("social-login-nonce")).data["nonce"]
+        claims = {**claims, "nonce": nonce}
+        with patch("apps.accounts.views.verify_provider_credential", return_value=claims):
+            return self.client.post(
+                reverse(f"{provider}-login"),
+                {"credential": "test-provider-id-token", "nonce": nonce},
+                format="json",
+            )
+
+    def google_login(self, claims):
+        return self.provider_login("google", claims)
+
+    def test_first_google_sign_in_creates_verified_student_pending_approval(self):
+        response = self.google_login({
+            "sub": "google-sub-new-student",
+            "email": "New.Student@Example.com",
+            "email_verified": True,
+            "given_name": "New",
+            "family_name": "Student",
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        user = User.objects.get(email="new.student@example.com")
+        self.assertEqual(user.role, "student")
+        self.assertTrue(user.email_verified)
+        self.assertFalse(user.is_approved)
+        self.assertFalse(user.is_active)
+        self.assertTrue(ExternalIdentity.objects.filter(
+            user=user,
+            provider=ExternalIdentity.Provider.GOOGLE,
+            subject="google-sub-new-student",
+        ).exists())
+        self.assertNotIn("access_token", response.cookies)
+
+    def test_approved_existing_account_is_not_linked_by_email(self):
+        user = self.make_user(
+            "instructor@example.com",
+            "instructor",
+            verified=False,
+            role="instructor",
+            is_approved=True,
+            is_active=True,
+        )
+
+        response = self.google_login({
+            "sub": "google-sub-instructor",
+            "email": "INSTRUCTOR@example.com",
+            "email_verified": True,
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.data)
+        user.refresh_from_db()
+        self.assertEqual(user.role, "instructor")
+        self.assertFalse(user.email_verified)
+        self.assertTrue(user.check_password(GOOD_PASSWORD))
+        self.assertFalse(ExternalIdentity.objects.filter(user=user).exists())
+        self.assertNotIn("access_token", response.cookies)
+
+    def test_linked_identity_signs_in_when_provider_email_changes(self):
+        user = self.make_user(
+            "instructor@example.com",
+            "instructor",
+            role="instructor",
+            is_approved=True,
+            is_active=True,
+        )
+        ExternalIdentity.objects.create(
+            user=user,
+            provider=ExternalIdentity.Provider.GOOGLE,
+            subject="google-sub-instructor",
+        )
+
+        response = self.google_login({
+            "sub": "google-sub-instructor",
+            "email": "new-address@example.com",
+            "email_verified": True,
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertEqual(response.data["user"]["id"], user.id)
+        self.assertIn("access_token", response.cookies)
+
+    def test_google_identity_cannot_be_linked_to_a_second_account(self):
+        user = self.make_user("learner@example.com", "learner")
+        ExternalIdentity.objects.create(
+            user=user,
+            provider=ExternalIdentity.Provider.GOOGLE,
+            subject="already-linked-subject",
+        )
+
+        response = self.google_login({
+            "sub": "different-google-subject",
+            "email": user.email,
+            "email_verified": True,
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(
+            ExternalIdentity.objects.get(user=user, provider=ExternalIdentity.Provider.GOOGLE).subject,
+            "already-linked-subject",
+        )
+        self.assertNotIn("access_token", response.cookies)
+
+    def test_all_configured_provider_routes_can_sign_in_existing_accounts(self):
+        for provider in ("google", "microsoft", "apple"):
+            with self.subTest(provider=provider):
+                email = f"{provider}@example.com"
+                user = self.make_user(email, provider, role="student", is_approved=True, is_active=True)
+                ExternalIdentity.objects.create(
+                    user=user,
+                    provider=provider,
+                    subject=f"{provider}-subject",
+                )
+                response = self.provider_login(provider, {
+                    "sub": f"{provider}-subject",
+                    "email": email,
+                    "email_verified": True,
+                })
+                self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+                self.assertIn("access_token", response.cookies)
+
+    def test_linked_microsoft_identity_can_sign_in_without_an_email_claim(self):
+        user = self.make_user(
+            "microsoft@example.com",
+            "microsoft",
+            role="student",
+            is_approved=True,
+            is_active=True,
+        )
+        ExternalIdentity.objects.create(
+            user=user,
+            provider=ExternalIdentity.Provider.MICROSOFT,
+            subject="microsoft-subject",
+        )
+
+        response = self.provider_login("microsoft", {
+            "sub": "microsoft-subject",
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertIn("access_token", response.cookies)
+
+    def test_first_microsoft_sign_in_without_email_requests_contact_email(self):
+        nonce = self.client.get(reverse("social-login-nonce")).data["nonce"]
+        claims = {"sub": "microsoft-sub-no-email", "nonce": nonce}
+        with patch("apps.accounts.views.verify_provider_credential", return_value=claims):
+            response = self.client.post(
+                reverse("microsoft-login"),
+                {"credential": "test-provider-id-token", "nonce": nonce},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.data["code"], "contact_email_required")
+        self.assertFalse(ExternalIdentity.objects.filter(
+            provider=ExternalIdentity.Provider.MICROSOFT,
+            subject="microsoft-sub-no-email",
+        ).exists())
+
+        with patch("apps.accounts.views.verify_provider_credential", return_value=claims):
+            retried = self.client.post(
+                reverse("microsoft-login"),
+                {
+                    "credential": "test-provider-id-token",
+                    "nonce": nonce,
+                    "contact_email": "Contact@Example.com",
+                },
+                format="json",
+            )
+
+        self.assertEqual(retried.status_code, status.HTTP_403_FORBIDDEN, retried.data)
+        user = User.objects.get(email="contact@example.com")
+        self.assertFalse(user.email_verified)
+        self.assertFalse(user.is_approved)
+        self.assertFalse(user.is_active)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_unverified_microsoft_email_claim_requires_email_challenge(self):
+        response = self.provider_login("microsoft", {
+            "sub": "microsoft-sub-unverified-email",
+            "email": "unverified.microsoft@example.com",
+        })
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.data)
+        user = User.objects.get(email="unverified.microsoft@example.com")
+        self.assertFalse(user.email_verified)
+        self.assertFalse(user.is_approved)
+        self.assertFalse(user.is_active)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_authenticated_user_can_explicitly_link_provider_identity(self):
+        user = self.make_user("link-target@example.com", "link-target", verified=False)
+        nonce = self.client.get(reverse("social-login-nonce")).data["nonce"]
+        claims = {
+            "sub": "google-sub-explicit-link",
+            "email": "different-provider-email@example.com",
+            "email_verified": True,
+            "nonce": nonce,
+        }
+        self.client.force_authenticate(user=user)
+        with patch("apps.accounts.views.verify_provider_credential", return_value=claims):
+            response = self.client.post(
+                reverse("social-link", args=["google"]),
+                {"credential": "test-provider-id-token", "nonce": nonce},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertTrue(ExternalIdentity.objects.filter(
+            user=user,
+            provider=ExternalIdentity.Provider.GOOGLE,
+            subject="google-sub-explicit-link",
+        ).exists())
+        user.refresh_from_db()
+        self.assertFalse(user.email_verified)
+
+    def test_provider_identity_cannot_be_explicitly_linked_to_another_user(self):
+        owner = self.make_user("identity-owner@example.com", "identity-owner")
+        target = self.make_user("link-target@example.com", "link-target")
+        ExternalIdentity.objects.create(
+            user=owner,
+            provider=ExternalIdentity.Provider.GOOGLE,
+            subject="google-sub-owned",
+        )
+        nonce = self.client.get(reverse("social-login-nonce")).data["nonce"]
+        claims = {
+            "sub": "google-sub-owned",
+            "email": "identity-owner@example.com",
+            "email_verified": True,
+            "nonce": nonce,
+        }
+        self.client.force_authenticate(user=target)
+        with patch("apps.accounts.views.verify_provider_credential", return_value=claims):
+            response = self.client.post(
+                reverse("social-link", args=["google"]),
+                {"credential": "test-provider-id-token", "nonce": nonce},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(
+            ExternalIdentity.objects.get(
+                provider=ExternalIdentity.Provider.GOOGLE,
+                subject="google-sub-owned",
+            ).user_id,
+            owner.id,
+        )
+
+    def test_provider_identity_linking_requires_an_authenticated_user(self):
+        nonce = self.client.get(reverse("social-login-nonce")).data["nonce"]
+
+        response = self.client.post(
+            reverse("social-link", args=["google"]),
+            {"credential": "test-provider-id-token", "nonce": nonce},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_social_nonce_cannot_be_replayed(self):
+        nonce_response = self.client.get(reverse("social-login-nonce"))
+        nonce = nonce_response.data["nonce"]
+        nonce_cookie = nonce_response.cookies["social_login_nonce"].value
+        claims = {
+            "sub": "google-sub-nonce-once",
+            "email": "nonce-once@example.com",
+            "email_verified": True,
+            "nonce": nonce,
+        }
+        payload = {"credential": "test-provider-id-token", "nonce": nonce}
+        with patch("apps.accounts.views.verify_provider_credential", return_value=claims):
+            first = self.client.post(reverse("google-login"), payload, format="json")
+            self.client.cookies["social_login_nonce"] = nonce_cookie
+            replay = self.client.post(reverse("google-login"), payload, format="json")
+
+        self.assertEqual(first.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(replay.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertIn("already been used", replay.data["detail"])
+
+    def test_microsoft_username_is_not_accepted_as_a_verified_email(self):
+        from apps.accounts.views import verify_provider_credential
+
+        with patch("apps.accounts.views.settings.MICROSOFT_OAUTH_CLIENT_ID", "test-client"), patch(
+            "apps.accounts.views.verify_microsoft_credential",
+            return_value={
+                "sub": "microsoft-unverified-subject",
+                "preferred_username": "existing@example.com",
+                "xms_edov": True,
+            },
+        ):
+            claims = verify_provider_credential(
+                ExternalIdentity.Provider.MICROSOFT,
+                "test-provider-id-token",
+            )
+
+        self.assertNotIn("email", claims)
+        with self.assertRaises(AuthenticationFailed):
+            from apps.accounts.views import resolve_external_user
+
+            resolve_external_user(ExternalIdentity.Provider.MICROSOFT, claims)
+
+    def test_provider_credential_must_match_server_issued_nonce(self):
+        nonce = self.client.get(reverse("social-login-nonce")).data["nonce"]
+        with patch("apps.accounts.views.verify_provider_credential", return_value={
+            "sub": "google-sub-replay",
+            "email": "replay@example.com",
+            "email_verified": True,
+            "nonce": "not-the-issued-nonce",
+        }):
+            response = self.client.post(
+                reverse("google-login"),
+                {"credential": "test-provider-id-token", "nonce": nonce},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(User.objects.filter(email="replay@example.com").exists())
 
 
 class PasswordRuleTests(AuthBase):
@@ -289,6 +731,16 @@ class EmailVerificationLinkTests(AuthBase):
         self.assertEqual((a.status_code, a.data), (b.status_code, b.data))
         self.assertEqual(len(mail.outbox), 0)
 
+    def test_resend_verification_has_an_address_cooldown(self):
+        self.make_user("cooldown@example.com", "cooldown", verified=False)
+        path = reverse("email-resend-verification")
+        first = self.client.post(path, {"email": "cooldown@example.com"}, format="json")
+        second = self.client.post(path, {"email": "cooldown@example.com"}, format="json")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.data, second.data)
+        self.assertEqual(len(mail.outbox), 1)
+
 
 class PasswordResetLinkTests(AuthBase):
     def setUp(self):
@@ -375,11 +827,12 @@ class PasswordResetLinkTests(AuthBase):
 
     def test_reset_signs_out_existing_sessions(self):
         login = self.login("verified@example.com")
-        refresh = login.data["refresh"]
+        refresh = login.cookies["refresh_token"].value
         uid, token = self.emailed_link()
         self.assertEqual(self.confirm(uid, token).status_code, 200)
         self.assertTrue(BlacklistedToken.objects.exists())
-        resp = self.client.post(reverse("login-refresh"), {"refresh": refresh}, format="json")
+        self.client.cookies["refresh_token"] = refresh
+        resp = self.client.post(reverse("login-refresh"), {}, format="json")
         self.assertEqual(resp.status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_request_does_not_disclose_account_existence(self):
@@ -401,7 +854,7 @@ class PasswordResetLinkTests(AuthBase):
         self.assertEqual(self.confirm(uid, token).status_code, status.HTTP_200_OK)
         self.user.refresh_from_db()
         self.assertFalse(self.user.email_verified)
-        self.assertEqual(self.login(self.user.email, NEW_PASSWORD).status_code, status.HTTP_200_OK)
+        self.assertEqual(self.login(self.user.email, NEW_PASSWORD).status_code, status.HTTP_401_UNAUTHORIZED)
 
     def test_reset_request_is_rate_limited(self):
         codes = [
@@ -441,7 +894,7 @@ class LockoutSafetyTests(AuthBase):
     def test_verify_users_command_marks_accounts_as_verified(self):
         from django.core.management import call_command
         user = self.make_user("stuck@example.com", "stuck", verified=False)
-        self.assertEqual(self.login("stuck@example.com").status_code, status.HTTP_200_OK)
+        self.assertEqual(self.login("stuck@example.com").status_code, status.HTTP_401_UNAUTHORIZED)
         call_command("verify_users", "STUCK@example.com", stdout=__import__("io").StringIO())
         user.refresh_from_db()
         self.assertTrue(user.email_verified)
@@ -463,7 +916,10 @@ class LockoutSafetyTests(AuthBase):
 
     def test_refresh_token_survives_restart_of_session(self):
         self.make_user()
-        tokens = self.login("verified@example.com").data
-        r = self.client.post(reverse("login-refresh"), {"refresh": tokens["refresh"]}, format="json")
+        login = self.login("verified@example.com")
+        self.assertEqual(login.status_code, 200)
+        r = self.client.post(reverse("login-refresh"), {}, format="json")
         self.assertEqual(r.status_code, 200)
-        self.assertIn("access", r.data)
+        self.assertNotIn("access", r.data)
+        self.assertTrue(r.cookies["access_token"]["httponly"])
+        self.assertTrue(r.cookies["refresh_token"]["httponly"])

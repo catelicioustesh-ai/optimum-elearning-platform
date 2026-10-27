@@ -6,9 +6,11 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import LessonVideo from '../components/LessonVideo.jsx'
+import RichTextContent from '../components/RichTextContent.jsx'
 import { ACCEPT, MAX_UPLOAD_MB, checkUpload } from '../lib/uploadRules.js'
 import { wikipediaSearchUrl } from '../lib/wikipedia.js'
 import DashboardLayout from '../components/DashboardLayout.jsx'
+import LoadingState from '../components/LoadingState.jsx'
 import { api } from '../lib/api.js'
 import { useAuth } from '../context/useAuth.js'
 
@@ -181,7 +183,7 @@ export default function LessonView() {
             {lesson.tutorial_content && (
               <div className="rounded-2xl border border-line bg-paper p-5">
                 <h3 className="font-semibold text-ink">Tutorial</h3>
-                <p className="mt-2 whitespace-pre-wrap text-sm text-text-muted">{lesson.tutorial_content}</p>
+                <RichTextContent content={lesson.tutorial_content} className="mt-2 text-sm text-text-muted" />
               </div>
             )}
 
@@ -190,14 +192,26 @@ export default function LessonView() {
                 <h3 className="font-semibold text-ink">Resources</h3>
                 <div className="mt-3 space-y-2">
                   {lesson.attachments.map((a) => (
-                    <button
-                      key={a.id}
-                      type="button"
-                      onClick={() => api.download(a.download_url.replace(/^\/api/, ''), `${a.title}.pdf`).catch((err) => window.alert(err.message))}
-                      className="flex w-full items-center gap-2 rounded-md border border-line px-3 py-2 text-left text-sm text-ink hover:border-text-dim"
-                    >
-                      <FileText size={16} className="text-coral" /> {a.title}
-                    </button>
+                    a.external_url ? (
+                      <a
+                        key={a.id}
+                        href={a.external_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex w-full items-center gap-2 rounded-md border border-line px-3 py-2 text-left text-sm text-ink hover:border-text-dim"
+                      >
+                        <FileText size={16} className="text-coral" /> {a.title} <span className="text-xs text-text-muted">(external link)</span>
+                      </a>
+                    ) : (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => api.download(a.download_url.replace(/^\/api/, ''), a.file_name || a.title).catch((err) => window.alert(err.message))}
+                        className="flex w-full items-center gap-2 rounded-md border border-line px-3 py-2 text-left text-sm text-ink hover:border-text-dim"
+                      >
+                        <FileText size={16} className="text-coral" /> {a.title}
+                      </button>
+                    )
                   ))}
                 </div>
               </div>
@@ -251,6 +265,7 @@ const ACTIVITY_LABELS = {
   lab: 'Lab',
   quiz: 'Quiz',
   assignment: 'Assignment',
+  questionnaire: 'Questionnaire',
 }
 
 function ActivityCard({ activity, onSubmitted }) {
@@ -278,15 +293,17 @@ function ActivityCard({ activity, onSubmitted }) {
             </p>
           )}
         </div>
-        <span className="text-xs text-text-muted">
-          {activity.max_attempts} attempt{activity.max_attempts === 1 ? '' : 's'} · {activity.max_score} pts
-        </span>
+        {activity.activity_type !== 'questionnaire' && (
+          <span className="text-xs text-text-muted">
+            {activity.max_attempts} attempt{activity.max_attempts === 1 ? '' : 's'} · {activity.max_score} pts
+          </span>
+        )}
       </div>
       {activity.instructions && <p className="mt-2 text-sm text-text-muted">{activity.instructions}</p>}
 
       <div className="mt-4">
         {(activity.activity_type === 'lab' || activity.activity_type === 'exercise') && (
-          <Suspense fallback={<div className="rounded-lg border border-line bg-panel p-4 text-sm text-text-muted">Loading code editor…</div>}>
+          <Suspense fallback={<LoadingState label="Preparing code workspace…" compact />}>
             <CodeActivityEditor key={activity.id} activity={activity} onSubmitted={onSubmitted} />
           </Suspense>
         )}
@@ -298,11 +315,124 @@ function ActivityCard({ activity, onSubmitted }) {
             to={`/dashboard/student/quiz/${activity.quiz_id}`}
             className="inline-flex items-center gap-1.5 rounded-md bg-coral px-4 py-2 text-sm font-medium text-white hover:bg-coral-dim"
           >
-            Take quiz
+            {activity.is_final_assessment ? 'Take final assessment' : 'Take quiz'}
           </Link>
+        )}
+        {activity.activity_type === 'questionnaire' && (
+          <QuestionnaireForm key={activity.id} activity={activity} onSubmitted={onSubmitted} />
         )}
       </div>
     </div>
+  )
+}
+
+function QuestionnaireForm({ activity, onSubmitted }) {
+  const [answers, setAnswers] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [submittedAt, setSubmittedAt] = useState(null)
+
+  useEffect(() => {
+    let cancelled = false
+    api.get(`/questionnaires/${activity.id}/response/`)
+      .then((response) => {
+        if (cancelled) return
+        setAnswers(response.answers || {})
+        setSubmittedAt(response.submitted_at)
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || 'Unable to load your saved response.')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [activity.id])
+
+  function setChoice(index, choice, checked) {
+    const key = String(index)
+    setAnswers((value) => {
+      const current = Array.isArray(value[key]) ? value[key] : []
+      return {
+        ...value,
+        [key]: checked
+          ? [...current, choice].filter((item, itemIndex, items) => items.indexOf(item) === itemIndex)
+          : current.filter((item) => item !== choice),
+      }
+    })
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+    setBusy(true)
+    setError('')
+    try {
+      const response = await api.post(`/questionnaires/${activity.id}/response/`, { answers })
+      setAnswers(response.answers)
+      setSubmittedAt(response.submitted_at)
+      onSubmitted?.()
+    } catch (err) {
+      setError(err.message || 'Unable to save your response.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (loading) return <p className="text-sm text-text-muted" role="status">Loading questionnaire…</p>
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {activity.questionnaire_questions.map((question, index) => {
+        const key = String(index)
+        return (
+          <fieldset key={key} className="space-y-2 rounded-lg border border-line p-3">
+            <legend className="px-1 text-sm font-medium text-ink">
+              {question.text}{question.required && <span aria-label="required"> *</span>}
+            </legend>
+            {question.question_type === 'text' ? (
+              <textarea
+                required={question.required}
+                maxLength={5000}
+                rows={3}
+                value={typeof answers[key] === 'string' ? answers[key] : ''}
+                onChange={(event) => setAnswers((value) => ({ ...value, [key]: event.target.value }))}
+                className="w-full rounded border border-line bg-paper px-3 py-2 text-sm text-ink"
+              />
+            ) : question.question_type === 'single_choice' ? (
+              question.options.map((option, optionIndex) => (
+                <label key={optionIndex} className="flex items-center gap-2 text-sm text-ink">
+                  <input
+                    type="radio"
+                    name={`questionnaire-${activity.id}-${index}`}
+                    required={question.required}
+                    checked={answers[key] === optionIndex}
+                    onChange={() => setAnswers((value) => ({ ...value, [key]: optionIndex }))}
+                  />
+                  {option}
+                </label>
+              ))
+            ) : (
+              question.options.map((option, optionIndex) => (
+                <label key={optionIndex} className="flex items-center gap-2 text-sm text-ink">
+                  <input
+                    type="checkbox"
+                    checked={Array.isArray(answers[key]) && answers[key].includes(optionIndex)}
+                    onChange={(event) => setChoice(index, optionIndex, event.target.checked)}
+                  />
+                  {option}
+                </label>
+              ))
+            )}
+          </fieldset>
+        )
+      })}
+      {error && <p className="text-sm text-rose-700" role="alert">{error}</p>}
+      {submittedAt && <p className="text-xs text-emerald-700" role="status">Response saved. You can update it before leaving this course.</p>}
+      <button type="submit" disabled={busy} className="rounded-md bg-coral px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
+        {busy ? 'Saving…' : submittedAt ? 'Update response' : 'Submit response'}
+      </button>
+    </form>
   )
 }
 

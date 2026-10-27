@@ -7,8 +7,13 @@ import sys
 from datetime import timedelta
 from pathlib import Path
 
-from dotenv import load_dotenv
-from django.core.exceptions import ImproperlyConfigured
+try:
+    from dotenv import load_dotenv  # type: ignore[import-not-found]
+except ModuleNotFoundError:  # pragma: no cover - optional dependency in dev environments
+    def load_dotenv(*args, **kwargs):
+        return False
+
+from django.core.exceptions import ImproperlyConfigured  # type: ignore[import-not-found]
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -25,8 +30,14 @@ SECRET_KEY = os.environ.get(
     "DJANGO_SECRET_KEY",
     "dev-only-change-this-in-production",
 )
+EMAIL_VERIFICATION_RESEND_COOLDOWN = int(
+    os.environ.get("EMAIL_VERIFICATION_RESEND_COOLDOWN", "300")
+)
 
-DEBUG = os.environ.get("DJANGO_DEBUG", "True") == "True"
+DEBUG = os.environ.get("DJANGO_DEBUG", "False") == "True"
+GOOGLE_OAUTH_CLIENT_ID = os.environ.get("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+MICROSOFT_OAUTH_CLIENT_ID = os.environ.get("MICROSOFT_OAUTH_CLIENT_ID", "").strip()
+APPLE_OAUTH_CLIENT_ID = os.environ.get("APPLE_OAUTH_CLIENT_ID", "").strip()
 
 ALLOWED_HOSTS = os.environ.get(
     "DJANGO_ALLOWED_HOSTS",
@@ -158,30 +169,25 @@ DATABASES = {
     "default": {
         "ENGINE": "mssql",
         "NAME": os.environ.get("MSSQL_DB_NAME", "e-learning"),
-        "USER": os.environ.get("MSSQL_DB_USER", "sa"),
-        "PASSWORD": os.environ.get("MSSQL_DB_PASSWORD", ""),
-        "HOST": os.environ.get("MSSQL_DB_HOST", "KENNETH\\USER"),
-        "PORT": os.environ.get("MSSQL_DB_PORT", "1433"),
+        "USER": "",
+        "PASSWORD": "",
+        "HOST": os.environ.get("MSSQL_DB_HOST", "KENNETH"),
+        "PORT": "",
         "CONN_MAX_AGE": int(os.environ.get("DB_CONN_MAX_AGE", "60")),
         "OPTIONS": {
             "driver": os.environ.get(
                 "MSSQL_ODBC_DRIVER",
                 "ODBC Driver 18 for SQL Server",
             ),
-            "extra_params": os.environ.get(
-                "MSSQL_EXTRA_PARAMS",
-                (
-                    "Encrypt=yes;TrustServerCertificate=no;"
-                    if not DEBUG
-                    else "Encrypt=yes;TrustServerCertificate=yes;"
-                ),
+            "extra_params": (
+                "Trusted_Connection=yes;"
+                "Encrypt=yes;"
+                "TrustServerCertificate=yes;"
             ),
         },
     }
 }
-
-
-# --------------------------------------------------------------------------
+#---------------------------
 # Authentication
 # --------------------------------------------------------------------------
 
@@ -260,7 +266,7 @@ REST_FRAMEWORK = {
     "NUM_PROXIES": NUM_PROXIES_ENV,
 
     "DEFAULT_AUTHENTICATION_CLASSES": (
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "apps.accounts.authentication.CookieJWTAuthentication",
     ),
 
     "DEFAULT_PERMISSION_CLASSES": (
@@ -274,6 +280,7 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "auth": "10/minute",
         "password_reset": "5/hour",
+        "email_resend": "5/hour",
         "code_run": "30/minute",
         "upload": "30/hour",
         "video_progress": "120/minute",
@@ -411,14 +418,20 @@ SIMPLE_JWT = {
 
 CORS_ALLOWED_ORIGINS = os.environ.get(
     "CORS_ALLOWED_ORIGINS",
-    "http://localhost:5173",
+    "http://localhost:5173,http://127.0.0.1:5173",
 ).split(",")
+CORS_ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ALLOWED_ORIGINS if origin.strip()]
+CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = [
     origin.strip()
     for origin in CORS_ALLOWED_ORIGINS
-    if origin.strip().startswith("https://")
+    if origin.strip().startswith(("http://", "https://"))
 ]
+
+CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_SAMESITE = "Lax"
 
 
 # --------------------------------------------------------------------------
